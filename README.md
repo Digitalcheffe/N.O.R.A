@@ -1,6 +1,4 @@
 # N.O.R.A
-
-# N.O.R.A
 ### Nexus Operations Recon & Alerts
 
 > Know what's happening in your homelab without it becoming a project.
