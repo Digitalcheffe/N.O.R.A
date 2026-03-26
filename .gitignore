@@ -1,0 +1,6 @@
+data/
+*.db
+.env
+dist/
+node_modules/
+frontend/dist/
