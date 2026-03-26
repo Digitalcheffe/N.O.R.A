@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 
 	"github.com/digitalcheffe/nora/internal/api"
 	"github.com/digitalcheffe/nora/internal/auth"
 	"github.com/digitalcheffe/nora/internal/config"
+	"github.com/digitalcheffe/nora/internal/frontend"
 	"github.com/digitalcheffe/nora/internal/ingest"
 	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -51,9 +53,50 @@ func main() {
 		api.NewEventsHandler(eventRepo).Routes(r)
 	})
 
+	// Frontend — serve embedded React app, SPA fallback to index.html
+	distFS, err := fs.Sub(frontend.Dist, "dist")
+	if err != nil {
+		log.Fatalf("frontend embed: %v", err)
+	}
+	// Only register the static handler if index.html was actually embedded.
+	if _, err := distFS.Open("index.html"); err == nil {
+		fileServer := http.FileServer(http.FS(distFS))
+		r.Get("/*", spaHandler(distFS, fileServer))
+		log.Printf("serving frontend from embedded dist")
+	} else {
+		log.Printf("no embedded frontend found — API-only mode")
+	}
+
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Printf("NORA listening on %s (dev_mode=%v)", addr, cfg.DevMode)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server error: %v", err)
+	}
+}
+
+// spaHandler serves static files when they exist, and falls back to index.html
+// for all other paths so React Router can handle client-side navigation.
+func spaHandler(distFS fs.FS, fileServer http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Strip the leading slash for FS lookups.
+		path := r.URL.Path
+		if len(path) > 0 && path[0] == '/' {
+			path = path[1:]
+		}
+		if path == "" {
+			path = "index.html"
+		}
+
+		// If the file exists in the embedded FS, serve it directly.
+		if f, err := distFS.Open(path); err == nil {
+			f.Close()
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		// Otherwise fall back to index.html for SPA routing.
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = "/"
+		fileServer.ServeHTTP(w, r2)
 	}
 }

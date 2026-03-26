@@ -4,3 +4,6 @@ data/
 dist/
 node_modules/
 frontend/dist/
+# Allow the embed placeholder so the Go build works locally
+!internal/frontend/dist/
+!internal/frontend/dist/.gitkeep

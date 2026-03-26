@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "NORA Backend (Go)",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/nora/"],
+      "port": 3001,
+      "env": {
+        "NORA_DEV_MODE": "true",
+        "NORA_SECRET": "dev-secret-local",
+        "NORA_DB_PATH": "./data/nora.db",
+        "NORA_PORT": "3001"
+      }
+    },
+    {
+      "name": "NORA Frontend (Vite)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
+      "port": 8081
+    }
+  ]
+}
