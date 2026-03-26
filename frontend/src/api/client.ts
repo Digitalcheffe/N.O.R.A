@@ -10,7 +10,7 @@ import type {
   CreateAppInput,
   CreateCheckInput,
   CreateUserInput,
-  DashboardSummary,
+  DashboardSummaryResponse,
   DockerEngine,
   Event,
   EventFilter,
@@ -196,8 +196,8 @@ export const topology = {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export const dashboard = {
-  summary: () =>
-    request<DashboardSummary>('GET', '/dashboard/summary'),
+  summary: (period: string = 'week') =>
+    request<DashboardSummaryResponse>('GET', `/dashboard/summary?period=${period}`),
 
   digest: (period: string) =>
     request<unknown>('GET', `/dashboard/digest/${period}`),
