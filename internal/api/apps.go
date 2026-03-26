@@ -55,6 +55,15 @@ type regenerateTokenResponse struct {
 // --- handlers ---
 
 // List returns all apps: GET /api/v1/apps
+//
+// @Summary      List all apps
+// @Description  Returns all registered applications.
+// @Tags         apps
+// @Produce      json
+// @Success      200  {object}  listAppsResponse
+// @Failure      500  {object}  map[string]string
+// @Security     BearerToken
+// @Router       /apps [get]
 func (h *AppsHandler) List(w http.ResponseWriter, r *http.Request) {
 	apps, err := h.apps.List(r.Context())
 	if err != nil {
@@ -68,6 +77,18 @@ func (h *AppsHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Create creates a new app: POST /api/v1/apps
+//
+// @Summary      Create an app
+// @Description  Creates a new application and generates a unique ingest token.
+// @Tags         apps
+// @Accept       json
+// @Produce      json
+// @Param        app  body      createAppRequest  true  "App to create"
+// @Success      201  {object}  models.App
+// @Failure      400  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerToken
+// @Router       /apps [post]
 func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createAppRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -112,6 +133,17 @@ func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get returns a single app: GET /api/v1/apps/{id}
+//
+// @Summary      Get an app
+// @Description  Returns a single application by ID.
+// @Tags         apps
+// @Produce      json
+// @Param        id   path      string  true  "App ID"
+// @Success      200  {object}  models.App
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerToken
+// @Router       /apps/{id} [get]
 func (h *AppsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	app, err := h.apps.Get(r.Context(), id)
@@ -127,6 +159,20 @@ func (h *AppsHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // Update replaces an app's mutable fields: PUT /api/v1/apps/{id}
+//
+// @Summary      Update an app
+// @Description  Replaces mutable fields (name, profile_id, config, rate_limit) on an existing application. Only non-empty fields are applied.
+// @Tags         apps
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string            true  "App ID"
+// @Param        app  body      createAppRequest  true  "Fields to update"
+// @Success      200  {object}  models.App
+// @Failure      400  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerToken
+// @Router       /apps/{id} [put]
 func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -168,6 +214,17 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete removes an app: DELETE /api/v1/apps/{id}
+//
+// @Summary      Delete an app
+// @Description  Permanently removes an application and all associated data.
+// @Tags         apps
+// @Produce      json
+// @Param        id   path      string  true  "App ID"
+// @Success      204  "No Content"
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerToken
+// @Router       /apps/{id} [delete]
 func (h *AppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	err := h.apps.Delete(r.Context(), id)
@@ -183,6 +240,17 @@ func (h *AppsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // RegenerateToken rotates the app's ingest token: POST /api/v1/apps/{id}/token/regenerate
+//
+// @Summary      Regenerate app token
+// @Description  Rotates the application's ingest token. The old token is immediately invalidated.
+// @Tags         apps
+// @Produce      json
+// @Param        id   path      string  true  "App ID"
+// @Success      200  {object}  regenerateTokenResponse
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     BearerToken
+// @Router       /apps/{id}/token/regenerate [post]
 func (h *AppsHandler) RegenerateToken(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 

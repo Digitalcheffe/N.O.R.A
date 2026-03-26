@@ -1,0 +1,256 @@
+basePath: /api/v1
+definitions:
+  api.createAppRequest:
+    type: object
+  api.listAppsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/models.App'
+        type: array
+      total:
+        type: integer
+    type: object
+  api.regenerateTokenResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  models.App:
+    properties:
+      config:
+        type: string
+      created_at:
+        type: string
+      docker_engine_id:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      profile_id:
+        type: string
+      rate_limit:
+        type: integer
+      token:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: NORA Project
+    url: https://github.com/digitalcheffe/nora
+  description: Nexus Operations Recon & Alerts — self-hosted homelab monitoring, event
+    capture, and alerting.
+  license:
+    name: MIT
+  title: NORA API
+  version: "1.0"
+paths:
+  /apps:
+    get:
+      description: Returns all registered applications.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listAppsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerToken: []
+      summary: List all apps
+      tags:
+      - apps
+    post:
+      consumes:
+      - application/json
+      description: Creates a new application and generates a unique ingest token.
+      parameters:
+      - description: App to create
+        in: body
+        name: app
+        required: true
+        schema:
+          $ref: '#/definitions/api.createAppRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.App'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerToken: []
+      summary: Create an app
+      tags:
+      - apps
+  /apps/{id}:
+    delete:
+      description: Permanently removes an application and all associated data.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerToken: []
+      summary: Delete an app
+      tags:
+      - apps
+    get:
+      description: Returns a single application by ID.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.App'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerToken: []
+      summary: Get an app
+      tags:
+      - apps
+    put:
+      consumes:
+      - application/json
+      description: Replaces mutable fields (name, profile_id, config, rate_limit)
+        on an existing application. Only non-empty fields are applied.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: app
+        required: true
+        schema:
+          $ref: '#/definitions/api.createAppRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.App'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerToken: []
+      summary: Update an app
+      tags:
+      - apps
+  /apps/{id}/token/regenerate:
+    post:
+      description: Rotates the application's ingest token. The old token is immediately
+        invalidated.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.regenerateTokenResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerToken: []
+      summary: Regenerate app token
+      tags:
+      - apps
+securityDefinitions:
+  BearerToken:
+    description: Session token. Use dev-mode bypass when NORA_DEV_MODE=true.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
