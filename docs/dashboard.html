@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LogRelay — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #0a0c0f;
+    --bg2:         #0f1215;
+    --bg3:         #151920;
+    --bg4:         #1c2028;
+    --border:      #1e2530;
+    --border2:     #252d38;
+    --text:        #c8d4e0;
+    --text2:       #7a8fa8;
+    --text3:       #445566;
+    --accent:      #3b82f6;
+    --accent-dim:  #1d3a6b;
+    --green:       #22c55e;
+    --green-dim:   #14532d;
+    --yellow:      #eab308;
+    --yellow-dim:  #713f12;
+    --red:         #ef4444;
+    --red-dim:     #7f1d1d;
+    --mono:        'JetBrains Mono', monospace;
+    --sans:        'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Subtle grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── LAYOUT ── */
+  .shell {
+    display: flex;
+    min-height: 100vh;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 56px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 4px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 10;
+  }
+
+  .sidebar-logo {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    letter-spacing: -1px;
+    flex-shrink: 0;
+  }
+
+  .sidebar-divider {
+    width: 24px;
+    height: 1px;
+    background: var(--border);
+    margin: 8px 0;
+  }
+
+  .nav-item {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text3);
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .nav-item:hover { background: var(--bg3); color: var(--text2); }
+  .nav-item.active { background: var(--accent-dim); color: var(--accent); }
+
+  .nav-item svg { width: 16px; height: 16px; }
+
+  .sidebar-bottom {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ── MAIN ── */
+  .main {
+    margin-left: 56px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    height: 52px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 9;
+  }
+
+  .topbar-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text2);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .topbar-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    background: var(--green-dim);
+    border: 1px solid #166534;
+    border-radius: 20px;
+    padding: 4px 10px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .status-dot.warn { background: var(--yellow); }
+  .status-dot.down { background: var(--red); animation: none; }
+
+  .topbar-status span {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 16px;
+  }
+
+  .time-filter {
+    display: flex;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .time-btn {
+    padding: 4px 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    cursor: pointer;
+    border: none;
+    background: none;
+    transition: all 0.15s;
+  }
+
+  .time-btn:hover { color: var(--text2); background: var(--bg4); }
+  .time-btn.active { color: var(--accent); background: var(--accent-dim); }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text2);
+    transition: all 0.15s;
+  }
+
+  .icon-btn:hover { border-color: var(--border2); color: var(--text); }
+  .icon-btn svg { width: 14px; height: 14px; }
+
+  /* ── CONTENT ── */
+  .content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── SUMMARY BAR ── */
+  .summary-bar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+
+  .summary-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: border-color 0.15s;
+  }
+
+  .summary-card:hover { border-color: var(--border2); }
+
+  .summary-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .summary-value {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .summary-value.green { color: var(--green); }
+  .summary-value.yellow { color: var(--yellow); }
+  .summary-value.red { color: var(--red); }
+
+  .summary-sub {
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  /* ── SPARKLINE ── */
+  .sparkline {
+    height: 24px;
+    margin-top: 2px;
+  }
+
+  /* ── SECTION HEADER ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::before {
+    content: '';
+    width: 2px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 1px;
+    display: block;
+  }
+
+  .section-action {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+  }
+
+  .section-action:hover { opacity: 1; }
+
+  /* ── WIDGET GRID ── */
+  .widget-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+
+  /* ── APP WIDGET ── */
+  .app-widget {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .app-widget::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--green);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .app-widget:hover { border-color: var(--border2); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .app-widget:hover::before { opacity: 1; }
+  .app-widget.warn::before { background: var(--yellow); opacity: 1; }
+  .app-widget.down::before { background: var(--red); opacity: 1; }
+
+  .app-widget-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .app-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text2);
+    flex-shrink: 0;
+  }
+
+  .app-name {
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--text);
+    flex: 1;
+  }
+
+  .app-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot.green { background: var(--green); }
+  .dot.yellow { background: var(--yellow); }
+  .dot.red { background: var(--red); }
+  .dot.grey { background: var(--text3); }
+
+  .app-status.online { color: var(--green); }
+  .app-status.warn { color: var(--yellow); }
+  .app-status.down { color: var(--red); }
+  .app-status.unknown { color: var(--text3); }
+
+  .app-widget-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .stat-item {
+    background: var(--bg3);
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .app-widget-sparkline {
+    height: 28px;
+    width: 100%;
+  }
+
+  .app-last-event {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: var(--mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── HOST WIDGET ── */
+  .host-widget {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .host-widget:hover { border-color: var(--border2); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+
+  .host-widget-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .host-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .host-icon svg { width: 14px; height: 14px; color: var(--text3); }
+
+  .host-meta { flex: 1; }
+  .host-name { font-weight: 500; font-size: 13px; color: var(--text); }
+  .host-type { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+  .resource-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .resource-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .resource-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    width: 28px;
+    flex-shrink: 0;
+  }
+
+  .resource-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--bg4);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .resource-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 0.3s ease;
+  }
+
+  .resource-bar-fill.warn { background: var(--yellow); }
+  .resource-bar-fill.crit { background: var(--red); }
+
+  .resource-pct {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text2);
+    width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* ── MONITOR WIDGET ── */
+  .monitor-widget {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .monitor-widget:hover { border-color: var(--border2); }
+
+  .monitor-status-block {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .monitor-status-block.up { background: var(--green-dim); color: var(--green); border: 1px solid #166534; }
+  .monitor-status-block.warn { background: var(--yellow-dim); color: var(--yellow); border: 1px solid #854d0e; }
+  .monitor-status-block.down { background: var(--red-dim); color: var(--red); border: 1px solid #991b1b; }
+
+  .monitor-info { flex: 1; min-width: 0; }
+  .monitor-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .monitor-target { font-family: var(--mono); font-size: 10px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .monitor-meta {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .monitor-uptime { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--green); }
+  .monitor-last { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+  /* ── BOOKMARK WIDGET ── */
+  .bookmark-widget {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .bookmark-widget:hover { border-color: var(--border2); background: var(--bg3); }
+
+  .bookmark-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .bookmark-icon svg { width: 12px; height: 12px; color: var(--text3); }
+  .bookmark-name { font-size: 13px; color: var(--text); flex: 1; }
+  .bookmark-url { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+  .bookmark-arrow { color: var(--text3); margin-left: auto; }
+  .bookmark-arrow svg { width: 12px; height: 12px; }
+
+  /* ── RECENT EVENTS ── */
+  .events-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .events-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .event-row {
+    display: grid;
+    grid-template-columns: 80px 20px 140px 1fr 80px;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+    cursor: pointer;
+  }
+
+  .event-row:last-child { border-bottom: none; }
+  .event-row:hover { background: var(--bg3); }
+
+  .event-time {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+  }
+
+  .severity-badge {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .severity-badge.info { background: var(--accent); }
+  .severity-badge.warn { background: var(--yellow); }
+  .severity-badge.error { background: var(--red); }
+
+  .event-app {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-text {
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-sev-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .event-sev-label.info { color: var(--accent); }
+  .event-sev-label.warn { color: var(--yellow); }
+  .event-sev-label.error { color: var(--red); }
+
+  /* ── TWO COL ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* ── SSL PANEL ── */
+  .ssl-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .ssl-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .ssl-row:last-child { border-bottom: none; }
+  .ssl-row:hover { background: var(--bg3); }
+
+  .ssl-days {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    width: 50px;
+    flex-shrink: 0;
+  }
+
+  .ssl-days.good { color: var(--green); }
+  .ssl-days.warn { color: var(--yellow); }
+  .ssl-days.crit { color: var(--red); }
+
+  .ssl-domain { font-size: 12px; color: var(--text); flex: 1; font-family: var(--mono); }
+  .ssl-date { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+  /* Animations */
+  .app-widget, .host-widget, .summary-card {
+    animation: fadeUp 0.3s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .app-widget:nth-child(1) { animation-delay: 0.05s; }
+  .app-widget:nth-child(2) { animation-delay: 0.10s; }
+  .app-widget:nth-child(3) { animation-delay: 0.15s; }
+  .app-widget:nth-child(4) { animation-delay: 0.20s; }
+  .app-widget:nth-child(5) { animation-delay: 0.25s; }
+  .app-widget:nth-child(6) { animation-delay: 0.30s; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">LR</div>
+
+    <div class="nav-item active" title="Dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </div>
+    <div class="nav-item" title="Events">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    </div>
+    <div class="nav-item" title="Monitor Checks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <div class="nav-item" title="Apps">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    </div>
+    <div class="nav-item" title="Infrastructure">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="nav-item" title="Bookmarks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-divider"></div>
+      <div class="nav-item" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <div class="nav-item" title="ryan@itegasus.com">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <span class="topbar-title">Dashboard</span>
+      <div class="topbar-status">
+        <div class="status-dot"></div>
+        <span>All systems normal</span>
+      </div>
+      <div class="topbar-right">
+        <div class="time-filter">
+          <button class="time-btn">Day</button>
+          <button class="time-btn active">Week</button>
+          <button class="time-btn">Month</button>
+        </div>
+        <div class="icon-btn" title="Add app">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="icon-btn" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+
+      <!-- SUMMARY BAR -->
+      <div class="summary-bar">
+        <div class="summary-card">
+          <div class="summary-label">Downloads</div>
+          <div class="summary-value">143</div>
+          <div class="summary-sub">Sonarr 89 · Radarr 41 · Lidarr 13</div>
+          <svg class="sparkline" viewBox="0 0 120 24" preserveAspectRatio="none">
+            <polyline points="0,20 15,18 30,16 45,10 60,14 75,6 90,10 105,8 120,12" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.8"/>
+            <polyline points="0,20 15,18 30,16 45,10 60,14 75,6 90,10 105,8 120,12 120,24 0,24" fill="#3b82f6" opacity="0.08"/>
+          </svg>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Errors</div>
+          <div class="summary-value red">2</div>
+          <div class="summary-sub">n8n · resolved</div>
+          <svg class="sparkline" viewBox="0 0 120 24" preserveAspectRatio="none">
+            <polyline points="0,22 15,22 30,22 45,22 60,22 75,8 90,16 105,22 120,22" fill="none" stroke="#ef4444" stroke-width="1.5" opacity="0.8"/>
+            <polyline points="0,22 15,22 30,22 45,22 60,22 75,8 90,16 105,22 120,22 120,24 0,24" fill="#ef4444" opacity="0.08"/>
+          </svg>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Backups</div>
+          <div class="summary-value green">31</div>
+          <div class="summary-sub">All successful</div>
+          <svg class="sparkline" viewBox="0 0 120 24" preserveAspectRatio="none">
+            <polyline points="0,18 15,16 30,14 45,16 60,14 75,12 90,14 105,12 120,10" fill="none" stroke="#22c55e" stroke-width="1.5" opacity="0.8"/>
+            <polyline points="0,18 15,16 30,14 45,16 60,14 75,12 90,14 105,12 120,10 120,24 0,24" fill="#22c55e" opacity="0.08"/>
+          </svg>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Updates</div>
+          <div class="summary-value">8</div>
+          <div class="summary-sub">Watchtower · DIUN</div>
+          <svg class="sparkline" viewBox="0 0 120 24" preserveAspectRatio="none">
+            <polyline points="0,22 15,22 30,16 45,22 60,22 75,22 90,14 105,22 120,22" fill="none" stroke="#7a8fa8" stroke-width="1.5" opacity="0.6"/>
+            <polyline points="0,22 15,22 30,16 45,22 60,22 75,22 90,14 105,22 120,22 120,24 0,24" fill="#7a8fa8" opacity="0.06"/>
+          </svg>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Uptime</div>
+          <div class="summary-value green">99.8%</div>
+          <div class="summary-sub">2hr OPNsense outage Mar 14</div>
+          <svg class="sparkline" viewBox="0 0 120 24" preserveAspectRatio="none">
+            <polyline points="0,4 15,4 30,4 45,4 60,4 75,20 90,4 105,4 120,4" fill="none" stroke="#22c55e" stroke-width="1.5" opacity="0.8"/>
+            <polyline points="0,4 15,4 30,4 45,4 60,4 75,20 90,4 105,4 120,4 120,24 0,24" fill="#22c55e" opacity="0.06"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- TWO COL LAYOUT -->
+      <div class="two-col">
+
+        <!-- LEFT COL -->
+        <div style="display:flex;flex-direction:column;gap:20px;">
+
+          <!-- APPS -->
+          <div>
+            <div class="section-header">
+              <div class="section-title">Apps</div>
+              <div class="section-action">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add app
+              </div>
+            </div>
+            <div class="widget-grid">
+
+              <div class="app-widget">
+                <div class="app-widget-header">
+                  <div class="app-icon">SN</div>
+                  <div class="app-name">Sonarr</div>
+                  <div class="app-status online"><div class="dot green"></div> Online</div>
+                </div>
+                <div class="app-widget-stats">
+                  <div class="stat-item"><div class="stat-label">Downloads</div><div class="stat-value">89</div></div>
+                  <div class="stat-item"><div class="stat-label">Health</div><div class="stat-value" style="color:var(--green)">OK</div></div>
+                </div>
+                <svg class="app-widget-sparkline" viewBox="0 0 180 28" preserveAspectRatio="none">
+                  <polyline points="0,22 20,20 40,18 60,12 80,16 100,8 120,12 140,10 160,14 180,10" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.7"/>
+                  <polyline points="0,22 20,20 40,18 60,12 80,16 100,8 120,12 140,10 160,14 180,10 180,28 0,28" fill="#3b82f6" opacity="0.07"/>
+                </svg>
+                <div class="app-last-event">11:42pm — Download · Breaking Bad S03E04</div>
+              </div>
+
+              <div class="app-widget">
+                <div class="app-widget-header">
+                  <div class="app-icon">RD</div>
+                  <div class="app-name">Radarr</div>
+                  <div class="app-status online"><div class="dot green"></div> Online</div>
+                </div>
+                <div class="app-widget-stats">
+                  <div class="stat-item"><div class="stat-label">Downloads</div><div class="stat-value">41</div></div>
+                  <div class="stat-item"><div class="stat-label">Health</div><div class="stat-value" style="color:var(--green)">OK</div></div>
+                </div>
+                <svg class="app-widget-sparkline" viewBox="0 0 180 28" preserveAspectRatio="none">
+                  <polyline points="0,20 20,18 40,22 60,14 80,18 100,12 120,16 140,10 160,12 180,8" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.7"/>
+                  <polyline points="0,20 20,18 40,22 60,14 80,18 100,12 120,16 140,10 160,12 180,8 180,28 0,28" fill="#3b82f6" opacity="0.07"/>
+                </svg>
+                <div class="app-last-event">10:15pm — Download · Oppenheimer</div>
+              </div>
+
+              <div class="app-widget warn">
+                <div class="app-widget-header">
+                  <div class="app-icon">N8</div>
+                  <div class="app-name">n8n</div>
+                  <div class="app-status warn"><div class="dot yellow"></div> 2 errors</div>
+                </div>
+                <div class="app-widget-stats">
+                  <div class="stat-item"><div class="stat-label">Workflows</div><div class="stat-value">147</div></div>
+                  <div class="stat-item"><div class="stat-label">Errors</div><div class="stat-value" style="color:var(--yellow)">2</div></div>
+                </div>
+                <svg class="app-widget-sparkline" viewBox="0 0 180 28" preserveAspectRatio="none">
+                  <polyline points="0,22 20,20 40,22 60,22 80,22 100,22 120,6 140,18 160,22 180,22" fill="none" stroke="#eab308" stroke-width="1.5" opacity="0.7"/>
+                  <polyline points="0,22 20,20 40,22 60,22 80,22 100,22 120,6 140,18 160,22 180,22 180,28 0,28" fill="#eab308" opacity="0.07"/>
+                </svg>
+                <div class="app-last-event" style="color:var(--yellow)">2:14am — HTTP request failed · webhook-out</div>
+              </div>
+
+              <div class="app-widget">
+                <div class="app-widget-header">
+                  <div class="app-icon">DU</div>
+                  <div class="app-name">Duplicati</div>
+                  <div class="app-status online"><div class="dot green"></div> Online</div>
+                </div>
+                <div class="app-widget-stats">
+                  <div class="stat-item"><div class="stat-label">Backups</div><div class="stat-value">31</div></div>
+                  <div class="stat-item"><div class="stat-label">Failed</div><div class="stat-value" style="color:var(--green)">0</div></div>
+                </div>
+                <svg class="app-widget-sparkline" viewBox="0 0 180 28" preserveAspectRatio="none">
+                  <polyline points="0,16 20,14 40,14 60,14 80,12 100,14 120,12 140,14 160,12 180,10" fill="none" stroke="#22c55e" stroke-width="1.5" opacity="0.7"/>
+                  <polyline points="0,16 20,14 40,14 60,14 80,12 100,14 120,12 140,14 160,12 180,10 180,28 0,28" fill="#22c55e" opacity="0.07"/>
+                </svg>
+                <div class="app-last-event">03:00am — Backup complete · /home/ryan</div>
+              </div>
+
+              <div class="app-widget">
+                <div class="app-widget-header">
+                  <div class="app-icon">DI</div>
+                  <div class="app-name">DIUN</div>
+                  <div class="app-status online"><div class="dot green"></div> Online</div>
+                </div>
+                <div class="app-widget-stats">
+                  <div class="stat-item"><div class="stat-label">Updates</div><div class="stat-value">5</div></div>
+                  <div class="stat-item"><div class="stat-label">Watched</div><div class="stat-value">34</div></div>
+                </div>
+                <svg class="app-widget-sparkline" viewBox="0 0 180 28" preserveAspectRatio="none">
+                  <polyline points="0,24 20,24 40,12 60,24 80,24 100,24 120,24 140,16 160,24 180,24" fill="none" stroke="#7a8fa8" stroke-width="1.5" opacity="0.6"/>
+                  <polyline points="0,24 20,24 40,12 60,24 80,24 100,24 120,24 140,16 160,24 180,24 180,28 0,28" fill="#7a8fa8" opacity="0.05"/>
+                </svg>
+                <div class="app-last-event">Yesterday — New image · traefik:v3.1</div>
+              </div>
+
+              <div class="app-widget">
+                <div class="app-widget-header">
+                  <div class="app-icon">MX</div>
+                  <div class="app-name">Matrix</div>
+                  <div class="app-status online"><div class="dot green"></div> Online</div>
+                </div>
+                <div class="app-widget-stats">
+                  <div class="stat-item"><div class="stat-label">Users</div><div class="stat-value">4</div></div>
+                  <div class="stat-item"><div class="stat-label">Rooms</div><div class="stat-value">12</div></div>
+                </div>
+                <svg class="app-widget-sparkline" viewBox="0 0 180 28" preserveAspectRatio="none">
+                  <polyline points="0,18 20,16 40,18 60,14 80,16 100,14 120,16 140,12 160,14 180,12" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity="0.5"/>
+                  <polyline points="0,18 20,16 40,18 60,14 80,16 100,14 120,16 140,12 160,14 180,12 180,28 0,28" fill="#3b82f6" opacity="0.05"/>
+                </svg>
+                <div class="app-last-event">Federation healthy · 3 min ago</div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- INFRASTRUCTURE -->
+          <div>
+            <div class="section-header">
+              <div class="section-title">Infrastructure</div>
+              <div class="section-action">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add host
+              </div>
+            </div>
+            <div class="widget-grid">
+
+              <div class="host-widget">
+                <div class="host-widget-header">
+                  <div class="host-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                  </div>
+                  <div class="host-meta">
+                    <div class="host-name">proxmox-node1</div>
+                    <div class="host-type">Proxmox VE · 192.168.1.10</div>
+                  </div>
+                  <div class="app-status online"><div class="dot green"></div></div>
+                </div>
+                <div class="resource-bars">
+                  <div class="resource-row">
+                    <div class="resource-label">CPU</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:34%"></div></div>
+                    <div class="resource-pct">34%</div>
+                  </div>
+                  <div class="resource-row">
+                    <div class="resource-label">MEM</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill warn" style="width:72%"></div></div>
+                    <div class="resource-pct" style="color:var(--yellow)">72%</div>
+                  </div>
+                  <div class="resource-row">
+                    <div class="resource-label">DSK</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:48%"></div></div>
+                    <div class="resource-pct">48%</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="host-widget">
+                <div class="host-widget-header">
+                  <div class="host-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  </div>
+                  <div class="host-meta">
+                    <div class="host-name">rocky-vm01</div>
+                    <div class="host-type">Rocky Linux 9 · 192.168.1.50</div>
+                  </div>
+                  <div class="app-status online"><div class="dot green"></div></div>
+                </div>
+                <div class="resource-bars">
+                  <div class="resource-row">
+                    <div class="resource-label">CPU</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:18%"></div></div>
+                    <div class="resource-pct">18%</div>
+                  </div>
+                  <div class="resource-row">
+                    <div class="resource-label">MEM</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:61%"></div></div>
+                    <div class="resource-pct">61%</div>
+                  </div>
+                  <div class="resource-row">
+                    <div class="resource-label">DSK</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:55%"></div></div>
+                    <div class="resource-pct">55%</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="host-widget">
+                <div class="host-widget-header">
+                  <div class="host-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                  </div>
+                  <div class="host-meta">
+                    <div class="host-name">synology-nas</div>
+                    <div class="host-type">Synology DS920+ · 192.168.1.20</div>
+                  </div>
+                  <div class="app-status online"><div class="dot green"></div></div>
+                </div>
+                <div class="resource-bars">
+                  <div class="resource-row">
+                    <div class="resource-label">CPU</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:8%"></div></div>
+                    <div class="resource-pct">8%</div>
+                  </div>
+                  <div class="resource-row">
+                    <div class="resource-label">MEM</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:42%"></div></div>
+                    <div class="resource-pct">42%</div>
+                  </div>
+                  <div class="resource-row">
+                    <div class="resource-label">VOL</div>
+                    <div class="resource-bar-track"><div class="resource-bar-fill" style="width:68%"></div></div>
+                    <div class="resource-pct">68%</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- RECENT EVENTS -->
+          <div>
+            <div class="section-header">
+              <div class="section-title">Recent Events</div>
+              <div class="section-action">View all →</div>
+            </div>
+            <div class="events-panel">
+              <div class="event-row">
+                <div class="event-time">11:42pm</div>
+                <div class="severity-badge info"></div>
+                <div class="event-app">sonarr</div>
+                <div class="event-text">Download — Breaking Bad S03E04 · 1080p</div>
+                <div class="event-sev-label info">info</div>
+              </div>
+              <div class="event-row">
+                <div class="event-time">11:38pm</div>
+                <div class="severity-badge info"></div>
+                <div class="event-app">radarr</div>
+                <div class="event-text">Download — Oppenheimer · 2160p HDR</div>
+                <div class="event-sev-label info">info</div>
+              </div>
+              <div class="event-row">
+                <div class="event-time">10:22pm</div>
+                <div class="severity-badge warn"></div>
+                <div class="event-app">n8n</div>
+                <div class="event-text">Workflow failed — HTTP request timeout · webhook-pushover</div>
+                <div class="event-sev-label warn">warn</div>
+              </div>
+              <div class="event-row">
+                <div class="event-time">03:00am</div>
+                <div class="severity-badge info"></div>
+                <div class="event-app">duplicati</div>
+                <div class="event-text">Backup completed — /home/ryan · 2.4GB · 4m 12s</div>
+                <div class="event-sev-label info">info</div>
+              </div>
+              <div class="event-row">
+                <div class="event-time">Yesterday</div>
+                <div class="severity-badge info"></div>
+                <div class="event-app">diun</div>
+                <div class="event-text">New image available — traefik:v3.1.0</div>
+                <div class="event-sev-label info">info</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT COL -->
+        <div style="display:flex;flex-direction:column;gap:20px;">
+
+          <!-- MONITOR CHECKS -->
+          <div>
+            <div class="section-header">
+              <div class="section-title">Monitor Checks</div>
+              <div class="section-action">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add check
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+
+              <div class="monitor-widget">
+                <div class="monitor-status-block up">UP</div>
+                <div class="monitor-info">
+                  <div class="monitor-name">OPNsense</div>
+                  <div class="monitor-target">192.168.1.1 · ping</div>
+                </div>
+                <div class="monitor-meta">
+                  <div class="monitor-uptime">100%</div>
+                  <div class="monitor-last">1m ago</div>
+                </div>
+              </div>
+
+              <div class="monitor-widget">
+                <div class="monitor-status-block up">UP</div>
+                <div class="monitor-info">
+                  <div class="monitor-name">Traefik</div>
+                  <div class="monitor-target">traefik.itegasus.com/ping</div>
+                </div>
+                <div class="monitor-meta">
+                  <div class="monitor-uptime">99.9%</div>
+                  <div class="monitor-last">2m ago</div>
+                </div>
+              </div>
+
+              <div class="monitor-widget">
+                <div class="monitor-status-block up">UP</div>
+                <div class="monitor-info">
+                  <div class="monitor-name">Sonarr API</div>
+                  <div class="monitor-target">sonarr.itegasus.com/api/v3/health</div>
+                </div>
+                <div class="monitor-meta">
+                  <div class="monitor-uptime">100%</div>
+                  <div class="monitor-last">3m ago</div>
+                </div>
+              </div>
+
+              <div class="monitor-widget">
+                <div class="monitor-status-block warn">SSL</div>
+                <div class="monitor-info">
+                  <div class="monitor-name">itegasus.com</div>
+                  <div class="monitor-target">SSL · expires in 18 days</div>
+                </div>
+                <div class="monitor-meta">
+                  <div class="monitor-uptime" style="color:var(--yellow)">18d</div>
+                  <div class="monitor-last">1h ago</div>
+                </div>
+              </div>
+
+              <div class="monitor-widget">
+                <div class="monitor-status-block up">UP</div>
+                <div class="monitor-info">
+                  <div class="monitor-name">Proxmox UI</div>
+                  <div class="monitor-target">192.168.1.10:8006</div>
+                </div>
+                <div class="monitor-meta">
+                  <div class="monitor-uptime">100%</div>
+                  <div class="monitor-last">5m ago</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- SSL CERTS -->
+          <div>
+            <div class="section-header">
+              <div class="section-title">SSL Certificates</div>
+            </div>
+            <div class="ssl-panel">
+              <div class="ssl-row">
+                <div class="ssl-days warn">18d</div>
+                <div class="ssl-domain">itegasus.com</div>
+                <div class="ssl-date">Apr 11</div>
+              </div>
+              <div class="ssl-row">
+                <div class="ssl-days good">64d</div>
+                <div class="ssl-domain">sonarr.itegasus.com</div>
+                <div class="ssl-date">May 27</div>
+              </div>
+              <div class="ssl-row">
+                <div class="ssl-days good">64d</div>
+                <div class="ssl-domain">matrix.itegasus.com</div>
+                <div class="ssl-date">May 27</div>
+              </div>
+              <div class="ssl-row">
+                <div class="ssl-days good">64d</div>
+                <div class="ssl-domain">n8n.itegasus.com</div>
+                <div class="ssl-date">May 27</div>
+              </div>
+              <div class="ssl-row">
+                <div class="ssl-days good">89d</div>
+                <div class="ssl-domain">proxmox.itegasus.com</div>
+                <div class="ssl-date">Jun 21</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BOOKMARKS -->
+          <div>
+            <div class="section-header">
+              <div class="section-title">Bookmarks</div>
+              <div class="section-action">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+
+              <a class="bookmark-widget" href="#">
+                <div class="bookmark-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div class="bookmark-name">ISP Status Page</div>
+                  <div class="bookmark-url">status.isp.com</div>
+                </div>
+                <div class="bookmark-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></div>
+              </a>
+
+              <a class="bookmark-widget" href="#">
+                <div class="bookmark-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div class="bookmark-name">Router Admin</div>
+                  <div class="bookmark-url">192.168.1.1</div>
+                </div>
+                <div class="bookmark-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></div>
+              </a>
+
+              <a class="bookmark-widget" href="#">
+                <div class="bookmark-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div class="bookmark-name">Network Diagram</div>
+                  <div class="bookmark-url">docs.itegasus.com/network</div>
+                </div>
+                <div class="bookmark-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></div>
+              </a>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
