@@ -1,0 +1,54 @@
+meta:
+  name: Radarr
+  category: Media
+  logo: radarr.png
+  description: Movie management and download automation
+  capability: full
+
+webhook:
+  setup_instructions: |
+    In Radarr go to Settings → Connect → Add → Webhook.
+    Set the URL to {base_url}/ingest/{token} and select the event types below.
+  recommended_events:
+    - On Download
+    - On Upgrade
+    - On Health Issue
+    - On Application Update
+  not_recommended:
+    - On Grab
+  field_mappings:
+    event_type: "$.eventType"
+    movie_title: "$.movie.title"
+    quality: "$.movieFile.quality.quality.name"
+    health_type: "$.healthCheck.type"
+    health_message: "$.healthCheck.message"
+  severity_field: event_type
+  display_template: "{event_type} — {movie_title}"
+  severity_mapping:
+    Download: info
+    Upgrade: info
+    HealthIssue: warn
+    HealthRestored: info
+    ApplicationUpdate: info
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/v3/system/status"
+  auth_header: "X-Api-Key: {api_key}"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Downloads
+      match_field: event_type
+      match_value: Download
+      match_severity: ""
+    - label: Upgrades
+      match_field: event_type
+      match_value: Upgrade
+      match_severity: ""
+    - label: Health Issues
+      match_field: event_type
+      match_value: HealthIssue
+      match_severity: ""

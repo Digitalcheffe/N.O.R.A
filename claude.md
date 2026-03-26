@@ -2,9 +2,36 @@
 # Claude Code Instructions — NORA
 
 ## Before Starting Any Task
-- Checkout main: `git checkout main`
-- Pull latest: `git pull origin main`
-- Create a fresh branch: `git checkout -b <type>/<short-description>`
+
+**Every new session starts here. No exceptions. Do not skip any step.**
+
+### Step 1 — Establish ground truth from the remote
+```
+git fetch --all --prune
+git checkout main
+git pull origin main
+git log --oneline -10
+git branch -a
+```
+Read the output. Do not assume anything about what is merged or what branch you are on.
+`git log` tells you what is actually on main right now.
+`git branch -a` tells you what branches still exist locally and remotely.
+
+### Step 2 — Confirm previous work is merged
+Before starting anything new, verify the last known branch is no longer open.
+If a branch still exists remotely, check its PR status with `gh pr list --state all`.
+Do not declare something merged unless `git log` on main shows the commits.
+
+### Step 3 — Clean up any stale local branches
+```
+git branch -d <any-branch-that-has-been-merged>
+```
+If `git branch -d` fails because the branch is not fully merged, stop and ask — do not force delete.
+
+### Step 4 — Create a fresh branch for this session's work
+```
+git checkout -b <type>/<short-description>
+```
 - Branch naming: feat/, fix/, chore/, docs/
 - Never commit directly to main or master
 - Never start work on a stale branch
@@ -31,6 +58,8 @@
 - Do not ask for confirmation on routine git operations
 - Do not pause for approval on branch creation, commits, pushes, or PRs
 - Only stop and ask if something is ambiguous or destructive
+- **Never assume git state — always verify with git fetch + git log before acting**
+- **Never say a branch is merged or a feature is complete without confirming it in git log on main**
 
 ---
 
@@ -140,12 +169,66 @@ NORA_VAPID_PRIVATE     VAPID private key (auto-generated on first run if absent)
 
 ---
 
-## Testing Expectations
-- Backend: `go test ./...` must pass before opening a PR
-- Each handler should have at minimum a happy-path and an error-path test
+## Testing & Build Verification
+
+Run all of the following before opening any PR. No exceptions.
+
+### Backend
+- `go test ./...` must pass
+- Each handler must have at minimum a happy-path and an error-path test
 - Use `net/http/httptest` for handler tests — no external test servers
-- Frontend: `npm run build` must succeed with zero TypeScript errors
-- Lint: `golangci-lint run` for Go, `npm run lint` for frontend — fix all warnings
+- `golangci-lint run` — fix all warnings
+
+### Frontend
+- `cd frontend && npm run build` must succeed with zero TypeScript errors
+- `npm run lint` — fix all warnings
+
+### Docker Build
+All development and testing runs in Docker Desktop. One Dockerfile. One `docker-compose.yml`. No exceptions.
+
+```
+docker compose up --build       — must complete with zero errors
+curl http://localhost:8080/     — must return a response
+docker images                   — nora image must be under 50MB
+```
+
+**Dockerfile is a 3-stage build — do not change this structure:**
+- Stage 1 `frontend-build`: `node:20-alpine` → `npm ci` → `npm run build`
+- Stage 2 `backend-build`: `golang:1.22-alpine` → `go mod download` → `go build`
+- Stage 3 `final`: `alpine:3.19` → binary only
+
+Final image contains ONLY the binary + ca-certificates + tzdata. No node_modules. No Go toolchain. No source code.
+
+**Layer cache rule — always copy dependency manifests before source code:**
+```
+COPY package.json package-lock.json ./   ← before npm ci
+COPY go.mod go.sum ./                    ← before go mod download
+COPY . .                                 ← source always last
+```
+Violating this means every build downloads all dependencies from scratch.
+
+**What Claude Code must NOT do:**
+- Do NOT create a second compose file or any dev override
+- Do NOT use concurrently, air, nodemon, or any process watcher
+- Do NOT run backend and frontend as separate containers
+- Do NOT write shell scripts that start multiple processes
+- Do NOT use `--watch` flags on any docker command
+- Do NOT copy node_modules into the final image
+- Do NOT use the golang or node image as the runtime base — `alpine:3.19` only
+
+**If the build fails, diagnose in this order:**
+1. `cd frontend && npm run build`
+2. `go build ./cmd/nora/`
+3. `docker compose up --build`
+
+Fix the earliest failing stage first. Use `docker build --progress=plain .` to see full output.
+
+### PR Checklist
+- [ ] `go test ./...` passes
+- [ ] `npm run build` passes with zero TypeScript errors
+- [ ] `docker compose up --build` completes with zero errors
+- [ ] `curl http://localhost:8080/` returns a response
+- [ ] `docker images` shows nora image under 50MB
 
 ---
 

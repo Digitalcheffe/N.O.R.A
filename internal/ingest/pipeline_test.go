@@ -24,7 +24,7 @@ func newTestStore(t *testing.T) *repo.Store {
 	t.Cleanup(func() { db.Close() })
 	appRepo := repo.NewAppRepo(db)
 	eventRepo := repo.NewEventRepo(db)
-	return repo.NewStore(appRepo, eventRepo)
+	return repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db))
 }
 
 func seedApp(t *testing.T, store *repo.Store, token string, rateLimit int) models.App {
@@ -134,17 +134,19 @@ func TestProcess_ProfileFieldExtraction(t *testing.T) {
 
 	// Profile with field mappings, severity mapping, and display template.
 	p := &profile.Profile{
-		FieldMappings: map[string]string{
-			"eventType": "$.eventType",
-			"series":    "$.series.title",
+		Webhook: profile.Webhook{
+			FieldMappings: map[string]string{
+				"eventType": "$.eventType",
+				"series":    "$.series.title",
+			},
+			SeverityField: "eventType",
+			SeverityMapping: map[string]string{
+				"Test":    "info",
+				"Health":  "warn",
+				"Grabbed": "info",
+			},
+			DisplayTemplate: "{series} — {eventType}",
 		},
-		SeverityField: "eventType",
-		SeverityMapping: map[string]string{
-			"Test":    "info",
-			"Health":  "warn",
-			"Grabbed": "info",
-		},
-		DisplayTemplate: "{series} — {eventType}",
 	}
 
 	loader := &stubLoader{profile: p}

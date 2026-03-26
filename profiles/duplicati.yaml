@@ -1,0 +1,41 @@
+meta:
+  name: Duplicati
+  category: Storage
+  logo: duplicati.png
+  description: Open-source backup software
+  capability: webhook_only
+
+webhook:
+  setup_instructions: |
+    In Duplicati go to Settings → Default options → Send HTTP message.
+    Set the URL to {base_url}/ingest/{token}.
+  recommended_events:
+    - Backup completed
+    - Backup failed
+    - Restore completed
+  not_recommended: []
+  field_mappings:
+    event_type: "$.Data.ParsedResult"
+    backup_name: "$.Data.OperationName"
+    duration: "$.Data.Duration"
+    files_added: "$.Data.AddedFiles"
+    bytes_uploaded: "$.Data.SizeOfAddedFiles"
+    error_message: "$.Data.Message"
+  severity_field: event_type
+  display_template: "Backup {event_type} — {backup_name}"
+  severity_mapping:
+    Success: info
+    Warning: warn
+    Error: error
+    Fatal: critical
+
+digest:
+  categories:
+    - label: Backups
+      match_field: event_type
+      match_value: Success
+      match_severity: ""
+    - label: Backup Errors
+      match_field: ""
+      match_value: ""
+      match_severity: error

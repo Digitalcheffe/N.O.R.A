@@ -14,6 +14,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/migrations"
+	noraprofiles "github.com/digitalcheffe/nora/profiles"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -32,10 +33,17 @@ func main() {
 	// Repositories
 	appRepo := repo.NewAppRepo(db)
 	eventRepo := repo.NewEventRepo(db)
-	store := repo.NewStore(appRepo, eventRepo)
+	checkRepo := repo.NewCheckRepo(db)
+	rollupRepo := repo.NewRollupRepo(db)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo)
 
-	// Ingest dependencies
-	profiler := &profile.NoopLoader{}
+	// Profile registry — load all bundled YAML profiles
+	registry, err := profile.NewRegistry(noraprofiles.Files)
+	if err != nil {
+		log.Fatalf("profile registry init failed: %v", err)
+	}
+	log.Printf("loaded %d profiles", len(registry.List()))
+
 	limiter := ingest.NewRateLimiter()
 
 	// Router
@@ -45,13 +53,14 @@ func main() {
 
 	// Public routes — no session auth
 	api.RegisterDocsRoutes(r)
-	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, profiler, limiter))
+	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
 
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.DevMode))
 		api.NewAppsHandler(appRepo).Routes(r)
 		api.NewEventsHandler(eventRepo).Routes(r)
+		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html
