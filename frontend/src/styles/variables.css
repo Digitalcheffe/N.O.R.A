@@ -1,0 +1,43 @@
+/* ── NORA Design Tokens ─────────────────────────────────────────────────────
+   Extracted verbatim from /docs/dashboard.html. Do not invent new values —
+   always reference an existing variable.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  /* Backgrounds */
+  --bg:          #0a0c0f;
+  --bg2:         #0f1215;
+  --bg3:         #151920;
+  --bg4:         #1c2028;
+
+  /* Borders */
+  --border:      #1e2530;
+  --border2:     #252d38;
+
+  /* Text */
+  --text:        #c8d4e0;
+  --text2:       #7a8fa8;
+  --text3:       #445566;
+
+  /* Accent */
+  --accent:      #3b82f6;
+  --accent-dim:  #1d3a6b;
+
+  /* Status: green */
+  --green:       #22c55e;
+  --green-dim:   #14532d;
+
+  /* Status: yellow / warn */
+  --yellow:      #eab308;
+  --yellow-dim:  #713f12;
+
+  /* Status: red / error */
+  --red:         #ef4444;
+  --red-dim:     #7f1d1d;
+
+  /* Typography */
+  --mono:        'JetBrains Mono', monospace;
+  --sans:        'DM Sans', sans-serif;
+}

@@ -1,0 +1,30 @@
+.dashboard-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 80px 20px;
+  color: var(--text3);
+}
+
+.dashboard-empty-text {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.dashboard-empty-btn {
+  padding: 8px 16px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.dashboard-empty-btn:hover {
+  background: var(--accent);
+  color: white;
+}
