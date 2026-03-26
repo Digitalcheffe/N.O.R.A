@@ -1,0 +1,109 @@
+.topbar {
+  height: 52px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 9;
+}
+
+.topbar-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  border-radius: 20px;
+  padding: 4px 10px;
+  border: 1px solid #166534;
+  background: var(--green-dim);
+}
+
+.topbar-status.status-warn {
+  background: var(--yellow-dim);
+  border-color: #854d0e;
+}
+
+.topbar-status.status-down {
+  background: var(--red-dim);
+  border-color: #991b1b;
+}
+
+.topbar-status span {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+  font-weight: 500;
+}
+
+.topbar-status.status-warn span { color: var(--yellow); }
+.topbar-status.status-down span { color: var(--red); }
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+
+.status-dot.warn { background: var(--yellow); }
+.status-dot.down { background: var(--red); animation: none; }
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.time-filter {
+  display: flex;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.time-btn {
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: all 0.15s;
+}
+
+.time-btn:hover { color: var(--text2); background: var(--bg4); }
+.time-btn.active { color: var(--accent); background: var(--accent-dim); }
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text2);
+  transition: all 0.15s;
+}
+
+.icon-btn:hover { border-color: var(--border2); color: var(--text); }
+.icon-btn svg { width: 14px; height: 14px; }

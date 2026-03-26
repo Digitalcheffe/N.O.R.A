@@ -1,0 +1,118 @@
+.events-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text3);
+  transition: all 0.15s;
+}
+
+.filter-chip:hover { border-color: var(--border2); color: var(--text2); }
+.filter-chip.sev-info.active   { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.filter-chip.sev-warn.active   { background: var(--yellow-dim); border-color: var(--yellow); color: var(--yellow); }
+.filter-chip.sev-error.active  { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+.filter-chip.sev-critical.active { background: var(--red-dim); border-color: var(--red); color: var(--red); font-weight: 600; }
+
+.events-panel {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.events-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.events-empty {
+  padding: 40px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+}
+
+/* Event row — used by both Events and Dashboard */
+.event-row {
+  display: grid;
+  grid-template-columns: 80px 20px 140px 1fr 80px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  cursor: pointer;
+}
+
+.event-row:last-child { border-bottom: none; }
+.event-row:hover { background: var(--bg3); }
+
+.event-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.severity-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.severity-badge.info     { background: var(--accent); }
+.severity-badge.warn     { background: var(--yellow); }
+.severity-badge.error    { background: var(--red); }
+.severity-badge.critical { background: var(--red); }
+.severity-badge.debug    { background: var(--text3); }
+
+.event-app {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-text {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-sev-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.event-sev-label.info     { color: var(--accent); }
+.event-sev-label.warn     { color: var(--yellow); }
+.event-sev-label.error    { color: var(--red); }
+.event-sev-label.critical { color: var(--red); }
