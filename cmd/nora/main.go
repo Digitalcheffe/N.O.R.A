@@ -27,6 +27,7 @@ func main() {
 
 	// Repositories
 	appRepo := repo.NewAppRepo(db)
+	eventRepo := repo.NewEventRepo(db)
 
 	// Router
 	r := chi.NewRouter()
@@ -37,6 +38,7 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.DevMode))
 		api.NewAppsHandler(appRepo).Routes(r)
+		api.NewEventsHandler(eventRepo).Routes(r)
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
