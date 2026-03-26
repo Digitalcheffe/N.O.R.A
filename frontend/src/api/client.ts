@@ -35,7 +35,7 @@ async function request<T>(
     headers['Content-Type'] = 'application/json'
   }
 
-  const res = await fetch(path, {
+  const res = await fetch(`/api/v1${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

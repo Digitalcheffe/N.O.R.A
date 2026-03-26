@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { events as eventsApi } from '../api/client'
 import type { Event } from '../api/types'
 
 function formatEventTime(iso: string): string {
@@ -22,11 +23,25 @@ interface Props {
 
 export function EventRow({ event, appName }: Props) {
   const [expanded, setExpanded] = useState(false)
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
+  const [fetching, setFetching] = useState(false)
   const sev = event.severity
+
+  function handleClick() {
+    if (!expanded && detail === null) {
+      setFetching(true)
+      eventsApi
+        .get(event.id)
+        .then(e => setDetail((e as Event & { raw_payload: Record<string, unknown> }).raw_payload ?? e.fields ?? {}))
+        .catch(() => setDetail({}))
+        .finally(() => setFetching(false))
+    }
+    setExpanded(!expanded)
+  }
 
   return (
     <div className={`event-row-wrapper${expanded ? ' expanded' : ''}`}>
-      <div className="event-row" onClick={() => setExpanded(!expanded)}>
+      <div className="event-row" onClick={handleClick}>
         <div className="event-time">{formatEventTime(event.received_at)}</div>
         <div className={`severity-badge ${sev}`} />
         <div className="event-app">{appName || event.app_id}</div>
@@ -35,7 +50,7 @@ export function EventRow({ event, appName }: Props) {
       </div>
       {expanded && (
         <div className="event-expand">
-          {JSON.stringify(event.raw_payload, null, 2)}
+          {fetching ? 'Loading…' : JSON.stringify(detail, null, 2)}
         </div>
       )}
     </div>
