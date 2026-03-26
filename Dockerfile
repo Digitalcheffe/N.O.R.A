@@ -21,6 +21,6 @@ FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata sqlite
 WORKDIR /app
 COPY --from=backend-build /app/nora .
-EXPOSE 6000
+EXPOSE 8081
 VOLUME ["/data"]
 CMD ["./nora"]

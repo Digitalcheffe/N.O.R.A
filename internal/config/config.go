@@ -26,7 +26,7 @@ func Load() *Config {
 		DevMode:        getEnvBool("NORA_DEV_MODE", false),
 		Secret:         os.Getenv("NORA_SECRET"),
 		DBPath:         getEnvStr("NORA_DB_PATH", "/data/nora.db"),
-		Port:           getEnvStr("NORA_PORT", "6000"),
+		Port:           getEnvStr("NORA_PORT", "8081"),
 		SMTPHost:       os.Getenv("NORA_SMTP_HOST"),
 		SMTPPort:       getEnvInt("NORA_SMTP_PORT", 587),
 		SMTPUser:       os.Getenv("NORA_SMTP_USER"),
