@@ -17,7 +17,10 @@ func main() {
 	}
 	defer db.Close()
 
+	store := repo.NewStore(db)
+	_ = store // TODO: pass to handlers (T-05+)
+
 	log.Printf("NORA database ready at %s", cfg.DBPath)
 
-	// TODO: initialize router and background jobs (T-02 / T-04+)
+	// TODO: initialize router and background jobs (T-02 / T-05+)
 }
