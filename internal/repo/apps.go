@@ -18,6 +18,7 @@ type AppRepo interface {
 	List(ctx context.Context) ([]models.App, error)
 	Create(ctx context.Context, app *models.App) error
 	Get(ctx context.Context, id string) (*models.App, error)
+	GetByToken(ctx context.Context, token string) (*models.App, error)
 	Update(ctx context.Context, app *models.App) error
 	Delete(ctx context.Context, id string) error
 	UpdateToken(ctx context.Context, id, token string) error
@@ -66,6 +67,21 @@ func (r *sqliteAppRepo) Get(ctx context.Context, id string) (*models.App, error)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get app: %w", err)
+	}
+	return &app, nil
+}
+
+func (r *sqliteAppRepo) GetByToken(ctx context.Context, token string) (*models.App, error) {
+	var app models.App
+	err := r.db.GetContext(ctx, &app, `
+		SELECT id, name, token, profile_id, COALESCE(docker_engine_id,'') AS docker_engine_id,
+		       config, rate_limit, created_at
+		FROM apps WHERE token = ?`, token)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get app by token: %w", err)
 	}
 	return &app, nil
 }

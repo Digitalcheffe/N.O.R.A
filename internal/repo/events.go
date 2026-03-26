@@ -22,8 +22,10 @@ type ListFilter struct {
 	Offset   int
 }
 
-// EventRepo defines read operations for the events table.
+// EventRepo defines read/write operations for the events table.
 type EventRepo interface {
+	// Create persists a new event.
+	Create(ctx context.Context, event *models.Event) error
 	// List returns a page of events matching f plus the total matching count.
 	List(ctx context.Context, f ListFilter) (events []models.Event, total int, err error)
 	// Get returns a single event by ID, including raw_payload.
@@ -37,6 +39,18 @@ type sqliteEventRepo struct {
 // NewEventRepo returns an EventRepo backed by the given SQLite database.
 func NewEventRepo(db *sqlx.DB) EventRepo {
 	return &sqliteEventRepo{db: db}
+}
+
+func (r *sqliteEventRepo) Create(ctx context.Context, event *models.Event) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO events (id, app_id, received_at, severity, display_text, raw_payload, fields)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		event.ID, event.AppID, event.ReceivedAt, event.Severity,
+		event.DisplayText, event.RawPayload, event.Fields)
+	if err != nil {
+		return fmt.Errorf("create event: %w", err)
+	}
+	return nil
 }
 
 // buildWhere constructs the WHERE clause and argument slice from a ListFilter.
