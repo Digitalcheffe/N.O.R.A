@@ -55,9 +55,9 @@ func Process(ctx context.Context, store *repo.Store, profiler profile.Loader, li
 	if profiler != nil && app.ProfileID != "" {
 		p, err := profiler.Get(app.ProfileID)
 		if err == nil && p != nil {
-			fieldsMap = extractFields(rawBody, p.FieldMappings)
-			severity = mapSeverity(fieldsMap, p.SeverityField, p.SeverityMapping)
-			displayText = renderTemplate(p.DisplayTemplate, fieldsMap)
+			fieldsMap = extractFields(rawBody, p.Webhook.FieldMappings)
+			severity = mapSeverity(fieldsMap, p.Webhook.SeverityField, p.Webhook.SeverityMapping)
+			displayText = renderTemplate(p.Webhook.DisplayTemplate, fieldsMap)
 		}
 	}
 

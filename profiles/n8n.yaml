@@ -1,0 +1,46 @@
+meta:
+  name: n8n
+  category: Automation
+  logo: n8n.png
+  description: Workflow automation platform
+  capability: full
+
+webhook:
+  setup_instructions: |
+    In n8n go to Settings → Log streaming or use the n8n webhook node to POST to
+    {base_url}/ingest/{token} on workflow completion and error events.
+  recommended_events:
+    - Workflow finished
+    - Workflow error
+    - Node error
+  not_recommended: []
+  field_mappings:
+    event_type: "$.eventName"
+    workflow_name: "$.workflowData.name"
+    workflow_id: "$.workflowData.id"
+    execution_id: "$.executionId"
+    error_message: "$.error.message"
+    error_node: "$.nodeName"
+  severity_field: event_type
+  display_template: "{event_type} — {workflow_name}"
+  severity_mapping:
+    "workflow.finished": info
+    "workflow.error": error
+    "node.error": warn
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/healthz"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Workflows
+      match_field: event_type
+      match_value: "workflow.finished"
+      match_severity: ""
+    - label: Errors
+      match_field: ""
+      match_value: ""
+      match_severity: error
