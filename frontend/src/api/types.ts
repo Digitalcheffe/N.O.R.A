@@ -150,19 +150,54 @@ export interface DockerEngine {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
 
-export interface DashboardSummary {
-  status: 'ok' | 'warn' | 'down'
-  categories: SummaryCategory[]
-  checks_total: number
-  checks_up: number
-  checks_warn: number
-  checks_down: number
-}
-
-export interface SummaryCategory {
+export interface SummaryBarItem {
   label: string
   count: number
-  trend: number[]
+  sub: string
+  sparkline: number[]
+}
+
+export interface AppStat {
+  label: string
+  value: string
+  color?: string
+}
+
+export interface AppSummary {
+  id: string
+  name: string
+  profile_id: string
+  status: 'online' | 'warn' | 'down'
+  last_event_at: string | null
+  last_event_text: string | null
+  stats: AppStat[]
+  sparkline: number[]
+}
+
+export interface CheckSummary {
+  id: string
+  name: string
+  type: string
+  target: string
+  status: string
+  uptime_pct: number
+  last_checked_at?: string
+}
+
+export interface SSLCert {
+  domain: string
+  days_remaining: number
+  expires_at: string
+  status: string
+}
+
+export interface DashboardSummaryResponse {
+  status: 'normal' | 'warn' | 'down'
+  period: string
+  summary_bar: SummaryBarItem[]
+  apps: AppSummary[]
+  checks: CheckSummary[]
+  ssl_certs: SSLCert[]
 }
 
 // ── Profile Library ──────────────────────────────────────────────────────────

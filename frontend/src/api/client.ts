@@ -10,7 +10,7 @@ import type {
   CreateAppInput,
   CreateCheckInput,
   CreateUserInput,
-  DashboardSummary,
+  DashboardSummaryResponse,
   DockerEngine,
   Event,
   EventFilter,
@@ -35,7 +35,7 @@ async function request<T>(
     headers['Content-Type'] = 'application/json'
   }
 
-  const res = await fetch(path, {
+  const res = await fetch(`/api/v1${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -196,8 +196,8 @@ export const topology = {
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 export const dashboard = {
-  summary: () =>
-    request<DashboardSummary>('GET', '/dashboard/summary'),
+  summary: (period: string = 'week') =>
+    request<DashboardSummaryResponse>('GET', `/dashboard/summary?period=${period}`),
 
   digest: (period: string) =>
     request<unknown>('GET', `/dashboard/digest/${period}`),
