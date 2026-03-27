@@ -7,7 +7,7 @@ import { Apps } from './pages/Apps'
 import { AppDetail } from './pages/AppDetail'
 import { Topology } from './pages/Topology'
 import { Settings } from './pages/Settings'
-import { ProfileEditor } from './pages/ProfileEditor'
+import { AppTemplateEditor } from './pages/AppTemplateEditor'
 import { Profile } from './pages/Profile'
 
 export default function App() {
@@ -23,8 +23,8 @@ export default function App() {
           <Route path="topology" element={<Topology />} />
           <Route path="settings" element={<Settings />} />
           <Route path="profile" element={<Profile />} />
-          <Route path="profiles/new" element={<ProfileEditor />} />
-          <Route path="profiles/:id/edit" element={<ProfileEditor />} />
+          <Route path="app-templates/new" element={<AppTemplateEditor />} />
+          <Route path="app-templates/:id/edit" element={<AppTemplateEditor />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

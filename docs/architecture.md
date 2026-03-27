@@ -359,16 +359,16 @@ When topology is not defined apps show as standalone with their own status only.
 
 ---
 
-## App Profile Library
+## App Template Library
 
-Every pre-built app ships with a YAML profile. The profile drives setup instructions, field extraction, display formatting, monitoring config, and digest categories automatically.
+Every pre-built app ships with a YAML app template. The template drives setup instructions, field extraction, display formatting, monitoring config, and digest categories automatically.
 
-### Profile Schema
+### App Template Schema
 ```yaml
 meta:
   name: string
   category: string          Media | Automation | Network | Infrastructure | Storage | Security
-  logo: string              filename in /profiles/logos/
+  logo: string              filename in /appprofiles/logos/
   description: string
   capability: string        full | webhook_only | monitor_only | docker_only | limited
 
@@ -409,9 +409,9 @@ digest:
 
 ---
 
-## Custom App Profiles
+## Custom App Templates
 
-Users create custom profiles without uploading files.
+Users create custom app templates without uploading files.
 
 ### v1 — In-Browser YAML Editor
 - Syntax highlighting
@@ -486,9 +486,9 @@ POST   /checks/{id}/run           manual trigger
 GET    /dashboard/summary         status roll-up + counts, current week
 GET    /dashboard/digest/{period} rollup data for period — YYYY-MM
 
-# Profile Library
-GET    /profiles
-GET    /profiles/{id}
+# App Template Library
+GET    /app-templates
+GET    /app-templates/{id}
 
 # Metrics
 GET    /metrics                   instance-wide

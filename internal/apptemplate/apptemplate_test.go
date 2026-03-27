@@ -1,10 +1,10 @@
-package profile_test
+package apptemplate_test
 
 import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/digitalcheffe/nora/internal/profile"
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 )
 
 const sonarrYAML = `
@@ -52,42 +52,42 @@ monitor:
   check_interval: 1m
 `
 
-func newTestRegistry(t *testing.T) *profile.Registry {
+func newTestRegistry(t *testing.T) *apptemplate.Registry {
 	t.Helper()
 	fsys := fstest.MapFS{
 		"sonarr.yaml": {Data: []byte(sonarrYAML)},
 		"simple.yaml": {Data: []byte(simpleYAML)},
 	}
-	reg, err := profile.NewRegistry(fsys)
+	reg, err := apptemplate.NewRegistry(fsys)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	return reg
 }
 
-// TestNewRegistry_LoadsProfiles verifies all YAML files in the FS are loaded.
-func TestNewRegistry_LoadsProfiles(t *testing.T) {
+// TestNewRegistry_LoadsTemplates verifies all YAML files in the FS are loaded.
+func TestNewRegistry_LoadsTemplates(t *testing.T) {
 	reg := newTestRegistry(t)
 	all := reg.List()
 	if len(all) != 2 {
-		t.Fatalf("want 2 profiles, got %d", len(all))
+		t.Fatalf("want 2 templates, got %d", len(all))
 	}
 	p, ok := all["sonarr"]
 	if !ok {
-		t.Fatal("sonarr profile not found")
+		t.Fatal("sonarr template not found")
 	}
 	if p.Meta.Name != "Sonarr" {
 		t.Errorf("want name Sonarr, got %q", p.Meta.Name)
 	}
 }
 
-// TestGet verifies Get returns the correct profile and nil for unknown IDs.
+// TestGet verifies Get returns the correct template and nil for unknown IDs.
 func TestGet(t *testing.T) {
 	reg := newTestRegistry(t)
 
 	p, err := reg.Get("sonarr")
 	if err != nil || p == nil {
-		t.Fatalf("want sonarr profile, got err=%v p=%v", err, p)
+		t.Fatalf("want sonarr template, got err=%v p=%v", err, p)
 	}
 	if p.Meta.Category != "Media" {
 		t.Errorf("want category Media, got %q", p.Meta.Category)
@@ -98,7 +98,7 @@ func TestGet(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if missing != nil {
-		t.Errorf("want nil for unknown profile, got %+v", missing)
+		t.Errorf("want nil for unknown template, got %+v", missing)
 	}
 }
 
@@ -135,8 +135,8 @@ func TestExtractFields(t *testing.T) {
 	}
 }
 
-// TestExtractFields_UnknownProfile returns empty map for an unregistered profile.
-func TestExtractFields_UnknownProfile(t *testing.T) {
+// TestExtractFields_UnknownTemplate returns empty map for an unregistered template.
+func TestExtractFields_UnknownTemplate(t *testing.T) {
 	reg := newTestRegistry(t)
 	fields, err := reg.ExtractFields("ghost", []byte(`{"x":1}`))
 	if err != nil {
@@ -174,8 +174,8 @@ func TestRenderDisplayText(t *testing.T) {
 	}
 }
 
-// TestRenderDisplayText_UnknownProfile returns default text for unknown profile.
-func TestRenderDisplayText_UnknownProfile(t *testing.T) {
+// TestRenderDisplayText_UnknownTemplate returns default text for unknown template.
+func TestRenderDisplayText_UnknownTemplate(t *testing.T) {
 	reg := newTestRegistry(t)
 	got := reg.RenderDisplayText("ghost", map[string]string{})
 	if got != "Event received" {
@@ -183,7 +183,7 @@ func TestRenderDisplayText_UnknownProfile(t *testing.T) {
 	}
 }
 
-// TestRenderDisplayText_NoTemplate returns default for profile without template.
+// TestRenderDisplayText_NoTemplate returns default for template without display template.
 func TestRenderDisplayText_NoTemplate(t *testing.T) {
 	reg := newTestRegistry(t)
 	got := reg.RenderDisplayText("simple", map[string]string{})
@@ -216,8 +216,8 @@ func TestMapSeverity(t *testing.T) {
 	}
 }
 
-// TestMapSeverity_UnknownProfile returns "info" for an unregistered profile.
-func TestMapSeverity_UnknownProfile(t *testing.T) {
+// TestMapSeverity_UnknownTemplate returns "info" for an unregistered template.
+func TestMapSeverity_UnknownTemplate(t *testing.T) {
 	reg := newTestRegistry(t)
 	got := reg.MapSeverity("ghost", map[string]string{"event_type": "Anything"})
 	if got != "info" {
@@ -225,7 +225,7 @@ func TestMapSeverity_UnknownProfile(t *testing.T) {
 	}
 }
 
-// TestMapSeverity_NoSeverityConfig returns "info" when profile has no severity config.
+// TestMapSeverity_NoSeverityConfig returns "info" when template has no severity config.
 func TestMapSeverity_NoSeverityConfig(t *testing.T) {
 	reg := newTestRegistry(t)
 	got := reg.MapSeverity("simple", map[string]string{"event_type": "Anything"})
@@ -271,12 +271,12 @@ digest:
       match_severity: error
 `
 
-func newN8nRegistry(t *testing.T) *profile.Registry {
+func newN8nRegistry(t *testing.T) *apptemplate.Registry {
 	t.Helper()
 	fsys := fstest.MapFS{
 		"n8n.yaml": {Data: []byte(n8nYAML)},
 	}
-	reg, err := profile.NewRegistry(fsys)
+	reg, err := apptemplate.NewRegistry(fsys)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -368,12 +368,12 @@ digest:
       match_severity: error
 `
 
-func newDuplicatiRegistry(t *testing.T) *profile.Registry {
+func newDuplicatiRegistry(t *testing.T) *apptemplate.Registry {
 	t.Helper()
 	fsys := fstest.MapFS{
 		"duplicati.yaml": {Data: []byte(duplicatiYAML)},
 	}
-	reg, err := profile.NewRegistry(fsys)
+	reg, err := apptemplate.NewRegistry(fsys)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}

@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/digitalcheffe/nora/internal/api"
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/ingest"
-	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
 )
@@ -23,7 +23,7 @@ func newIngestRouter(t *testing.T) (http.Handler, *repo.Store) {
 	eventRepo := repo.NewEventRepo(db)
 	store := repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil, nil, nil, nil, nil, nil)
 	limiter := ingest.NewRateLimiter()
-	profiler := &profile.NoopLoader{}
+	profiler := &apptemplate.NoopLoader{}
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, profiler, limiter))

@@ -8,17 +8,17 @@ import (
 	"testing"
 
 	"github.com/digitalcheffe/nora/internal/api"
-	"github.com/digitalcheffe/nora/internal/profile"
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
 	"testing/fstest"
 )
 
-// newProfilesRouter builds a chi router with the profiles handler under /api/v1.
-func newProfilesRouter(t *testing.T) http.Handler {
+// newAppTemplatesRouter builds a chi router with the app templates handler under /api/v1.
+func newAppTemplatesRouter(t *testing.T) http.Handler {
 	t.Helper()
 
-	// Minimal in-memory YAML profile filesystem.
+	// Minimal in-memory YAML app template filesystem.
 	fsys := fstest.MapFS{
 		"sonarr.yaml": {Data: []byte(`meta:
   name: Sonarr
@@ -35,7 +35,7 @@ webhook:
 `)},
 	}
 
-	registry, err := profile.NewRegistry(fsys)
+	registry, err := apptemplate.NewRegistry(fsys)
 	if err != nil {
 		t.Fatalf("build registry: %v", err)
 	}
@@ -51,12 +51,12 @@ webhook:
 	return r
 }
 
-// --- GET /profiles ---
+// --- GET /app-templates ---
 
-func TestProfilesList_OK(t *testing.T) {
-	router := newProfilesRouter(t)
+func TestAppTemplatesList_OK(t *testing.T) {
+	router := newAppTemplatesRouter(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/profiles", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/app-templates", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -68,14 +68,14 @@ func TestProfilesList_OK(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if resp["total"].(float64) != 1 {
-		t.Errorf("expected 1 profile, got %v", resp["total"])
+		t.Errorf("expected 1 app template, got %v", resp["total"])
 	}
 }
 
-func TestProfilesGet_NotFound(t *testing.T) {
-	router := newProfilesRouter(t)
+func TestAppTemplatesGet_NotFound(t *testing.T) {
+	router := newAppTemplatesRouter(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/profiles/does-not-exist", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/app-templates/does-not-exist", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -84,10 +84,10 @@ func TestProfilesGet_NotFound(t *testing.T) {
 	}
 }
 
-// --- POST /profiles/validate ---
+// --- POST /app-templates/validate ---
 
-func TestProfilesValidate_Valid(t *testing.T) {
-	router := newProfilesRouter(t)
+func TestAppTemplatesValidate_Valid(t *testing.T) {
+	router := newAppTemplatesRouter(t)
 
 	body, _ := json.Marshal(map[string]string{"yaml": `meta:
   name: MyApp
@@ -95,7 +95,7 @@ func TestProfilesValidate_Valid(t *testing.T) {
   description: A custom app
   capability: webhook_only
 `})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/profiles/validate", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/app-templates/validate", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -112,15 +112,15 @@ func TestProfilesValidate_Valid(t *testing.T) {
 	}
 }
 
-func TestProfilesValidate_MissingRequired(t *testing.T) {
-	router := newProfilesRouter(t)
+func TestAppTemplatesValidate_MissingRequired(t *testing.T) {
+	router := newAppTemplatesRouter(t)
 
 	// meta.name and meta.category are missing
 	body, _ := json.Marshal(map[string]string{"yaml": `meta:
   description: Missing name and category
   capability: webhook_only
 `})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/profiles/validate", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/app-templates/validate", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -140,11 +140,11 @@ func TestProfilesValidate_MissingRequired(t *testing.T) {
 	}
 }
 
-func TestProfilesValidate_InvalidYAML(t *testing.T) {
-	router := newProfilesRouter(t)
+func TestAppTemplatesValidate_InvalidYAML(t *testing.T) {
+	router := newAppTemplatesRouter(t)
 
 	body, _ := json.Marshal(map[string]string{"yaml": ":\t:invalid yaml{"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/profiles/validate", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/app-templates/validate", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -160,18 +160,18 @@ func TestProfilesValidate_InvalidYAML(t *testing.T) {
 	}
 }
 
-// --- POST /profiles/custom ---
+// --- POST /app-templates/custom ---
 
-func TestProfilesCreateCustom_OK(t *testing.T) {
-	router := newProfilesRouter(t)
+func TestAppTemplatesCreateCustom_OK(t *testing.T) {
+	router := newAppTemplatesRouter(t)
 
 	body, _ := json.Marshal(map[string]string{"yaml": `meta:
   name: MyCustomApp
   category: Custom
-  description: A test custom profile
+  description: A test custom app template
   capability: webhook_only
 `})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/profiles/custom", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/app-templates/custom", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -191,13 +191,13 @@ func TestProfilesCreateCustom_OK(t *testing.T) {
 	}
 }
 
-func TestProfilesCreateCustom_InvalidYAML(t *testing.T) {
-	router := newProfilesRouter(t)
+func TestAppTemplatesCreateCustom_InvalidYAML(t *testing.T) {
+	router := newAppTemplatesRouter(t)
 
 	body, _ := json.Marshal(map[string]string{"yaml": `meta:
   description: Missing required fields
 `})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/profiles/custom", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/app-templates/custom", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)

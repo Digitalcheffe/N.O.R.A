@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { EditorView, lineNumbers, highlightActiveLine } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { yaml } from '@codemirror/lang-yaml'
-import { profiles } from '../api/client'
+import { appTemplates } from '../api/client'
 import type { ValidationResult } from '../api/types'
 
 // ── NORA dark theme for CodeMirror ─────────────────────────────────────────
@@ -85,7 +85,7 @@ digest:
 
 // ── Minimal YAML parser for preview (key: value, indented blocks) ───────────
 
-interface ParsedProfile {
+interface ParsedAppTemplate {
   name: string
   category: string
   description: string
@@ -96,10 +96,10 @@ interface ParsedProfile {
   severityMapping: Record<string, string>
 }
 
-function parseProfileYAML(content: string): ParsedProfile | null {
+function parseAppTemplateYAML(content: string): ParsedAppTemplate | null {
   try {
     const lines = content.split('\n')
-    const result: ParsedProfile = {
+    const result: ParsedAppTemplate = {
       name: '',
       category: '',
       description: '',
@@ -193,15 +193,15 @@ const CAPABILITY_COLORS: Record<string, string> = {
   limited: 'var(--text3)',
 }
 
-// ── ProfileEditor component ─────────────────────────────────────────────────
+// ── AppTemplateEditor component ─────────────────────────────────────────────
 
-export function ProfileEditor() {
+export function AppTemplateEditor() {
   const navigate = useNavigate()
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
 
   const [validation, setValidation] = useState<ValidationResult | null>(null)
-  const [preview, setPreview] = useState<ParsedProfile | null>(null)
+  const [preview, setPreview] = useState<ParsedAppTemplate | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -210,13 +210,13 @@ export function ProfileEditor() {
 
   const handleDocChange = useCallback((content: string) => {
     // Update preview immediately (cheap client-side parse)
-    setPreview(parseProfileYAML(content))
+    setPreview(parseAppTemplateYAML(content))
 
     // Debounce validation API call
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(async () => {
       try {
-        const result = await profiles.validate(content)
+        const result = await appTemplates.validate(content)
         setValidation(result)
       } catch {
         // Network error — don't show stale validation
@@ -268,8 +268,8 @@ export function ProfileEditor() {
     setSaving(true)
     setSaveError(null)
     try {
-      const created = await profiles.createCustom(content)
-      navigate(`/apps?profile=${created.id}`)
+      const created = await appTemplates.createCustom(content)
+      navigate(`/apps?app-template=${created.id}`)
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -286,8 +286,8 @@ export function ProfileEditor() {
       {/* Header */}
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Custom Profile Editor</h1>
-          <p style={styles.subtitle}>Write a YAML profile for an app not in the library</p>
+          <h1 style={styles.title}>Custom App Template Editor</h1>
+          <p style={styles.subtitle}>Write a YAML app template for an app not in the library</p>
         </div>
         <div style={styles.headerActions}>
           {validation && (
@@ -310,7 +310,7 @@ export function ProfileEditor() {
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? 'Saving…' : 'Save Profile'}
+            {saving ? 'Saving…' : 'Save App Template'}
           </button>
         </div>
       </div>

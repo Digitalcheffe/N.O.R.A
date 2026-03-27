@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/models"
-	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/google/uuid"
 )
@@ -30,7 +30,7 @@ func (e ErrRateLimited) Error() string { return "rate limit exceeded" }
 
 // Process runs the full ingest pipeline for a raw JSON payload arriving under token.
 // rawBody must be valid JSON. The caller is responsible for validating this before calling Process.
-func Process(ctx context.Context, store *repo.Store, profiler profile.Loader, limiter *RateLimiter, token string, rawBody []byte) (*Result, error) {
+func Process(ctx context.Context, store *repo.Store, profiler apptemplate.Loader, limiter *RateLimiter, token string, rawBody []byte) (*Result, error) {
 	// Step 1 — Token lookup
 	app, err := store.Apps.GetByToken(ctx, token)
 	if err != nil {

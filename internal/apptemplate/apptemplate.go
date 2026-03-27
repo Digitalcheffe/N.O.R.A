@@ -1,4 +1,4 @@
-package profile
+package apptemplate
 
 import (
 	"encoding/json"
@@ -14,13 +14,13 @@ import (
 
 var arrayIndexRe = regexp.MustCompile(`^([^\[]+)\[(\d+)\]$`)
 
-// Loader retrieves app profiles by ID.
+// Loader retrieves app templates by ID.
 type Loader interface {
-	Get(profileID string) (*Profile, error)
+	Get(templateID string) (*AppTemplate, error)
 }
 
-// Meta holds the profile identification and classification fields.
-type Meta struct {
+// AppTemplateMeta holds the template identification and classification fields.
+type AppTemplateMeta struct {
 	Name        string `yaml:"name"`
 	Category    string `yaml:"category"`
 	Logo        string `yaml:"logo"`
@@ -28,7 +28,7 @@ type Meta struct {
 	Capability  string `yaml:"capability"`
 }
 
-// Webhook holds ingest processing configuration for the profile.
+// Webhook holds ingest processing configuration for the template.
 type Webhook struct {
 	SetupInstructions string            `yaml:"setup_instructions"`
 	RecommendedEvents []string          `yaml:"recommended_events"`
@@ -39,7 +39,7 @@ type Webhook struct {
 	SeverityMapping   map[string]string `yaml:"severity_mapping"`
 }
 
-// Monitor holds active check configuration for the profile.
+// Monitor holds active check configuration for the template.
 type Monitor struct {
 	CheckType     string `yaml:"check_type"`
 	CheckURL      string `yaml:"check_url"`
@@ -63,27 +63,27 @@ type Digest struct {
 	Categories []DigestCategory `yaml:"categories"`
 }
 
-// Profile describes how to process webhooks and render dashboard data for a specific app.
-type Profile struct {
-	Meta    Meta    `yaml:"meta"`
-	Webhook Webhook `yaml:"webhook"`
-	Monitor Monitor `yaml:"monitor"`
-	Digest  Digest  `yaml:"digest"`
+// AppTemplate describes how to process webhooks and render dashboard data for a specific app.
+type AppTemplate struct {
+	Meta    AppTemplateMeta `yaml:"meta"`
+	Webhook Webhook         `yaml:"webhook"`
+	Monitor Monitor         `yaml:"monitor"`
+	Digest  Digest          `yaml:"digest"`
 }
 
-// Registry loads all bundled YAML profiles from an embedded filesystem.
+// Registry loads all bundled YAML app templates from an embedded filesystem.
 type Registry struct {
-	profiles map[string]*Profile
+	templates map[string]*AppTemplate
 }
 
 // NewRegistry loads all *.yaml files from fsys and returns a populated Registry.
-// Each profile is keyed by its filename without extension (e.g. "sonarr").
+// Each template is keyed by its filename without extension (e.g. "sonarr").
 func NewRegistry(fsys fs.FS) (*Registry, error) {
-	reg := &Registry{profiles: make(map[string]*Profile)}
+	reg := &Registry{templates: make(map[string]*AppTemplate)}
 
 	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		return nil, fmt.Errorf("read profile dir: %w", err)
+		return nil, fmt.Errorf("read app template dir: %w", err)
 	}
 
 	for _, e := range entries {
@@ -93,44 +93,44 @@ func NewRegistry(fsys fs.FS) (*Registry, error) {
 
 		data, err := fs.ReadFile(fsys, e.Name())
 		if err != nil {
-			return nil, fmt.Errorf("read profile %s: %w", e.Name(), err)
+			return nil, fmt.Errorf("read app template %s: %w", e.Name(), err)
 		}
 
-		var p Profile
-		if err := yaml.Unmarshal(data, &p); err != nil {
-			return nil, fmt.Errorf("parse profile %s: %w", e.Name(), err)
+		var t AppTemplate
+		if err := yaml.Unmarshal(data, &t); err != nil {
+			return nil, fmt.Errorf("parse app template %s: %w", e.Name(), err)
 		}
 
 		id := strings.TrimSuffix(e.Name(), ".yaml")
-		reg.profiles[id] = &p
+		reg.templates[id] = &t
 	}
 
 	return reg, nil
 }
 
-// Get returns the profile for profileID, or nil if no profile is registered.
-// A nil profile is valid — it means passthrough (no field extraction or mapping).
-func (r *Registry) Get(profileID string) (*Profile, error) {
-	if p, ok := r.profiles[profileID]; ok {
-		return p, nil
+// Get returns the app template for templateID, or nil if no template is registered.
+// A nil template is valid — it means passthrough (no field extraction or mapping).
+func (r *Registry) Get(templateID string) (*AppTemplate, error) {
+	if t, ok := r.templates[templateID]; ok {
+		return t, nil
 	}
 	return nil, nil
 }
 
-// List returns all registered profiles keyed by ID.
-func (r *Registry) List() map[string]*Profile {
-	out := make(map[string]*Profile, len(r.profiles))
-	for k, v := range r.profiles {
+// List returns all registered app templates keyed by ID.
+func (r *Registry) List() map[string]*AppTemplate {
+	out := make(map[string]*AppTemplate, len(r.templates))
+	for k, v := range r.templates {
 		out[k] = v
 	}
 	return out
 }
 
-// ExtractFields evaluates each JSONPath in the profile's field_mappings against payload
+// ExtractFields evaluates each JSONPath in the template's field_mappings against payload
 // and returns a flat tag→value map. Returns an error only on JSON decode failure.
-func (r *Registry) ExtractFields(profileID string, payload []byte) (map[string]string, error) {
-	p, ok := r.profiles[profileID]
-	if !ok || len(p.Webhook.FieldMappings) == 0 {
+func (r *Registry) ExtractFields(templateID string, payload []byte) (map[string]string, error) {
+	t, ok := r.templates[templateID]
+	if !ok || len(t.Webhook.FieldMappings) == 0 {
 		return map[string]string{}, nil
 	}
 
@@ -139,8 +139,8 @@ func (r *Registry) ExtractFields(profileID string, payload []byte) (map[string]s
 		return nil, fmt.Errorf("decode payload: %w", err)
 	}
 
-	out := make(map[string]string, len(p.Webhook.FieldMappings))
-	for tag, path := range p.Webhook.FieldMappings {
+	out := make(map[string]string, len(t.Webhook.FieldMappings))
+	for tag, path := range t.Webhook.FieldMappings {
 		if v, ok := jsonPathGet(root, path); ok {
 			out[tag] = v
 		}
@@ -148,32 +148,32 @@ func (r *Registry) ExtractFields(profileID string, payload []byte) (map[string]s
 	return out, nil
 }
 
-// RenderDisplayText substitutes {field_name} tokens in the profile's display_template
+// RenderDisplayText substitutes {field_name} tokens in the template's display_template
 // with values from fields. Returns "Event received" when the template is empty.
-func (r *Registry) RenderDisplayText(profileID string, fields map[string]string) string {
-	p, ok := r.profiles[profileID]
-	if !ok || p.Webhook.DisplayTemplate == "" {
+func (r *Registry) RenderDisplayText(templateID string, fields map[string]string) string {
+	t, ok := r.templates[templateID]
+	if !ok || t.Webhook.DisplayTemplate == "" {
 		return "Event received"
 	}
-	result := p.Webhook.DisplayTemplate
+	result := t.Webhook.DisplayTemplate
 	for k, v := range fields {
 		result = strings.ReplaceAll(result, "{"+k+"}", v)
 	}
 	return result
 }
 
-// MapSeverity looks up the value of the profile's severity_field in fields against
+// MapSeverity looks up the value of the template's severity_field in fields against
 // severity_mapping. Returns "info" for unknown values or missing configuration.
-func (r *Registry) MapSeverity(profileID string, fields map[string]string) string {
-	p, ok := r.profiles[profileID]
-	if !ok || p.Webhook.SeverityField == "" || len(p.Webhook.SeverityMapping) == 0 {
+func (r *Registry) MapSeverity(templateID string, fields map[string]string) string {
+	t, ok := r.templates[templateID]
+	if !ok || t.Webhook.SeverityField == "" || len(t.Webhook.SeverityMapping) == 0 {
 		return "info"
 	}
-	val, ok := fields[p.Webhook.SeverityField]
+	val, ok := fields[t.Webhook.SeverityField]
 	if !ok {
 		return "info"
 	}
-	if s, ok := p.Webhook.SeverityMapping[val]; ok {
+	if s, ok := t.Webhook.SeverityMapping[val]; ok {
 		return s
 	}
 	return "info"
@@ -240,8 +240,8 @@ func jsonToString(v interface{}) string {
 	return string(b)
 }
 
-// NoopLoader returns nil for all profiles (passthrough mode).
-// Used in tests and when profile loading is not required.
+// NoopLoader returns nil for all templates (passthrough mode).
+// Used in tests and when template loading is not required.
 type NoopLoader struct{}
 
-func (n *NoopLoader) Get(_ string) (*Profile, error) { return nil, nil }
+func (n *NoopLoader) Get(_ string) (*AppTemplate, error) { return nil, nil }

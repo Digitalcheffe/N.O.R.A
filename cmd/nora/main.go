@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/digitalcheffe/nora/internal/api"
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/auth"
 	"github.com/digitalcheffe/nora/internal/config"
 	"github.com/digitalcheffe/nora/internal/docker"
@@ -16,10 +17,9 @@ import (
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/monitor"
-	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/migrations"
-	noraprofiles "github.com/digitalcheffe/nora/profiles"
+	noraappprofiles "github.com/digitalcheffe/nora/appprofiles"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -49,12 +49,12 @@ func main() {
 	infraRepo := repo.NewInfraRepo(db)
 	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo)
 
-	// Profile registry — load all bundled YAML profiles
-	registry, err := profile.NewRegistry(noraprofiles.Files)
+	// App template registry — load all bundled YAML app templates
+	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
 	if err != nil {
-		log.Fatalf("profile registry init failed: %v", err)
+		log.Fatalf("app template registry init failed: %v", err)
 	}
-	log.Printf("loaded %d profiles", len(registry.List()))
+	log.Printf("loaded %d app templates", len(registry.List()))
 
 	limiter := ingest.NewRateLimiter()
 
