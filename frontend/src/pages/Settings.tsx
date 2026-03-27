@@ -26,9 +26,7 @@ function AppsTab() {
     Promise.all([appTemplates.list(), appTemplates.listCustom()])
       .then(([bt, ct]) => {
         // Sort built-ins by category then name
-        const sorted = [...bt.data].sort((a, b) =>
-          a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
-        )
+        const sorted = [...bt.data].sort((a, b) => a.name.localeCompare(b.name))
         setBuiltins(sorted)
         setCustoms(ct.data ?? [])
       })
