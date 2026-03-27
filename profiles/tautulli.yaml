@@ -1,0 +1,40 @@
+meta:
+  name: Tautulli
+  category: Media
+  logo: tautulli.png
+  description: Plex media server monitoring and statistics
+  capability: full
+
+webhook:
+  setup_instructions: |
+    In Tautulli go to Settings → Notification Agents → Add → Webhook.
+    Set the Webhook URL to {base_url}/ingest/{token} and configure triggers below.
+  recommended_events:
+    - Playback Start
+    - Playback Stop
+    - Playback Pause
+    - Playback Resume
+  not_recommended: []
+  field_mappings:
+    action: "$.action"
+    user: "$.user"
+    title: "$.title"
+    media_type: "$.media_type"
+    player: "$.player"
+    quality: "$.quality"
+  severity_field: ""
+  display_template: "{action} — {title} ({user})"
+  severity_mapping: {}
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/v2?apikey={api_key}&cmd=status"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Plays
+      match_field: action
+      match_value: play
+      match_severity: ""

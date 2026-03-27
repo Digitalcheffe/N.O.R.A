@@ -1,0 +1,12 @@
+meta:
+  name: Traefik
+  category: Infrastructure
+  logo: traefik.png
+  description: Cloud-native reverse proxy and load balancer
+  capability: monitor_only
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/ping"
+  healthy_status: 200
+  check_interval: 1m

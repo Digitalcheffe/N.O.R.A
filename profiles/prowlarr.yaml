@@ -1,0 +1,47 @@
+meta:
+  name: Prowlarr
+  category: Media
+  logo: prowlarr.png
+  description: Indexer manager and proxy for Usenet and torrents
+  capability: full
+
+webhook:
+  setup_instructions: |
+    In Prowlarr go to Settings → Connect → Add → Webhook.
+    Set the URL to {base_url}/ingest/{token} and select the event types below.
+  recommended_events:
+    - On Health Issue
+    - On Application Update
+    - On Grab
+  not_recommended: []
+  field_mappings:
+    event_type: "$.eventType"
+    indexer_name: "$.grabInfo.indexerName"
+    release_title: "$.grabInfo.title"
+    health_type: "$.healthCheck.type"
+    health_message: "$.healthCheck.message"
+  severity_field: event_type
+  display_template: "{event_type} — {indexer_name}"
+  severity_mapping:
+    Grab: info
+    HealthIssue: warn
+    HealthRestored: info
+    ApplicationUpdate: info
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/v1/system/status"
+  auth_header: "X-Api-Key: {api_key}"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Grabs
+      match_field: event_type
+      match_value: Grab
+      match_severity: ""
+    - label: Health Issues
+      match_field: event_type
+      match_value: HealthIssue
+      match_severity: ""
