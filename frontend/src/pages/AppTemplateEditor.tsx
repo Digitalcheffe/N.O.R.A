@@ -487,7 +487,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cancelBtn: {
     padding: '8px 18px',
-    background: 'var(--red-dim)',
+    background: 'transparent',
     color: 'var(--red)',
     border: '1px solid var(--red)',
     borderRadius: '6px',
