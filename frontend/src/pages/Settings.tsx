@@ -14,24 +14,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'metrics', label: 'Instance Metrics' },
 ]
 
-// ── Capability badge ──────────────────────────────────────────────────────────
-
-const CAPABILITY_LABEL: Record<string, string> = {
-  full: 'Full',
-  webhook_only: 'Webhook',
-  monitor_only: 'Monitor',
-  docker_only: 'Docker',
-  limited: 'Limited',
-}
-
-function CapBadge({ capability }: { capability: string }) {
-  return (
-    <span className={`cap-badge cap-badge--${capability}`}>
-      {CAPABILITY_LABEL[capability] ?? capability}
-    </span>
-  )
-}
-
 // ── Apps tab ──────────────────────────────────────────────────────────────────
 
 function AppsTab() {
@@ -86,14 +68,22 @@ function AppsTab() {
         ) : builtins.length === 0 ? (
           <div className="settings-placeholder">Loading…</div>
         ) : (
-          <div className="apps-list">
-            {builtins.map(t => (
-              <div key={t.id} className="app-row">
-                <div className="app-row-info">
-                  <span className="app-row-name">{t.name}</span>
-                  <span className="app-row-category">{t.category}</span>
+          <div className="apps-grid">
+            {Object.entries(
+              builtins.reduce<Record<string, AppTemplate[]>>((acc, t) => {
+                ;(acc[t.category] ??= []).push(t)
+                return acc
+              }, {})
+            ).sort(([a], [b]) => a.localeCompare(b)).map(([category, items]) => (
+              <div key={category} className="apps-category">
+                <div className="apps-category-label">{category}</div>
+                <div className="apps-pills">
+                  {items.map(t => (
+                    <span key={t.id} className={`app-pill app-pill--${t.capability}`}>
+                      {t.name}
+                    </span>
+                  ))}
                 </div>
-                <CapBadge capability={t.capability} />
               </div>
             ))}
           </div>
