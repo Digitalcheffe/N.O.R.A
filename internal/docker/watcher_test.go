@@ -78,7 +78,7 @@ func (r *mockEventRepo) LatestPerApp(_ context.Context, _ []string) (map[string]
 // --- helpers -------------------------------------------------------------
 
 func newTestWatcher(appRepo repo.AppRepo, eventRepo repo.EventRepo, dc dockerAPI) *Watcher {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil)
 	return &Watcher{store: store, client: dc}
 }
 

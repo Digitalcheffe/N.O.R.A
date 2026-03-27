@@ -13,6 +13,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/frontend"
 	"github.com/digitalcheffe/nora/internal/ingest"
+	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/monitor"
 	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -39,10 +40,11 @@ func main() {
 	checkRepo := repo.NewCheckRepo(db)
 	rollupRepo := repo.NewRollupRepo(db)
 	resourceRepo := repo.NewResourceReadingRepo(db)
+	resourceRollupRepo := repo.NewResourceRollupRepo(db)
 	physicalHostRepo := repo.NewPhysicalHostRepo(db)
 	virtualHostRepo := repo.NewVirtualHostRepo(db)
 	dockerEngineRepo := repo.NewDockerEngineRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo)
 
 	// Profile registry — load all bundled YAML profiles
 	registry, err := profile.NewRegistry(noraprofiles.Files)
@@ -57,6 +59,12 @@ func main() {
 	schedCtx, schedCancel := context.WithCancel(context.Background())
 	defer schedCancel()
 	go monitor.NewScheduler(store).Start(schedCtx)
+
+	// Resource rollup jobs — hourly aggregation and daily rollup + retention purge.
+	rollupCtx, rollupCancel := context.WithCancel(context.Background())
+	defer rollupCancel()
+	go jobs.StartHourlyRollup(rollupCtx, store)
+	go jobs.StartDailyRollup(rollupCtx, store)
 
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
