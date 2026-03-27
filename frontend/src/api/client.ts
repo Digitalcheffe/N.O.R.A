@@ -9,6 +9,7 @@ import type {
   AuthUser,
   CreateAppInput,
   CreateCheckInput,
+  CreateIntegrationInput,
   CreateUserInput,
   CustomProfile,
   DashboardSummaryResponse,
@@ -16,11 +17,14 @@ import type {
   Event,
   EventFilter,
   HostResources,
+  InfraIntegration,
   ListResponse,
   LoginInput,
   MonitorCheck,
   PhysicalHost,
   Profile,
+  SyncResult,
+  TraefikCert,
   User,
   ValidationResult,
   VirtualHost,
@@ -225,6 +229,31 @@ export const profiles = {
 
   listCustom: () =>
     request<ListResponse<CustomProfile>>('GET', '/profiles/custom'),
+}
+
+// ── Infrastructure Integrations ───────────────────────────────────────────────
+
+export const integrations = {
+  list: () =>
+    request<ListResponse<InfraIntegration>>('GET', '/integrations'),
+
+  get: (id: string) =>
+    request<InfraIntegration>('GET', `/integrations/${id}`),
+
+  create: (input: CreateIntegrationInput) =>
+    request<InfraIntegration>('POST', '/integrations', input),
+
+  update: (id: string, input: Partial<CreateIntegrationInput>) =>
+    request<InfraIntegration>('PUT', `/integrations/${id}`, input),
+
+  delete: (id: string) =>
+    request<void>('DELETE', `/integrations/${id}`),
+
+  sync: (id: string) =>
+    request<SyncResult>('POST', `/integrations/${id}/sync`),
+
+  certs: (id: string) =>
+    request<ListResponse<TraefikCert>>('GET', `/integrations/${id}/certs`),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────

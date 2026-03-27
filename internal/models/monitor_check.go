@@ -13,6 +13,10 @@ type MonitorCheck struct {
 	ExpectedStatus int        `db:"expected_status" json:"expected_status,omitempty"`
 	SSLWarnDays    int        `db:"ssl_warn_days"   json:"ssl_warn_days"`
 	SSLCritDays    int        `db:"ssl_crit_days"   json:"ssl_crit_days"`
+	// SSLSource distinguishes Traefik-mode SSL checks (cert read from cache)
+	// from standalone checks (direct TLS handshake). Nil means standalone.
+	SSLSource     *string `db:"ssl_source"     json:"ssl_source,omitempty"`
+	IntegrationID *string `db:"integration_id" json:"integration_id,omitempty"`
 	Enabled        bool       `db:"enabled"         json:"enabled"`
 	LastCheckedAt  *time.Time `db:"last_checked_at" json:"last_checked_at,omitempty"`
 	LastStatus     string     `db:"last_status"     json:"last_status,omitempty"`

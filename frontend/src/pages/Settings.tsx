@@ -1,4 +1,5 @@
 import { Topbar } from '../components/Topbar'
+import { InfraIntegrations } from './Integrations'
 import './Settings.css'
 
 export function Settings() {
@@ -19,6 +20,10 @@ export function Settings() {
               <span className="section-title">Notifications</span>
             </div>
             <div className="settings-placeholder">SMTP digest configuration — T-08+</div>
+          </section>
+
+          <section className="settings-section">
+            <InfraIntegrations />
           </section>
 
           <section className="settings-section">

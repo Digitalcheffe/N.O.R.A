@@ -39,14 +39,16 @@ func (h *ChecksHandler) Routes(r chi.Router) {
 // --- request / response types ---
 
 type checkRequest struct {
-	Name           string `json:"name"`
-	Type           string `json:"type"`
-	Target         string `json:"target"`
-	IntervalSecs   int    `json:"interval_secs"`
-	AppID          string `json:"app_id"`
-	ExpectedStatus int    `json:"expected_status"`
-	SSLWarnDays    int    `json:"ssl_warn_days"`
-	SSLCritDays    int    `json:"ssl_crit_days"`
+	Name           string  `json:"name"`
+	Type           string  `json:"type"`
+	Target         string  `json:"target"`
+	IntervalSecs   int     `json:"interval_secs"`
+	AppID          string  `json:"app_id"`
+	ExpectedStatus int     `json:"expected_status"`
+	SSLWarnDays    int     `json:"ssl_warn_days"`
+	SSLCritDays    int     `json:"ssl_crit_days"`
+	SSLSource      *string `json:"ssl_source"`       // "traefik" | "standalone" | nil
+	IntegrationID  *string `json:"integration_id"`   // required when ssl_source == "traefik"
 }
 
 type listChecksResponse struct {
@@ -77,9 +79,19 @@ func validateCheck(req checkRequest) string {
 	if req.IntervalSecs < 30 {
 		return "interval_secs must be at least 30"
 	}
-	if req.Type == "url" || req.Type == "ssl" {
+	if req.Type == "url" {
 		if !strings.HasPrefix(req.Target, "http://") && !strings.HasPrefix(req.Target, "https://") {
-			return "target must begin with http:// or https:// for url and ssl checks"
+			return "target must begin with http:// or https:// for url checks"
+		}
+	}
+	// For SSL checks, only require a URL prefix in standalone mode.
+	// Traefik-mode SSL checks use a bare domain name as the target.
+	if req.Type == "ssl" {
+		isTraefik := req.SSLSource != nil && *req.SSLSource == "traefik"
+		if !isTraefik {
+			if !strings.HasPrefix(req.Target, "http://") && !strings.HasPrefix(req.Target, "https://") {
+				return "target must begin with http:// or https:// for standalone ssl checks"
+			}
 		}
 	}
 	return ""
@@ -128,6 +140,8 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ExpectedStatus: req.ExpectedStatus,
 		SSLWarnDays:    warnDays,
 		SSLCritDays:    critDays,
+		SSLSource:      req.SSLSource,
+		IntegrationID:  req.IntegrationID,
 		Enabled:        true,
 		CreatedAt:      time.Now().UTC(),
 	}
@@ -198,6 +212,12 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.SSLCritDays != 0 {
 		existing.SSLCritDays = req.SSLCritDays
+	}
+	if req.SSLSource != nil {
+		existing.SSLSource = req.SSLSource
+	}
+	if req.IntegrationID != nil {
+		existing.IntegrationID = req.IntegrationID
 	}
 
 	// Re-validate the merged state.

@@ -1,0 +1,242 @@
+/* ── Infrastructure Integrations ─────────────────────────────────────────────── */
+
+.int-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.int-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.int-section-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+
+.int-empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  padding: 16px 0;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────────── */
+
+.int-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.int-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.int-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.int-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.int-card-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+
+.int-card-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.int-card-url {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+
+/* ── Status dot ─────────────────────────────────────────────────────────────── */
+
+.int-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.int-dot.green  { background: var(--green); }
+.int-dot.red    { background: var(--red); }
+.int-dot.grey   { background: var(--text3); }
+
+/* ── Meta line ──────────────────────────────────────────────────────────────── */
+
+.int-card-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.int-sync-msg {
+  color: var(--green);
+}
+
+.int-card-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  border-left: 2px solid var(--red-dim);
+  padding-left: 8px;
+}
+
+/* ── Card actions ───────────────────────────────────────────────────────────── */
+
+.int-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Add form ───────────────────────────────────────────────────────────────── */
+
+.int-add-form {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.int-form-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.int-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.int-form-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.int-form-input {
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.int-form-input:focus {
+  border-color: var(--accent);
+}
+
+.int-form-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+}
+
+.int-form-success {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+}
+
+.int-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Shared buttons ─────────────────────────────────────────────────────────── */
+
+.int-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.int-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.int-btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.int-btn.secondary {
+  background: var(--bg4);
+  color: var(--text);
+  border: 1px solid var(--border2);
+}
+
+.int-btn.ghost {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+
+.int-btn.danger {
+  background: transparent;
+  color: var(--red);
+  border: 1px solid var(--red-dim);
+}
+
+.int-btn.danger:hover {
+  background: var(--red-dim);
+}
