@@ -1,13 +1,18 @@
 package profile
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+var arrayIndexRe = regexp.MustCompile(`^([^\[]+)\[(\d+)\]$`)
 
 // Loader retrieves app profiles by ID.
 type Loader interface {
@@ -119,6 +124,120 @@ func (r *Registry) List() map[string]*Profile {
 		out[k] = v
 	}
 	return out
+}
+
+// ExtractFields evaluates each JSONPath in the profile's field_mappings against payload
+// and returns a flat tag→value map. Returns an error only on JSON decode failure.
+func (r *Registry) ExtractFields(profileID string, payload []byte) (map[string]string, error) {
+	p, ok := r.profiles[profileID]
+	if !ok || len(p.Webhook.FieldMappings) == 0 {
+		return map[string]string{}, nil
+	}
+
+	var root interface{}
+	if err := json.Unmarshal(payload, &root); err != nil {
+		return nil, fmt.Errorf("decode payload: %w", err)
+	}
+
+	out := make(map[string]string, len(p.Webhook.FieldMappings))
+	for tag, path := range p.Webhook.FieldMappings {
+		if v, ok := jsonPathGet(root, path); ok {
+			out[tag] = v
+		}
+	}
+	return out, nil
+}
+
+// RenderDisplayText substitutes {field_name} tokens in the profile's display_template
+// with values from fields. Returns "Event received" when the template is empty.
+func (r *Registry) RenderDisplayText(profileID string, fields map[string]string) string {
+	p, ok := r.profiles[profileID]
+	if !ok || p.Webhook.DisplayTemplate == "" {
+		return "Event received"
+	}
+	result := p.Webhook.DisplayTemplate
+	for k, v := range fields {
+		result = strings.ReplaceAll(result, "{"+k+"}", v)
+	}
+	return result
+}
+
+// MapSeverity looks up the value of the profile's severity_field in fields against
+// severity_mapping. Returns "info" for unknown values or missing configuration.
+func (r *Registry) MapSeverity(profileID string, fields map[string]string) string {
+	p, ok := r.profiles[profileID]
+	if !ok || p.Webhook.SeverityField == "" || len(p.Webhook.SeverityMapping) == 0 {
+		return "info"
+	}
+	val, ok := fields[p.Webhook.SeverityField]
+	if !ok {
+		return "info"
+	}
+	if s, ok := p.Webhook.SeverityMapping[val]; ok {
+		return s
+	}
+	return "info"
+}
+
+// jsonPathGet resolves a JSONPath expression against a decoded JSON value.
+// Supports dot-notation ($.field.nested) and array indexing ($.arr[0].field).
+func jsonPathGet(v interface{}, path string) (string, bool) {
+	path = strings.TrimPrefix(path, "$.")
+	path = strings.TrimPrefix(path, "$")
+	if path == "" {
+		return jsonToString(v), true
+	}
+
+	parts := strings.SplitN(path, ".", 2)
+	segment := parts[0]
+	rest := ""
+	if len(parts) == 2 {
+		rest = parts[1]
+	}
+
+	// Handle array index notation: episodes[0]
+	if m := arrayIndexRe.FindStringSubmatch(segment); m != nil {
+		key := m[1]
+		idx, _ := strconv.Atoi(m[2])
+
+		obj, ok := v.(map[string]interface{})
+		if !ok {
+			return "", false
+		}
+		arr, ok := obj[key].([]interface{})
+		if !ok || idx >= len(arr) {
+			return "", false
+		}
+		child := arr[idx]
+		if rest == "" {
+			return jsonToString(child), true
+		}
+		return jsonPathGet(child, rest)
+	}
+
+	obj, ok := v.(map[string]interface{})
+	if !ok {
+		return "", false
+	}
+	child, ok := obj[segment]
+	if !ok {
+		return "", false
+	}
+	if rest == "" {
+		return jsonToString(child), true
+	}
+	return jsonPathGet(child, rest)
+}
+
+func jsonToString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 // NoopLoader returns nil for all profiles (passthrough mode).
