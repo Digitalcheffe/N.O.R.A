@@ -260,23 +260,7 @@
   text-align: right;
 }
 
-/* ── App pills grid ───────────────────────────────────────────────────────── */
-
-.apps-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.apps-category-label {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text3);
-  margin-bottom: 6px;
-}
+/* ── App pills ────────────────────────────────────────────────────────────── */
 
 .apps-pills {
   display: flex;
@@ -285,6 +269,9 @@
 }
 
 .app-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
@@ -294,6 +281,13 @@
   background: var(--bg3);
   color: var(--text);
   white-space: nowrap;
+}
+
+.app-pill-type {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.55;
 }
 
 .app-pill--full         { border-color: var(--green);  color: var(--green);  background: var(--green-dim); }

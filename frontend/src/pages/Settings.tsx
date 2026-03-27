@@ -68,23 +68,12 @@ function AppsTab() {
         ) : builtins.length === 0 ? (
           <div className="settings-placeholder">Loading…</div>
         ) : (
-          <div className="apps-grid">
-            {Object.entries(
-              builtins.reduce<Record<string, AppTemplate[]>>((acc, t) => {
-                ;(acc[t.category] ??= []).push(t)
-                return acc
-              }, {})
-            ).sort(([a], [b]) => a.localeCompare(b)).map(([category, items]) => (
-              <div key={category} className="apps-category">
-                <div className="apps-category-label">{category}</div>
-                <div className="apps-pills">
-                  {items.map(t => (
-                    <span key={t.id} className={`app-pill app-pill--${t.capability}`}>
-                      {t.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
+          <div className="apps-pills">
+            {builtins.map(t => (
+              <span key={t.id} className={`app-pill app-pill--${t.capability}`}>
+                {t.name}
+                <span className="app-pill-type">{t.category}</span>
+              </span>
             ))}
           </div>
         )}
