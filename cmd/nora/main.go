@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/config"
 	"github.com/digitalcheffe/nora/internal/frontend"
 	"github.com/digitalcheffe/nora/internal/ingest"
+	"github.com/digitalcheffe/nora/internal/monitor"
 	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/migrations"
@@ -45,6 +47,11 @@ func main() {
 	log.Printf("loaded %d profiles", len(registry.List()))
 
 	limiter := ingest.NewRateLimiter()
+
+	// Monitor scheduler — runs all enabled checks on their configured intervals.
+	schedCtx, schedCancel := context.WithCancel(context.Background())
+	defer schedCancel()
+	go monitor.NewScheduler(store).Start(schedCtx)
 
 	// Router
 	r := chi.NewRouter()
