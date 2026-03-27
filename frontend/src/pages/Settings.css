@@ -263,13 +263,13 @@
 /* ── App pills ────────────────────────────────────────────────────────────── */
 
 .apps-pills {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 6px;
 }
 
 .app-pill {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
@@ -281,7 +281,6 @@
   border: 1px solid var(--border2);
   background: var(--bg3);
   color: var(--text);
-  white-space: nowrap;
 }
 
 .app-pill-type {
