@@ -187,14 +187,7 @@ function ProfileTab() {
         <div className="section-header">
           <span className="section-title">Profile</span>
         </div>
-        <div className="settings-avatar-row">
-          <div className="settings-avatar">A</div>
-          <div>
-            <div className="settings-avatar-name">Admin</div>
-            <div className="settings-avatar-email">admin@nora.local</div>
-          </div>
-        </div>
-        <div className="settings-field-row" style={{ marginTop: 16 }}>
+        <div className="settings-field-row">
           <label className="settings-label">Display name</label>
           <input className="settings-input" defaultValue="Admin" />
         </div>
