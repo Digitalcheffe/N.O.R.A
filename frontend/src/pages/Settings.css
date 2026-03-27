@@ -156,14 +156,13 @@
 }
 
 .settings-btn.danger {
-  background: transparent;
+  background: var(--bg3);
   border-color: var(--red);
   color: var(--red);
-  opacity: 0.75;
 }
 
 .settings-btn.danger:hover {
-  opacity: 1;
+  background: var(--red-dim);
 }
 
 .settings-actions {
