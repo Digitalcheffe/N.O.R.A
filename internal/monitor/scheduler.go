@@ -10,9 +10,6 @@ import (
 	"github.com/digitalcheffe/nora/internal/repo"
 )
 
-// URLChecker is a stub for the URL check runner, implemented in T-14.
-type URLChecker struct{ store *repo.Store }
-
 // SSLChecker is a stub for the SSL check runner, implemented in T-15.
 type SSLChecker struct{ store *repo.Store }
 
@@ -35,7 +32,7 @@ func NewScheduler(store *repo.Store) *Scheduler {
 	return &Scheduler{
 		store:  store,
 		ping:   NewPingChecker(store),
-		url:    &URLChecker{store: store},
+		url:    NewURLChecker(store),
 		ssl:    &SSLChecker{store: store},
 		active: make(map[string]context.CancelFunc),
 	}
@@ -151,8 +148,7 @@ func (s *Scheduler) dispatch(ctx context.Context, check *models.MonitorCheck) {
 	case "ping":
 		err = s.ping.Run(ctx, check)
 	case "url":
-		// T-14: URL checker not yet implemented.
-		log.Printf("monitor scheduler: url check %q skipped — url checker not yet implemented (T-14)", check.Name)
+		err = s.url.Run(ctx, check)
 	case "ssl":
 		// T-15: SSL checker not yet implemented.
 		log.Printf("monitor scheduler: ssl check %q skipped — ssl checker not yet implemented (T-15)", check.Name)
