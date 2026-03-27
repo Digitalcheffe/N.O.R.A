@@ -1,6 +1,10 @@
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
+import { appTemplates } from '../api/client'
+import type { AppTemplate, CustomProfile } from '../api/types'
+
 import './Settings.css'
 
 type Tab = 'apps' | 'notifications' | 'metrics'
@@ -11,9 +15,82 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'metrics', label: 'Instance Metrics' },
 ]
 
+// ── Delete confirmation modal ─────────────────────────────────────────────────
+
+interface DeleteConfirmModalProps {
+  name: string
+  onConfirm: () => void
+  onCancel: () => void
+  deleting: boolean
+}
+
+function DeleteConfirmModal({ name, onConfirm, onCancel, deleting }: DeleteConfirmModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal modal--destructive" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Delete Custom App Template</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p className="modal-delete-name">"{name}"</p>
+          <p className="modal-delete-warning">
+            This will permanently delete the template definition. Any apps using this template will lose their field mappings and severity rules.
+          </p>
+          <div className="modal-delete-nonrecoverable">
+            This action cannot be undone.
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="settings-btn secondary" onClick={onCancel}>Cancel</button>
+          <button
+            className="settings-btn danger"
+            onClick={onConfirm}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Apps tab ──────────────────────────────────────────────────────────────────
 
 function AppsTab() {
+  const navigate = useNavigate()
+  const [builtins, setBuiltins] = useState<AppTemplate[]>([])
+  const [customs, setCustoms] = useState<CustomProfile[]>([])
+  const [loadError, setLoadError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<CustomProfile | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return
+    setDeleting(true)
+    try {
+      await appTemplates.deleteCustom(confirmDelete.id)
+      setCustoms(prev => prev.filter(c => c.id !== confirmDelete.id))
+    } catch {
+      // leave list unchanged on error
+    } finally {
+      setConfirmDelete(null)
+      setDeleting(false)
+    }
+  }
+
+  useEffect(() => {
+    Promise.all([appTemplates.list(), appTemplates.listCustom()])
+      .then(([bt, ct]) => {
+        // Sort built-ins by category then name
+        const sorted = [...bt.data].sort((a, b) => a.name.localeCompare(b.name))
+        setBuiltins(sorted)
+        setCustoms(ct.data ?? [])
+      })
+      .catch(() => setLoadError('Failed to load app templates'))
+  }, [])
+
   return (
     <div className="tab-content">
       <section className="settings-section">
@@ -37,13 +114,75 @@ function AppsTab() {
         <InfraIntegrations />
       </section>
 
+      {/* Built-in app templates */}
       <section className="settings-section">
         <div className="section-header">
           <span className="section-title">Apps</span>
-          <button className="settings-btn primary">+ Add app</button>
         </div>
-        <div className="settings-placeholder">No apps configured. Add an app to start receiving webhook events.</div>
+        {loadError ? (
+          <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{loadError}</div>
+        ) : builtins.length === 0 ? (
+          <div className="settings-placeholder">Loading…</div>
+        ) : (
+          <div className="apps-pills">
+            {builtins.map(t => (
+              <span key={t.id} className="app-pill">
+                {t.name}
+                <span className="app-pill-type">{t.category}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </section>
+
+      {/* Custom app templates */}
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Custom Apps</span>
+          <button
+            className="settings-btn primary"
+            onClick={() => navigate('/app-templates/new')}
+          >
+            + Add Custom App
+          </button>
+        </div>
+        {customs.length === 0 ? (
+          <div className="settings-placeholder">
+            No custom apps yet. Click "+ Add Custom App" to write a YAML template for an app not in the library.
+          </div>
+        ) : (
+          <div className="apps-list">
+            {customs.map(cp => (
+              <div key={cp.id} className="app-row">
+                <span className="app-row-name">{cp.name}</span>
+                <div className="app-row-actions">
+                  <button
+                    className="settings-btn secondary settings-btn--sm"
+                    onClick={() => navigate(`/app-templates/${cp.id}/edit`)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="settings-btn danger settings-btn--sm"
+                    onClick={() => setConfirmDelete(cp)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {confirmDelete && (
+        <DeleteConfirmModal
+          name={confirmDelete.name}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(null)}
+          deleting={deleting}
+        />
+      )}
     </div>
   )
 }

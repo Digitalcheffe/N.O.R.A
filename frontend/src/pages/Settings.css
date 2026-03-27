@@ -156,9 +156,13 @@
 }
 
 .settings-btn.danger {
-  background: var(--red-dim);
+  background: var(--bg3);
   border-color: var(--red);
   color: var(--red);
+}
+
+.settings-btn.danger:hover {
+  background: var(--red-dim);
 }
 
 .settings-actions {
@@ -258,6 +262,168 @@
   color: var(--text2);
   width: 32px;
   text-align: right;
+}
+
+/* ── App pills ────────────────────────────────────────────────────────────── */
+
+.apps-pills {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.app-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text);
+}
+
+.app-pill-type {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.5;
+}
+
+
+/* ── Custom app rows ──────────────────────────────────────────────────────── */
+
+.apps-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-row:last-child {
+  border-bottom: none;
+}
+
+.app-row-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.app-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Delete confirmation modal ────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal--destructive {
+  border-color: var(--red);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.modal-close:hover { color: var(--text); background: var(--bg3); }
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-delete-name {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.modal-delete-warning {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.modal-delete-nonrecoverable {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--red);
+  background: var(--bg3);
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.settings-btn--sm {
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 /* ── Profile avatar ───────────────────────────────────────────────────────── */

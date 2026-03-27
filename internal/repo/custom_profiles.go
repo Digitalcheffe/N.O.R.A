@@ -13,6 +13,7 @@ type CustomProfileRepo interface {
 	List(ctx context.Context) ([]models.CustomProfile, error)
 	Get(ctx context.Context, id string) (*models.CustomProfile, error)
 	Create(ctx context.Context, p *models.CustomProfile) error
+	Delete(ctx context.Context, id string) error
 }
 
 type sqliteCustomProfileRepo struct {
@@ -51,6 +52,18 @@ func (r *sqliteCustomProfileRepo) Create(ctx context.Context, p *models.CustomPr
 		p.ID, p.Name, p.YAMLContent)
 	if err != nil {
 		return fmt.Errorf("create custom profile: %w", err)
+	}
+	return nil
+}
+
+func (r *sqliteCustomProfileRepo) Delete(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM custom_app_templates WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete custom profile: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

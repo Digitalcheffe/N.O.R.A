@@ -229,6 +229,9 @@ export const appTemplates = {
 
   listCustom: () =>
     request<ListResponse<CustomProfile>>('GET', '/app-templates/custom'),
+
+  deleteCustom: (id: string) =>
+    request<void>('DELETE', `/app-templates/custom/${id}`),
 }
 
 // ── Infrastructure Integrations ───────────────────────────────────────────────
