@@ -212,6 +212,20 @@ export interface Profile {
   capability: ProfileCapability
 }
 
+// ── Custom Profiles ───────────────────────────────────────────────────────────
+
+export interface ValidationResult {
+  valid: boolean
+  errors: string[]
+}
+
+export interface CustomProfile {
+  id: string
+  name: string
+  yaml_content: string
+  created_at: string
+}
+
 // ── Metrics ──────────────────────────────────────────────────────────────────
 
 export interface AppMetric {

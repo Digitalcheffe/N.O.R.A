@@ -10,6 +10,7 @@ import type {
   CreateAppInput,
   CreateCheckInput,
   CreateUserInput,
+  CustomProfile,
   DashboardSummaryResponse,
   DockerEngine,
   Event,
@@ -20,6 +21,7 @@ import type {
   PhysicalHost,
   Profile,
   User,
+  ValidationResult,
   VirtualHost,
 } from './types'
 
@@ -211,6 +213,15 @@ export const profiles = {
 
   get: (id: string) =>
     request<Profile>('GET', `/profiles/${id}`),
+
+  validate: (yamlContent: string) =>
+    request<ValidationResult>('POST', '/profiles/validate', { yaml: yamlContent }),
+
+  createCustom: (yamlContent: string) =>
+    request<CustomProfile>('POST', '/profiles/custom', { yaml: yamlContent }),
+
+  listCustom: () =>
+    request<ListResponse<CustomProfile>>('GET', '/profiles/custom'),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────

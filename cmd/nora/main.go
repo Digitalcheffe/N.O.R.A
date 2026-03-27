@@ -44,6 +44,7 @@ func main() {
 	physicalHostRepo := repo.NewPhysicalHostRepo(db)
 	virtualHostRepo := repo.NewVirtualHostRepo(db)
 	dockerEngineRepo := repo.NewDockerEngineRepo(db)
+	customProfileRepo := repo.NewCustomProfileRepo(db)
 	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo)
 
 	// Profile registry — load all bundled YAML profiles
@@ -97,7 +98,7 @@ func main() {
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo).Routes(r)
-		api.NewProfilesHandler(registry).Routes(r)
+		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html
