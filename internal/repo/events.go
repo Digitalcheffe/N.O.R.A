@@ -33,6 +33,20 @@ type CategoryFilter struct {
 	Until         time.Time // inclusive upper bound
 }
 
+// EventTypeCount is a grouped count row returned by GroupByTypeAndSeverity.
+type EventTypeCount struct {
+	EventType string `db:"event_type"`
+	Severity  string `db:"severity"`
+	Count     int    `db:"count"`
+}
+
+// EventMetrics holds per-app event statistics for a time window.
+type EventMetrics struct {
+	EventsPerHour   int
+	AvgPayloadBytes int
+	PeakPerMinute   int
+}
+
 // EventRepo defines read/write operations for the events table.
 type EventRepo interface {
 	// Create persists a new event.
@@ -48,6 +62,15 @@ type EventRepo interface {
 	SparklineBuckets(ctx context.Context, f CategoryFilter, startTime time.Time, bucketDur time.Duration) ([7]int, error)
 	// LatestPerApp returns the most recent event per app, keyed by app ID.
 	LatestPerApp(ctx context.Context, appIDs []string) (map[string]*models.Event, error)
+	// DeleteBySeverityBefore deletes events with the given severity older than
+	// before and returns the number of rows deleted.
+	DeleteBySeverityBefore(ctx context.Context, severity string, before time.Time) (int64, error)
+	// GroupByTypeAndSeverity returns event counts grouped by event_type (from
+	// the fields JSON column) and severity for a specific app and time range.
+	GroupByTypeAndSeverity(ctx context.Context, appID string, since, until time.Time) ([]EventTypeCount, error)
+	// MetricsForApp computes event count, average payload size, and peak
+	// per-minute rate for a single app over [since, until).
+	MetricsForApp(ctx context.Context, appID string, since, until time.Time) (EventMetrics, error)
 }
 
 type sqliteEventRepo struct {
@@ -228,6 +251,84 @@ func (r *sqliteEventRepo) SparklineBuckets(ctx context.Context, f CategoryFilter
 		counts[i] = n
 	}
 	return counts, nil
+}
+
+func (r *sqliteEventRepo) DeleteBySeverityBefore(ctx context.Context, severity string, before time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM events WHERE severity = ? AND datetime(received_at) < datetime(?)`,
+		severity, before.UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, fmt.Errorf("delete events by severity: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+func (r *sqliteEventRepo) GroupByTypeAndSeverity(ctx context.Context, appID string, since, until time.Time) ([]EventTypeCount, error) {
+	var rows []EventTypeCount
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT
+			COALESCE(json_extract(fields, '$.event_type'), '') AS event_type,
+			severity,
+			COUNT(*) AS count
+		FROM events
+		WHERE app_id = ?
+		  AND datetime(received_at) >= datetime(?)
+		  AND datetime(received_at) < datetime(?)
+		GROUP BY event_type, severity`,
+		appID,
+		since.UTC().Format(time.RFC3339),
+		until.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("group events by type and severity: %w", err)
+	}
+	if rows == nil {
+		rows = []EventTypeCount{}
+	}
+	return rows, nil
+}
+
+func (r *sqliteEventRepo) MetricsForApp(ctx context.Context, appID string, since, until time.Time) (EventMetrics, error) {
+	sinceStr := since.UTC().Format(time.RFC3339)
+	untilStr := until.UTC().Format(time.RFC3339)
+
+	var count int
+	var avgBytes float64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*), COALESCE(AVG(LENGTH(raw_payload)), 0)
+		FROM events
+		WHERE app_id = ?
+		  AND datetime(received_at) >= datetime(?)
+		  AND datetime(received_at) < datetime(?)`,
+		appID, sinceStr, untilStr,
+	).Scan(&count, &avgBytes)
+	if err != nil {
+		return EventMetrics{}, fmt.Errorf("metrics count/avg: %w", err)
+	}
+
+	var peak int
+	err = r.db.QueryRowContext(ctx, `
+		SELECT COALESCE(MAX(cnt), 0)
+		FROM (
+			SELECT COUNT(*) AS cnt
+			FROM events
+			WHERE app_id = ?
+			  AND datetime(received_at) >= datetime(?)
+			  AND datetime(received_at) < datetime(?)
+			GROUP BY strftime('%Y-%m-%dT%H:%M', received_at)
+		)`,
+		appID, sinceStr, untilStr,
+	).Scan(&peak)
+	if err != nil {
+		return EventMetrics{}, fmt.Errorf("metrics peak: %w", err)
+	}
+
+	return EventMetrics{
+		EventsPerHour:   count,
+		AvgPayloadBytes: int(avgBytes),
+		PeakPerMinute:   peak,
+	}, nil
 }
 
 func (r *sqliteEventRepo) LatestPerApp(ctx context.Context, appIDs []string) (map[string]*models.Event, error) {
