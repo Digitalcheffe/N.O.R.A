@@ -14,6 +14,7 @@ import type {
   CreateUserInput,
   CustomProfile,
   DashboardSummaryResponse,
+  DigestSchedule,
   DockerEngine,
   Event,
   EventFilter,
@@ -23,6 +24,8 @@ import type {
   LoginInput,
   MonitorCheck,
   PhysicalHost,
+  SMTPSettings,
+  SendNowResult,
   SyncResult,
   TraefikCert,
   User,
@@ -257,6 +260,27 @@ export const integrations = {
 
   certs: (id: string) =>
     request<ListResponse<TraefikCert>>('GET', `/integrations/${id}/certs`),
+}
+
+// ── Digest ────────────────────────────────────────────────────────────────────
+
+export const digestSettings = {
+  getSchedule: () =>
+    request<DigestSchedule>('GET', '/digest/schedule'),
+
+  putSchedule: (s: DigestSchedule) =>
+    request<DigestSchedule>('PUT', '/digest/schedule', s),
+
+  sendNow: () =>
+    request<SendNowResult>('POST', '/digest/send-now'),
+}
+
+export const smtpSettings = {
+  get: () =>
+    request<SMTPSettings>('GET', '/settings/smtp'),
+
+  put: (s: SMTPSettings) =>
+    request<SMTPSettings>('PUT', '/settings/smtp', s),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────

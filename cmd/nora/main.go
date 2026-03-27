@@ -47,7 +47,8 @@ func main() {
 	dockerEngineRepo := repo.NewDockerEngineRepo(db)
 	customProfileRepo := repo.NewCustomProfileRepo(db)
 	infraRepo := repo.NewInfraRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo)
+	settingsRepo := repo.NewSettingsRepo(db)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo, settingsRepo)
 
 	// App template registry — load all bundled YAML app templates
 	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
@@ -68,6 +69,12 @@ func main() {
 	defer rollupCancel()
 	go jobs.StartHourlyRollup(rollupCtx, store)
 	go jobs.StartDailyRollup(rollupCtx, store)
+
+	// Digest job — fires at 08:00 daily; checks stored schedule before sending.
+	digestJob := jobs.NewDigestJob(store, cfg)
+	digestCtx, digestCancel := context.WithCancel(context.Background())
+	defer digestCancel()
+	go jobs.StartDigestJob(digestCtx, digestJob)
 
 	// Traefik sync worker — polls all enabled Traefik integrations every 60 s.
 	infraCtx, infraCancel := context.WithCancel(context.Background())
@@ -117,6 +124,8 @@ func main() {
 		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
+		api.NewDigestHandler(store, digestJob).Routes(r)
+		api.NewSettingsHandler(store).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html
