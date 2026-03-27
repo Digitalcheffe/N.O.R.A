@@ -170,7 +170,7 @@ export interface AppSummary {
   status: 'online' | 'warn' | 'down'
   last_event_at: string | null
   last_event_text: string | null
-  stats: AppStat[]
+  stats: AppStat[] | null
   sparkline: number[]
 }
 
