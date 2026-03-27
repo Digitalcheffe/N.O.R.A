@@ -15,6 +15,7 @@ import type {
   DockerEngine,
   Event,
   EventFilter,
+  HostResources,
   ListResponse,
   LoginInput,
   MonitorCheck,
@@ -170,6 +171,8 @@ export const topology = {
       request<PhysicalHost>('PUT', `/hosts/physical/${id}`, input),
     delete: (id: string) =>
       request<void>('DELETE', `/hosts/physical/${id}`),
+    resources: (id: string, period = 'hour') =>
+      request<HostResources>('GET', `/hosts/physical/${id}/resources?period=${period}`),
   },
 
   virtualHosts: {

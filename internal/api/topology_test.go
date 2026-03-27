@@ -21,7 +21,8 @@ func newTopologyRouter(t *testing.T) http.Handler {
 	vh := repo.NewVirtualHostRepo(db)
 	de := repo.NewDockerEngineRepo(db)
 	apps := repo.NewAppRepo(db)
-	h := api.NewTopologyHandler(ph, vh, de, apps)
+	rollups := repo.NewResourceRollupRepo(db)
+	h := api.NewTopologyHandler(ph, vh, de, apps, rollups)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
@@ -494,6 +495,42 @@ func TestGetTopology_FullChain(t *testing.T) {
 	}
 	if len(chain[0].VirtualHosts[0].DockerEngines[0].Apps) != 0 {
 		t.Errorf("expected 0 apps got %d", len(chain[0].VirtualHosts[0].DockerEngines[0].Apps))
+	}
+}
+
+// ---- GET /hosts/physical/{id}/resources -------------------------------------
+
+func TestGetPhysicalResources_HappyPath(t *testing.T) {
+	router := newTopologyRouter(t)
+	ph := createPhysicalHost(t, router, "host1", "10.0.0.1", "bare_metal")
+
+	req := httptest.NewRequest(http.MethodGet, "/hosts/physical/"+ph.ID+"/resources", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		CPU  float64 `json:"cpu"`
+		Mem  float64 `json:"mem"`
+		Disk float64 `json:"disk"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode resources: %v", err)
+	}
+	// No rollup data exists yet — all fields must be zero.
+	if resp.CPU != 0 || resp.Mem != 0 || resp.Disk != 0 {
+		t.Errorf("expected zeroes when no rollup data, got cpu=%.2f mem=%.2f disk=%.2f", resp.CPU, resp.Mem, resp.Disk)
+	}
+}
+
+func TestGetPhysicalResources_NotFound(t *testing.T) {
+	router := newTopologyRouter(t)
+	req := httptest.NewRequest(http.MethodGet, "/hosts/physical/does-not-exist/resources", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404 got %d", rr.Code)
 	}
 }
 

@@ -148,6 +148,14 @@ export interface DockerEngine {
   created_at: string
 }
 
+// ── Host Resources ────────────────────────────────────────────────────────────
+
+export interface HostResources {
+  cpu: number
+  mem: number
+  disk: number
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────
 
 export interface SummaryBarItem {
