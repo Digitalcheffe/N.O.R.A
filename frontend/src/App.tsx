@@ -8,6 +8,7 @@ import { AppDetail } from './pages/AppDetail'
 import { Topology } from './pages/Topology'
 import { Settings } from './pages/Settings'
 import { ProfileEditor } from './pages/ProfileEditor'
+import { Profile } from './pages/Profile'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="apps/:id" element={<AppDetail />} />
           <Route path="topology" element={<Topology />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="profile" element={<Profile />} />
           <Route path="profiles/new" element={<ProfileEditor />} />
           <Route path="profiles/:id/edit" element={<ProfileEditor />} />
           <Route path="*" element={<Navigate to="/" replace />} />
