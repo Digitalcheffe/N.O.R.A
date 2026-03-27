@@ -4,6 +4,9 @@ import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
 import { appTemplates } from '../api/client'
 import type { AppTemplate, CustomProfile } from '../api/types'
+
+// id of the custom template pending delete confirmation, or null
+type ConfirmId = string | null
 import './Settings.css'
 
 type Tab = 'apps' | 'notifications' | 'metrics'
@@ -21,6 +24,21 @@ function AppsTab() {
   const [builtins, setBuiltins] = useState<AppTemplate[]>([])
   const [customs, setCustoms] = useState<CustomProfile[]>([])
   const [loadError, setLoadError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<ConfirmId>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async (id: string) => {
+    setDeleting(true)
+    try {
+      await appTemplates.deleteCustom(id)
+      setCustoms(prev => prev.filter(c => c.id !== id))
+    } catch {
+      // leave list unchanged on error
+    } finally {
+      setConfirmDelete(null)
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     Promise.all([appTemplates.list(), appTemplates.listCustom()])
@@ -97,12 +115,41 @@ function AppsTab() {
             {customs.map(cp => (
               <div key={cp.id} className="app-row">
                 <span className="app-row-name">{cp.name}</span>
-                <button
-                  className="settings-btn secondary settings-btn--sm"
-                  onClick={() => navigate(`/app-templates/${cp.id}/edit`)}
-                >
-                  Edit
-                </button>
+                <div className="app-row-actions">
+                  {confirmDelete === cp.id ? (
+                    <>
+                      <span className="app-row-confirm-label">Delete template?</span>
+                      <button
+                        className="settings-btn danger settings-btn--sm"
+                        onClick={() => handleDelete(cp.id)}
+                        disabled={deleting}
+                      >
+                        {deleting ? '…' : 'Yes, delete'}
+                      </button>
+                      <button
+                        className="settings-btn secondary settings-btn--sm"
+                        onClick={() => setConfirmDelete(null)}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="settings-btn secondary settings-btn--sm"
+                        onClick={() => navigate(`/app-templates/${cp.id}/edit`)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="settings-btn danger settings-btn--sm"
+                        onClick={() => setConfirmDelete(cp.id)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>

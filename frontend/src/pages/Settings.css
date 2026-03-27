@@ -316,6 +316,18 @@
   color: var(--text);
 }
 
+.app-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-row-confirm-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+}
+
 .settings-btn--sm {
   padding: 4px 10px;
   font-size: 11px;

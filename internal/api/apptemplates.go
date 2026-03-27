@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/digitalcheffe/nora/internal/apptemplate"
@@ -30,6 +31,7 @@ func (h *AppTemplatesHandler) Routes(r chi.Router) {
 	r.Post("/app-templates/validate", h.Validate)
 	r.Post("/app-templates/custom", h.CreateCustom)
 	r.Get("/app-templates/custom", h.ListCustom)
+	r.Delete("/app-templates/custom/{id}", h.DeleteCustom)
 }
 
 // appTemplateMeta is the list-response shape — meta fields only, no internals.
@@ -193,4 +195,19 @@ func (h *AppTemplatesHandler) ListCustom(w http.ResponseWriter, r *http.Request)
 		"data":  items,
 		"total": len(items),
 	})
+}
+
+// DeleteCustom handles DELETE /app-templates/custom/{id} — removes a custom app template.
+func (h *AppTemplatesHandler) DeleteCustom(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	err := h.customProfiles.Delete(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "custom app template not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete custom app template")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

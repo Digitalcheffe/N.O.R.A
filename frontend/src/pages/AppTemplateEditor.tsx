@@ -268,8 +268,8 @@ export function AppTemplateEditor() {
     setSaving(true)
     setSaveError(null)
     try {
-      const created = await appTemplates.createCustom(content)
-      navigate(`/apps?app-template=${created.id}`)
+      await appTemplates.createCustom(content)
+      navigate('/settings?tab=apps')
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -301,6 +301,12 @@ export function AppTemplateEditor() {
               {validation.valid ? 'Valid' : 'Invalid'}
             </span>
           )}
+          <button
+            style={styles.cancelBtn}
+            onClick={() => navigate('/settings?tab=apps')}
+          >
+            Cancel
+          </button>
           <button
             style={{
               ...styles.saveBtn,
@@ -478,6 +484,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '12px',
     fontWeight: 600,
     fontFamily: 'var(--mono)',
+  },
+  cancelBtn: {
+    padding: '8px 18px',
+    background: 'var(--bg3)',
+    color: 'var(--text2)',
+    border: '1px solid var(--border2)',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: 500,
+    fontFamily: 'var(--sans)',
+    cursor: 'pointer',
   },
   saveBtn: {
     padding: '8px 18px',
