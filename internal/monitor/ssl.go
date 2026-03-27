@@ -26,11 +26,98 @@ func NewSSLChecker(store *repo.Store) *SSLChecker {
 
 // Run executes one SSL certificate expiry check cycle for check.
 //
-// It dials the target over TLS, reads the leaf certificate, and maps days
-// remaining to one of four statuses: up / warn / critical / down.
-// On a status transition, an event is created — but only when the check is
+// When check.SSLSource is "traefik", expiry is read from the traefik_certs
+// cache — no outbound TLS connection is made. Otherwise the existing standalone
+// mode dials the target and reads the cert off the TLS handshake.
+//
+// On a status transition an event is created, but only when the check is
 // linked to an app (events require a valid app_id).
 func (s *SSLChecker) Run(ctx context.Context, check *models.MonitorCheck) error {
+	if check.SSLSource != nil && *check.SSLSource == "traefik" {
+		return s.runTraefikSSL(ctx, check)
+	}
+	return s.runStandaloneSSL(ctx, check)
+}
+
+// runTraefikSSL reads cert expiry from the traefik_certs cache.
+// No network connection is made.
+func (s *SSLChecker) runTraefikSSL(ctx context.Context, check *models.MonitorCheck) error {
+	warnDays := check.SSLWarnDays
+	if warnDays == 0 {
+		warnDays = 30
+	}
+	critDays := check.SSLCritDays
+	if critDays == 0 {
+		critDays = 7
+	}
+
+	now := time.Now().UTC()
+	domain := check.Target // Traefik checks store the bare domain as target
+
+	cert, err := s.store.Infra.GetCertByDomain(ctx, domain)
+	if err != nil {
+		errStr := fmt.Sprintf("cert not found in Traefik cache for domain %q", domain)
+		if err != repo.ErrNotFound {
+			errStr = err.Error()
+		}
+		details, _ := json.Marshal(sslDetails{Error: &errStr})
+		if updateErr := s.store.Checks.UpdateStatus(ctx, check.ID, "down", string(details), now); updateErr != nil {
+			return fmt.Errorf("ssl checker (traefik): update status for %s: %w", check.ID, updateErr)
+		}
+		return nil
+	}
+
+	if cert.ExpiresAt == nil {
+		errStr := "no expiry date in Traefik cert cache"
+		details, _ := json.Marshal(sslDetails{Error: &errStr})
+		if updateErr := s.store.Checks.UpdateStatus(ctx, check.ID, "down", string(details), now); updateErr != nil {
+			return fmt.Errorf("ssl checker (traefik): update status for %s: %w", check.ID, updateErr)
+		}
+		return nil
+	}
+
+	daysRemaining := int(time.Until(*cert.ExpiresAt).Hours() / 24)
+
+	var issuerStr, subjectStr string
+	if cert.Issuer != nil {
+		issuerStr = *cert.Issuer
+	}
+	subjectStr = cert.Domain
+	expiresAt := *cert.ExpiresAt
+
+	details, _ := json.Marshal(sslDetails{
+		DaysRemaining: &daysRemaining,
+		ExpiresAt:     &expiresAt,
+		Issuer:        &issuerStr,
+		Subject:       &subjectStr,
+	})
+
+	newStatus := "up"
+	switch {
+	case daysRemaining <= 0:
+		newStatus = "down"
+	case daysRemaining <= critDays:
+		newStatus = "critical"
+	case daysRemaining <= warnDays:
+		newStatus = "warn"
+	}
+
+	prevStatus := check.LastStatus
+	if prevStatus != "" && prevStatus != newStatus && check.AppID != "" {
+		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, daysRemaining, now); evErr != nil {
+			log.Printf("ssl checker (traefik): create event for check %s: %v", check.ID, evErr)
+		}
+	}
+
+	if updateErr := s.store.Checks.UpdateStatus(ctx, check.ID, newStatus, string(details), now); updateErr != nil {
+		return fmt.Errorf("ssl checker (traefik): update status for %s: %w", check.ID, updateErr)
+	}
+	return nil
+}
+
+// runStandaloneSSL dials the target over TLS and reads the leaf certificate.
+// This is the pre-T-34 behaviour, unchanged.
+func (s *SSLChecker) runStandaloneSSL(ctx context.Context, check *models.MonitorCheck) error {
 	warnDays := check.SSLWarnDays
 	if warnDays == 0 {
 		warnDays = 30
@@ -43,7 +130,6 @@ func (s *SSLChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 	result := s.runner(ctx, check.Target, warnDays, critDays)
 	now := time.Now().UTC()
 
-	// Parse days remaining from result details for use in event messages.
 	var parsed sslDetails
 	_ = json.Unmarshal(result.Details, &parsed)
 
@@ -53,9 +139,9 @@ func (s *SSLChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 	}
 
 	domain := extractDomain(check.Target)
-
 	prevStatus := check.LastStatus
 	newStatus := result.Status
+
 	if prevStatus != "" && prevStatus != newStatus && check.AppID != "" {
 		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, days, now); evErr != nil {
 			log.Printf("ssl checker: create event for check %s: %v", check.ID, evErr)

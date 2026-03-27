@@ -29,6 +29,16 @@ type dockerAPI interface {
 type Watcher struct {
 	store  *repo.Store
 	client dockerAPI
+	// onContainerStart is called after a "start" event is processed.
+	// It is used to trigger an immediate health check via the HealthPoller.
+	onContainerStart func(ctx context.Context, containerID string)
+}
+
+// SetContainerStartHook registers a callback that is called (in a goroutine)
+// whenever a container start event is received. Used to trigger an immediate
+// health check without coupling Watcher and HealthPoller.
+func (w *Watcher) SetContainerStartHook(fn func(ctx context.Context, containerID string)) {
+	w.onContainerStart = fn
 }
 
 // NewWatcher creates a Watcher connected to the Docker daemon. It returns an
@@ -100,6 +110,12 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message) error {
 	exitCodeStr := msg.Actor.Attributes["exitCode"]
 
 	severity, displayText := severityAndText(action, containerName, exitCodeStr)
+
+	// Trigger an immediate health check on container start.
+	if action == "start" && w.onContainerStart != nil {
+		containerID := msg.Actor.ID
+		go w.onContainerStart(ctx, containerID)
+	}
 
 	// Try to find a matching app by container name (case-insensitive).
 	appID := ""

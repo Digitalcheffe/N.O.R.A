@@ -13,6 +13,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/frontend"
 	"github.com/digitalcheffe/nora/internal/ingest"
+	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/monitor"
 	"github.com/digitalcheffe/nora/internal/profile"
@@ -45,7 +46,8 @@ func main() {
 	virtualHostRepo := repo.NewVirtualHostRepo(db)
 	dockerEngineRepo := repo.NewDockerEngineRepo(db)
 	customProfileRepo := repo.NewCustomProfileRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo)
+	infraRepo := repo.NewInfraRepo(db)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo)
 
 	// Profile registry — load all bundled YAML profiles
 	registry, err := profile.NewRegistry(noraprofiles.Files)
@@ -67,14 +69,29 @@ func main() {
 	go jobs.StartHourlyRollup(rollupCtx, store)
 	go jobs.StartDailyRollup(rollupCtx, store)
 
+	// Traefik sync worker — polls all enabled Traefik integrations every 60 s.
+	infraCtx, infraCancel := context.WithCancel(context.Background())
+	defer infraCancel()
+	syncWorker := infra.NewSyncWorker(store)
+	go syncWorker.Start(infraCtx)
+
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
+
 	if watcher, err := docker.NewWatcher(store); err != nil {
 		log.Printf("docker watcher: socket not available, skipping (%v)", err)
 	} else {
+		// Wire up health poller so start events trigger an immediate health check.
+		if healthPoller, err := docker.NewHealthPoller(store); err != nil {
+			log.Printf("docker health poller: socket not available, skipping (%v)", err)
+		} else {
+			watcher.SetContainerStartHook(healthPoller.CheckContainer)
+			go healthPoller.Start(dockerCtx)
+		}
 		go watcher.Start(dockerCtx)
 	}
+
 	if poller, err := docker.NewResourcePoller(store); err != nil {
 		log.Printf("resource poller: socket not available, skipping (%v)", err)
 	} else {
@@ -99,6 +116,7 @@ func main() {
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
+		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html

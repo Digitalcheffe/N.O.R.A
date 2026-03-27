@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Topbar } from '../components/Topbar'
 import { SSLRow } from '../components/SSLRow'
-import { checks as checksApi } from '../api/client'
-import type { MonitorCheck, CreateCheckInput, CheckType, SSLCert } from '../api/types'
+import { checks as checksApi, integrations as integrationsApi } from '../api/client'
+import type { MonitorCheck, CreateCheckInput, CheckType, SSLCert, InfraIntegration, TraefikCert, SSLSource } from '../api/types'
 import './Checks.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -16,6 +16,9 @@ type FormFields = {
   expected_status: string
   ssl_warn_days: string
   ssl_crit_days: string
+  ssl_source: SSLSource
+  integration_id: string
+  traefik_domain: string   // domain selection when ssl_source === 'traefik'
 }
 
 const defaultForm: FormFields = {
@@ -26,6 +29,9 @@ const defaultForm: FormFields = {
   expected_status: '200',
   ssl_warn_days: '30',
   ssl_crit_days: '7',
+  ssl_source: 'standalone',
+  integration_id: '',
+  traefik_domain: '',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -64,7 +70,9 @@ function extractSSLCerts(checkList: MonitorCheck[]): SSLCert[] {
       try {
         const result = JSON.parse(c.last_result!) as { days_remaining?: number; expires_at?: string }
         if (result.days_remaining == null) return []
-        const domain = c.target.replace(/^https?:\/\//, '').split('/')[0]
+        const domain = c.ssl_source === 'traefik'
+          ? c.target
+          : c.target.replace(/^https?:\/\//, '').split('/')[0]
         const expiresAt = result.expires_at
           ? new Date(result.expires_at).toISOString().split('T')[0]
           : ''
@@ -92,14 +100,29 @@ function formatResult(lastResult: string | null): string {
 
 function validateForm(form: FormFields): string | null {
   if (!form.name.trim()) return 'Name is required'
-  if (!form.target.trim()) return 'Target is required'
-  if (form.type === 'url' || form.type === 'ssl') {
+  const interval = parseInt(form.interval_secs, 10)
+  if (isNaN(interval) || interval < 30) return 'Interval must be at least 30 seconds'
+
+  if (form.type === 'url') {
+    if (!form.target.trim()) return 'Target is required'
     if (!form.target.startsWith('http://') && !form.target.startsWith('https://')) {
       return 'Target must begin with http:// or https://'
     }
   }
-  const interval = parseInt(form.interval_secs, 10)
-  if (isNaN(interval) || interval < 30) return 'Interval must be at least 30 seconds'
+
+  if (form.type === 'ssl') {
+    if (form.ssl_source === 'traefik') {
+      if (!form.traefik_domain) return 'Select a domain from the Traefik cert list'
+    } else {
+      if (!form.target.trim()) return 'Target is required'
+      if (!form.target.startsWith('http://') && !form.target.startsWith('https://')) {
+        return 'Target must begin with http:// or https://'
+      }
+    }
+  }
+
+  if (form.type === 'ping' && !form.target.trim()) return 'Target is required'
+
   return null
 }
 
@@ -107,25 +130,36 @@ function checkToForm(check: MonitorCheck): FormFields {
   return {
     type: check.type as CheckType,
     name: check.name,
-    target: check.target,
+    target: check.type === 'ssl' && check.ssl_source === 'traefik' ? '' : check.target,
     interval_secs: String(check.interval_secs),
     expected_status: String(check.expected_status ?? 200),
     ssl_warn_days: String(check.ssl_warn_days ?? 30),
     ssl_crit_days: String(check.ssl_crit_days ?? 7),
+    ssl_source: (check.ssl_source as SSLSource) ?? 'standalone',
+    integration_id: check.integration_id ?? '',
+    traefik_domain: check.ssl_source === 'traefik' ? check.target : '',
   }
 }
 
-function formToInput(form: FormFields): CreateCheckInput {
+function formToInput(form: FormFields, integrationID?: string): CreateCheckInput {
   const input: CreateCheckInput = {
     name: form.name.trim(),
     type: form.type,
-    target: form.target.trim(),
+    target: form.type === 'ssl' && form.ssl_source === 'traefik'
+      ? form.traefik_domain
+      : form.target.trim(),
     interval_secs: parseInt(form.interval_secs, 10),
   }
-  if (form.type === 'url') input.expected_status = parseInt(form.expected_status, 10)
+  if (form.type === 'url') {
+    input.expected_status = parseInt(form.expected_status, 10)
+  }
   if (form.type === 'ssl') {
     input.ssl_warn_days = parseInt(form.ssl_warn_days, 10)
     input.ssl_crit_days = parseInt(form.ssl_crit_days, 10)
+    input.ssl_source = form.ssl_source
+    if (form.ssl_source === 'traefik' && integrationID) {
+      input.integration_id = integrationID
+    }
   }
   return input
 }
@@ -142,6 +176,10 @@ interface CheckFormProps {
   title: string
   submitLabel: string
   extraAction?: ReactNode
+  // Traefik context
+  traefikIntegrations: InfraIntegration[]
+  traefikCerts: TraefikCert[]
+  onIntegrationChange: (integrationId: string) => void
 }
 
 const CHECK_TYPES: CheckType[] = ['ping', 'url', 'ssl']
@@ -156,7 +194,13 @@ function CheckForm({
   title,
   submitLabel,
   extraAction,
+  traefikIntegrations,
+  traefikCerts,
+  onIntegrationChange,
 }: CheckFormProps) {
+  const hasTraefik = traefikIntegrations.length > 0
+  const selectedIntegration = traefikIntegrations.find(i => i.id === form.integration_id)
+
   return (
     <div className="add-form">
       <div className="form-title">{title}</div>
@@ -181,15 +225,98 @@ function CheckForm({
             placeholder="e.g. Proxmox Web UI"
           />
         </div>
-        <div className="form-field">
-          <div className="form-label">{form.type === 'ping' ? 'Host / IP' : 'URL'}</div>
-          <input
-            className="form-input"
-            value={form.target}
-            onChange={e => onChange('target', e.target.value)}
-            placeholder={form.type === 'ping' ? 'e.g. 192.168.1.1' : 'https://example.com'}
-          />
-        </div>
+
+        {/* SSL source toggle */}
+        {form.type === 'ssl' && (
+          <div className="form-field">
+            <div className="form-label">SSL Source</div>
+            {!hasTraefik ? (
+              <div className="ssl-no-traefik-banner">
+                Connect Traefik in Settings → Integrations to enable automatic SSL discovery.
+              </div>
+            ) : (
+              <div className="type-selector">
+                <button
+                  className={`type-btn${form.ssl_source === 'traefik' ? ' active' : ''}`}
+                  onClick={() => onChange('ssl_source', 'traefik')}
+                >
+                  Traefik
+                </button>
+                <button
+                  className={`type-btn${form.ssl_source === 'standalone' ? ' active' : ''}`}
+                  onClick={() => onChange('ssl_source', 'standalone')}
+                >
+                  Standalone
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Traefik SSL: integration selector + domain dropdown */}
+        {form.type === 'ssl' && form.ssl_source === 'traefik' && hasTraefik && (
+          <>
+            {traefikIntegrations.length > 1 && (
+              <div className="form-field">
+                <div className="form-label">Traefik Integration</div>
+                <select
+                  className="form-input"
+                  value={form.integration_id}
+                  onChange={e => {
+                    onChange('integration_id', e.target.value)
+                    onIntegrationChange(e.target.value)
+                  }}
+                >
+                  <option value="">Select integration…</option>
+                  {traefikIntegrations.map(i => (
+                    <option key={i.id} value={i.id}>{i.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="form-field">
+              <div className="form-label">Domain</div>
+              {traefikCerts.length === 0 ? (
+                <div className="ssl-no-certs-msg">
+                  {selectedIntegration
+                    ? 'No certs discovered yet — run a sync in Settings → Integrations.'
+                    : 'Select an integration to see available domains.'}
+                </div>
+              ) : (
+                <select
+                  className="form-input"
+                  value={form.traefik_domain}
+                  onChange={e => onChange('traefik_domain', e.target.value)}
+                >
+                  <option value="">Select domain…</option>
+                  {traefikCerts.map(c => (
+                    <option key={c.id} value={c.domain}>{c.domain}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Standalone SSL or other types: target URL/host */}
+        {(form.type !== 'ssl' || form.ssl_source === 'standalone' || !hasTraefik) && (
+          <div className="form-field">
+            <div className="form-label">{form.type === 'ping' ? 'Host / IP' : 'URL'}</div>
+            <input
+              className="form-input"
+              value={form.target}
+              onChange={e => onChange('target', e.target.value)}
+              placeholder={form.type === 'ping' ? 'e.g. 192.168.1.1' : 'https://example.com'}
+            />
+            {form.type === 'ssl' && form.ssl_source === 'standalone' && (
+              <div className="ssl-standalone-warning">
+                ⚠ Standalone SSL checks make a direct TLS connection. This may fail for
+                services proxied through Traefik on the same host. Use for external URLs only.
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="form-field">
           <div className="form-label">Interval (seconds)</div>
           <input
@@ -259,6 +386,10 @@ export function Checks() {
   const [checkList, setCheckList] = useState<MonitorCheck[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Traefik integrations for SSL source toggle
+  const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
+  const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
+
   // Add form
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState<FormFields>(defaultForm)
@@ -282,14 +413,42 @@ export function Checks() {
       .then(res => setCheckList(res.data))
       .catch(() => {})
       .finally(() => setLoading(false))
+
+    integrationsApi.list()
+      .then(res => {
+        const traefik = res.data.filter(i => i.type === 'traefik' && i.enabled)
+        setTraefikIntegrations(traefik)
+        if (traefik.length > 0) {
+          return integrationsApi.certs(traefik[0].id)
+            .then(certsRes => setTraefikCerts(certsRes.data))
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const sslCerts = extractSSLCerts(checkList)
 
+  // ── Integration change (reload certs) ──
+
+  function handleIntegrationChange(integrationId: string) {
+    if (!integrationId) return
+    integrationsApi.certs(integrationId)
+      .then(res => setTraefikCerts(res.data))
+      .catch(() => {})
+  }
+
   // ── Add form ──
 
   function handleAddChange(field: keyof FormFields, value: string) {
-    setAddForm(prev => ({ ...prev, [field]: value }))
+    setAddForm(prev => {
+      const next = { ...prev, [field]: value }
+      // When switching to traefik ssl, auto-set first integration
+      if (field === 'ssl_source' && value === 'traefik' && traefikIntegrations.length > 0 && !next.integration_id) {
+        next.integration_id = traefikIntegrations[0].id
+      }
+      return next
+    })
     setAddError(null)
   }
 
@@ -298,7 +457,8 @@ export function Checks() {
     if (err) { setAddError(err); return }
     setAddSubmitting(true)
     try {
-      const created = await checksApi.create(formToInput(addForm))
+      const integrationId = addForm.ssl_source === 'traefik' ? addForm.integration_id : undefined
+      const created = await checksApi.create(formToInput(addForm, integrationId))
       setCheckList(prev => [created, ...prev])
       setShowAddForm(false)
       setAddForm(defaultForm)
@@ -318,6 +478,10 @@ export function Checks() {
       setExpandedId(check.id)
       setEditForm(checkToForm(check))
       setEditError(null)
+      // Load certs for the check's integration if it's traefik
+      if (check.ssl_source === 'traefik' && check.integration_id) {
+        handleIntegrationChange(check.integration_id)
+      }
     }
   }
 
@@ -331,7 +495,8 @@ export function Checks() {
     if (err) { setEditError(err); return }
     setEditSubmitting(true)
     try {
-      const updated = await checksApi.update(id, formToInput(editForm))
+      const integrationId = editForm.ssl_source === 'traefik' ? editForm.integration_id : undefined
+      const updated = await checksApi.update(id, formToInput(editForm, integrationId))
       setCheckList(prev => prev.map(c => c.id === id ? updated : c))
       setExpandedId(null)
     } catch (e: unknown) {
@@ -392,6 +557,9 @@ export function Checks() {
             submitting={addSubmitting}
             title="New Check"
             submitLabel="Add Check"
+            traefikIntegrations={traefikIntegrations}
+            traefikCerts={traefikCerts}
+            onIntegrationChange={handleIntegrationChange}
           />
         )}
 
@@ -420,7 +588,9 @@ export function Checks() {
                   <div className="monitor-info">
                     <div className="monitor-name">{check.name}</div>
                     <div className="monitor-target">
-                      {check.target} · {check.type} · every {check.interval_secs}s
+                      {check.target} · {check.type}
+                      {check.ssl_source === 'traefik' && ' (Traefik)'}
+                      {' '}· every {check.interval_secs}s
                     </div>
                   </div>
                   <div className="monitor-meta">
@@ -450,6 +620,9 @@ export function Checks() {
                       submitting={editSubmitting}
                       title="Edit Check"
                       submitLabel="Save"
+                      traefikIntegrations={traefikIntegrations}
+                      traefikCerts={traefikCerts}
+                      onIntegrationChange={handleIntegrationChange}
                       extraAction={
                         <button
                           className="form-btn danger"

@@ -33,7 +33,7 @@ func NewCheckRepo(db *sqlx.DB) CheckRepo {
 const selectCheckCols = `
 	SELECT id, COALESCE(app_id,'') AS app_id, name, type, target,
 	       interval_secs, COALESCE(expected_status,0) AS expected_status,
-	       ssl_warn_days, ssl_crit_days, enabled,
+	       ssl_warn_days, ssl_crit_days, ssl_source, integration_id, enabled,
 	       last_checked_at, COALESCE(last_status,'') AS last_status,
 	       COALESCE(last_result,'') AS last_result, created_at
 	FROM monitor_checks`
@@ -54,12 +54,14 @@ func (r *sqliteCheckRepo) Create(ctx context.Context, check *models.MonitorCheck
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO monitor_checks
 		  (id, app_id, name, type, target, interval_secs, expected_status,
-		   ssl_warn_days, ssl_crit_days, enabled)
-		VALUES (?, NULLIF(?,?), ?, ?, ?, ?, NULLIF(?,0), ?, ?, ?)`,
+		   ssl_warn_days, ssl_crit_days, ssl_source, integration_id, enabled)
+		VALUES (?, NULLIF(?,?), ?, ?, ?, ?, NULLIF(?,0), ?, ?, ?, ?, ?)`,
 		check.ID, check.AppID, check.AppID,
 		check.Name, check.Type, check.Target, check.IntervalSecs,
 		check.ExpectedStatus,
-		check.SSLWarnDays, check.SSLCritDays, check.Enabled)
+		check.SSLWarnDays, check.SSLCritDays,
+		check.SSLSource, check.IntegrationID,
+		check.Enabled)
 	if err != nil {
 		return fmt.Errorf("create check: %w", err)
 	}
@@ -82,12 +84,15 @@ func (r *sqliteCheckRepo) Update(ctx context.Context, check *models.MonitorCheck
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE monitor_checks
 		SET app_id=NULLIF(?,?), name=?, type=?, target=?, interval_secs=?,
-		    expected_status=NULLIF(?,0), ssl_warn_days=?, ssl_crit_days=?, enabled=?
+		    expected_status=NULLIF(?,0), ssl_warn_days=?, ssl_crit_days=?,
+		    ssl_source=?, integration_id=?, enabled=?
 		WHERE id=?`,
 		check.AppID, check.AppID,
 		check.Name, check.Type, check.Target, check.IntervalSecs,
 		check.ExpectedStatus,
-		check.SSLWarnDays, check.SSLCritDays, check.Enabled,
+		check.SSLWarnDays, check.SSLCritDays,
+		check.SSLSource, check.IntegrationID,
+		check.Enabled,
 		check.ID)
 	if err != nil {
 		return fmt.Errorf("update check: %w", err)
