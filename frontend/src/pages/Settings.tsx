@@ -70,7 +70,7 @@ function AppsTab() {
         ) : (
           <div className="apps-pills">
             {builtins.map(t => (
-              <span key={t.id} className={`app-pill app-pill--${t.capability}`}>
+              <span key={t.id} className="app-pill">
                 {t.name}
                 <span className="app-pill-type">{t.category}</span>
               </span>

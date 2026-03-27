@@ -290,11 +290,6 @@
   opacity: 0.5;
 }
 
-.app-pill--full         { border-color: var(--green);  color: var(--green);  background: var(--green-dim); }
-.app-pill--webhook_only { border-color: var(--border2); color: var(--text); }
-.app-pill--monitor_only { border-color: var(--yellow); color: var(--yellow); background: var(--yellow-dim); }
-.app-pill--docker_only  { border-color: var(--border2); color: var(--text2); }
-.app-pill--limited      { border-color: var(--border2); color: var(--text3); }
 
 /* ── Custom app rows ──────────────────────────────────────────────────────── */
 
