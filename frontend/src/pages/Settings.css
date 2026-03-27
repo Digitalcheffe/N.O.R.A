@@ -1,3 +1,48 @@
+/* ── Tab bar ──────────────────────────────────────────────────────────────── */
+
+.settings-tabs-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  background: var(--bg2);
+  position: sticky;
+  top: 52px;
+  z-index: 5;
+}
+
+.settings-tab {
+  padding: 12px 16px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.settings-tab:hover {
+  color: var(--text);
+}
+
+.settings-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Tab content ──────────────────────────────────────────────────────────── */
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+
 .settings-sections {
   display: flex;
   flex-direction: column;
@@ -11,9 +56,244 @@
   padding: 16px;
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .settings-placeholder {
-  padding: 20px 0;
+  padding: 12px 0;
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text3);
+}
+
+/* ── Form fields ──────────────────────────────────────────────────────────── */
+
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.settings-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text2);
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.settings-input {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-input[readonly] {
+  color: var(--text2);
+}
+
+.settings-row-inline {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+
+.settings-btn {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.settings-btn.primary {
+  background: var(--accent);
+  color: white;
+}
+
+.settings-btn.primary:hover {
+  opacity: 0.9;
+}
+
+.settings-btn.secondary {
+  background: var(--bg3);
+  border-color: var(--border2);
+  color: var(--text2);
+}
+
+.settings-btn.secondary:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.settings-btn.danger {
+  background: var(--red-dim);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ── Digest schedule option cards ─────────────────────────────────────────── */
+
+.settings-option-cards {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-option-card {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-option-card:hover {
+  color: var(--text);
+}
+
+.settings-option-card.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ── KV grid (metrics) ────────────────────────────────────────────────────── */
+
+.settings-kv-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 12px;
+}
+
+.settings-kv-key {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  align-self: center;
+}
+
+.settings-kv-val {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+}
+
+/* ── Resource usage bars ──────────────────────────────────────────────────── */
+
+.settings-resource-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-resource-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-resource-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  width: 36px;
+}
+
+.settings-progress-track {
+  flex: 1;
+  height: 4px;
+  background: var(--bg4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.settings-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.settings-resource-pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  width: 32px;
+  text-align: right;
+}
+
+/* ── Profile avatar ───────────────────────────────────────────────────────── */
+
+.settings-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.settings-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.settings-avatar-name {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.settings-avatar-email {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
 }
