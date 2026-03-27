@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates, digestSettings, smtpSettings } from '../api/client'
+import { appTemplates, digestSettings, digestReport, smtpSettings } from '../api/client'
 import type { AppTemplate, CustomProfile, DigestFrequency, DigestSchedule, SMTPSettings } from '../api/types'
 
 import './Settings.css'
@@ -204,6 +204,7 @@ function NotificationsTab() {
   const [smtp, setSMTP] = useState<SMTPSettings>({ host: '', port: 587, user: '', pass: '', from: '' })
   const [smtpSaving, setSmtpSaving] = useState(false)
   const [smtpMsg, setSmtpMsg] = useState('')
+  const [smtpConfigured, setSmtpConfigured] = useState(false)
 
   // Digest schedule state
   const [schedule, setSchedule] = useState<DigestSchedule>({ frequency: 'monthly', day_of_week: 1, day_of_month: 1, send_hour: 8 })
@@ -213,7 +214,9 @@ function NotificationsTab() {
   const [sendNowMsg, setSendNowMsg] = useState('')
 
   useEffect(() => {
-    smtpSettings.get().then(setSMTP).catch(() => {/* not yet saved — keep defaults */})
+    smtpSettings.get()
+      .then(s => { setSMTP(s); setSmtpConfigured(!!s.host) })
+      .catch(() => {/* not yet saved — keep defaults */})
     digestSettings.getSchedule().then(setSchedule).catch(() => {/* keep defaults */})
   }, [])
 
@@ -221,7 +224,8 @@ function NotificationsTab() {
     setSmtpSaving(true)
     setSmtpMsg('')
     try {
-      await smtpSettings.put(smtp)
+      const saved = await smtpSettings.put(smtp)
+      setSmtpConfigured(!!saved.host)
       setSmtpMsg('Saved.')
     } catch (e: unknown) {
       setSmtpMsg(e instanceof Error ? e.message : 'Save failed')
@@ -326,6 +330,12 @@ function NotificationsTab() {
           <span className="section-title">Digest Email</span>
         </div>
 
+        {!smtpConfigured && (
+          <div className="settings-smtp-warning">
+            SMTP is not configured. Set up SMTP above before enabling the digest schedule.
+          </div>
+        )}
+
         {/* Frequency — segmented control */}
         <div className="settings-field-row">
           <label className="settings-label">Frequency</label>
@@ -390,11 +400,27 @@ function NotificationsTab() {
         </div>
 
         <div className="settings-actions">
-          <button className="settings-btn primary" onClick={saveSchedule} disabled={schedSaving}>
+          <button
+            className="settings-btn primary"
+            onClick={saveSchedule}
+            disabled={schedSaving || !smtpConfigured}
+            title={!smtpConfigured ? 'Configure SMTP first' : undefined}
+          >
             {schedSaving ? 'Saving…' : 'Save schedule'}
           </button>
-          <button className="settings-btn secondary" onClick={sendNow} disabled={sendingNow}>
+          <button
+            className="settings-btn secondary"
+            onClick={sendNow}
+            disabled={sendingNow || !smtpConfigured}
+            title={!smtpConfigured ? 'Configure SMTP first' : undefined}
+          >
             {sendingNow ? 'Sending…' : 'Send test digest now'}
+          </button>
+          <button
+            className="settings-btn secondary"
+            onClick={() => window.open(digestReport.url(), '_blank')}
+          >
+            Export PDF
           </button>
           {schedMsg && <span className="settings-status-msg">{schedMsg}</span>}
           {sendNowMsg && <span className="settings-status-msg">{sendNowMsg}</span>}

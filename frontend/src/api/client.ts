@@ -283,6 +283,11 @@ export const smtpSettings = {
     request<SMTPSettings>('PUT', '/settings/smtp', s),
 }
 
+export const digestReport = {
+  url: (period?: string) =>
+    `/api/v1/digest/report${period ? `?period=${encodeURIComponent(period)}` : ''}`,
+}
+
 // ── Metrics ───────────────────────────────────────────────────────────────────
 
 export const metrics = {

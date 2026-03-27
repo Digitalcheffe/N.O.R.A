@@ -31,6 +31,7 @@ func (h *DigestHandler) Routes(r chi.Router) {
 	r.Get("/digest/schedule", h.GetSchedule)
 	r.Put("/digest/schedule", h.PutSchedule)
 	r.Post("/digest/send-now", h.SendNow)
+	r.Get("/digest/report", h.GetReport)
 }
 
 // GetSchedule returns the current digest schedule: GET /api/v1/digest/schedule
@@ -74,6 +75,11 @@ func (h *DigestHandler) PutSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !h.digestJob.SMTPConfigured(r.Context()) {
+		writeError(w, http.StatusUnprocessableEntity, "SMTP is not configured — set up SMTP before enabling the digest schedule")
+		return
+	}
+
 	if err := h.store.Settings.SetJSON(r.Context(), digestScheduleKey, req); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -83,6 +89,11 @@ func (h *DigestHandler) PutSchedule(w http.ResponseWriter, r *http.Request) {
 
 // SendNow triggers an immediate digest for the current period: POST /api/v1/digest/send-now
 func (h *DigestHandler) SendNow(w http.ResponseWriter, r *http.Request) {
+	if !h.digestJob.SMTPConfigured(r.Context()) {
+		writeError(w, http.StatusUnprocessableEntity, "SMTP is not configured — set up SMTP before sending a digest")
+		return
+	}
+
 	var sched models.DigestSchedule
 	err := h.store.Settings.GetJSON(r.Context(), digestScheduleKey, &sched)
 	if errors.Is(err, repo.ErrNotFound) {
@@ -97,7 +108,6 @@ func (h *DigestHandler) SendNow(w http.ResponseWriter, r *http.Request) {
 	// Run in background — send-now is fire-and-forget from the HTTP perspective.
 	go func() {
 		if err := h.digestJob.Send(r.Context(), period); err != nil {
-			// Error is already logged inside Send.
 			_ = err
 		}
 	}()
@@ -106,6 +116,33 @@ func (h *DigestHandler) SendNow(w http.ResponseWriter, r *http.Request) {
 		"status": "queued",
 		"period": period,
 	})
+}
+
+// GetReport renders a print-friendly HTML digest report: GET /api/v1/digest/report
+// Optional query param: ?period=2026-03 (defaults to the current period).
+func (h *DigestHandler) GetReport(w http.ResponseWriter, r *http.Request) {
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		var sched models.DigestSchedule
+		err := h.store.Settings.GetJSON(r.Context(), digestScheduleKey, &sched)
+		if errors.Is(err, repo.ErrNotFound) {
+			sched = models.DigestSchedule{Frequency: "monthly"}
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		period = periodLabelFromSchedule(sched.Frequency, time.Now())
+	}
+
+	html, err := h.digestJob.GenerateReportHTML(r.Context(), period)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprint(w, html)
 }
 
 // periodLabelFromSchedule returns the period label for the current date given a frequency.

@@ -38,6 +38,37 @@ func newDigestRouter(t *testing.T) (http.Handler, *repo.Store) {
 	return r, store
 }
 
+// newDigestRouterWithSMTP creates a digest router with SMTP seeded into settings
+// so that SMTP-gated endpoints (PUT schedule, POST send-now) are accessible.
+func newDigestRouterWithSMTP(t *testing.T) (http.Handler, *repo.Store) {
+	t.Helper()
+	cfg := &config.Config{
+		SMTPHost: "smtp.example.com",
+		SMTPPort: 587,
+		SMTPFrom: "nora@example.com",
+	}
+	// Re-create the handler with SMTP available via config fallback.
+	db := newTestDB(t)
+	store2 := repo.NewStore(
+		repo.NewAppRepo(db),
+		repo.NewEventRepo(db),
+		repo.NewCheckRepo(db),
+		repo.NewRollupRepo(db),
+		repo.NewResourceReadingRepo(db),
+		repo.NewResourceRollupRepo(db),
+		repo.NewPhysicalHostRepo(db),
+		repo.NewVirtualHostRepo(db),
+		repo.NewDockerEngineRepo(db),
+		repo.NewInfraRepo(db),
+		repo.NewSettingsRepo(db),
+	)
+	digestJob2 := jobs.NewDigestJob(store2, cfg)
+	h2 := api.NewDigestHandler(store2, digestJob2)
+	r2 := chi.NewRouter()
+	h2.Routes(r2)
+	return r2, store2
+}
+
 // --- GET /digest/schedule ---
 
 func TestGetDigestSchedule_Default(t *testing.T) {
@@ -65,8 +96,20 @@ func TestGetDigestSchedule_Default(t *testing.T) {
 
 // --- PUT /digest/schedule ---
 
-func TestPutDigestSchedule_Happy(t *testing.T) {
+func TestPutDigestSchedule_NoSMTP(t *testing.T) {
 	r, _ := newDigestRouter(t)
+	body, _ := json.Marshal(models.DigestSchedule{Frequency: "daily", DayOfWeek: 1, DayOfMonth: 1})
+	req := httptest.NewRequest(http.MethodPut, "/digest/schedule", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPutDigestSchedule_Happy(t *testing.T) {
+	r, _ := newDigestRouterWithSMTP(t)
 
 	body, _ := json.Marshal(models.DigestSchedule{
 		Frequency:  "weekly",
@@ -92,7 +135,7 @@ func TestPutDigestSchedule_Happy(t *testing.T) {
 }
 
 func TestPutDigestSchedule_InvalidFrequency(t *testing.T) {
-	r, _ := newDigestRouter(t)
+	r, _ := newDigestRouterWithSMTP(t)
 
 	body, _ := json.Marshal(models.DigestSchedule{Frequency: "hourly"})
 	req := httptest.NewRequest(http.MethodPut, "/digest/schedule", bytes.NewReader(body))
@@ -106,7 +149,7 @@ func TestPutDigestSchedule_InvalidFrequency(t *testing.T) {
 }
 
 func TestPutDigestSchedule_InvalidDayOfWeek(t *testing.T) {
-	r, _ := newDigestRouter(t)
+	r, _ := newDigestRouterWithSMTP(t)
 
 	body, _ := json.Marshal(map[string]any{
 		"frequency":    "weekly",
@@ -124,7 +167,7 @@ func TestPutDigestSchedule_InvalidDayOfWeek(t *testing.T) {
 }
 
 func TestPutDigestSchedule_InvalidDayOfMonth(t *testing.T) {
-	r, _ := newDigestRouter(t)
+	r, _ := newDigestRouterWithSMTP(t)
 
 	tests := []struct {
 		day  int
@@ -153,7 +196,7 @@ func TestPutDigestSchedule_InvalidDayOfMonth(t *testing.T) {
 }
 
 func TestPutDigestSchedule_InvalidBody(t *testing.T) {
-	r, _ := newDigestRouter(t)
+	r, _ := newDigestRouterWithSMTP(t)
 
 	req := httptest.NewRequest(http.MethodPut, "/digest/schedule", bytes.NewReader([]byte("not-json")))
 	req.Header.Set("Content-Type", "application/json")
@@ -166,7 +209,7 @@ func TestPutDigestSchedule_InvalidBody(t *testing.T) {
 }
 
 func TestPutDigestSchedule_InvalidSendHour(t *testing.T) {
-	r, _ := newDigestRouter(t)
+	r, _ := newDigestRouterWithSMTP(t)
 
 	tests := []struct {
 		hour int
@@ -198,8 +241,18 @@ func TestPutDigestSchedule_InvalidSendHour(t *testing.T) {
 
 // --- POST /digest/send-now ---
 
-func TestSendNow_Accepted(t *testing.T) {
+func TestSendNow_NoSMTP(t *testing.T) {
 	r, _ := newDigestRouter(t)
+	req := httptest.NewRequest(http.MethodPost, "/digest/send-now", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestSendNow_Accepted(t *testing.T) {
+	r, _ := newDigestRouterWithSMTP(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/digest/send-now", nil)
 	rr := httptest.NewRecorder()
@@ -222,10 +275,59 @@ func TestSendNow_Accepted(t *testing.T) {
 	}
 }
 
+// --- GET /digest/report ---
+
+func TestGetReport(t *testing.T) {
+	r, _ := newDigestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/digest/report", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body.String())
+	}
+	ct := rr.Header().Get("Content-Type")
+	if ct == "" || len(ct) < 9 || ct[:9] != "text/html" {
+		t.Errorf("expected text/html content-type, got %s", ct)
+	}
+	body := rr.Body.String()
+	if len(body) == 0 {
+		t.Error("expected non-empty HTML body")
+	}
+	// Must contain the print button.
+	if !stringContains(body, "Print / Save as PDF") {
+		t.Error("report HTML missing print button")
+	}
+}
+
+func TestGetReport_WithPeriod(t *testing.T) {
+	r, _ := newDigestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/digest/report?period=2026-03", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func stringContains(s, sub string) bool {
+	return len(s) >= len(sub) && func() bool {
+		for i := 0; i <= len(s)-len(sub); i++ {
+			if s[i:i+len(sub)] == sub {
+				return true
+			}
+		}
+		return false
+	}()
+}
+
 // --- GET then PUT roundtrip ---
 
 func TestDigestScheduleRoundtrip(t *testing.T) {
-	r, _ := newDigestRouter(t)
+	r, _ := newDigestRouterWithSMTP(t)
 
 	// Set a daily schedule.
 	body, _ := json.Marshal(models.DigestSchedule{

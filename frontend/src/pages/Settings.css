@@ -523,3 +523,15 @@
   align-self: center;
 }
 
+/* ── SMTP not-configured warning ────────────────────────────────────────── */
+
+.settings-smtp-warning {
+  font-size: 13px;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+

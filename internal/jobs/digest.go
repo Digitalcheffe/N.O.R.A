@@ -137,7 +137,7 @@ func (d *DigestJob) Send(ctx context.Context, period string) error {
 	return nil
 }
 
-// RenderHTML renders the digest HTML from DigestData.
+// RenderHTML renders the digest email HTML from DigestData.
 func (d *DigestJob) RenderHTML(data *DigestData) (string, error) {
 	tmpl, err := template.New("digest").Parse(digestHTMLTemplate)
 	if err != nil {
@@ -148,6 +148,31 @@ func (d *DigestJob) RenderHTML(data *DigestData) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// GenerateReportHTML builds digest data for the given period and renders the
+// print-friendly report HTML. Used by the report export endpoint.
+func (d *DigestJob) GenerateReportHTML(ctx context.Context, period string) (string, error) {
+	data, err := d.buildDigestData(ctx, period)
+	if err != nil {
+		return "", fmt.Errorf("digest: build report data: %w", err)
+	}
+	tmpl, err := template.New("report").Parse(reportHTMLTemplate)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// SMTPConfigured returns true if SMTP is configured either in the settings
+// table or via environment-level config.
+func (d *DigestJob) SMTPConfigured(ctx context.Context) bool {
+	_, err := d.smtpSettings(ctx)
+	return err == nil
 }
 
 // buildDigestData queries rollups and assembles DigestData for the given period.
@@ -446,5 +471,104 @@ var digestHTMLTemplate = `<!DOCTYPE html>
     </td>
   </tr>
 </table>
+</body>
+</html>`
+
+// reportHTMLTemplate is the browser/print-friendly report template.
+// It includes print CSS and a screen-only print button.
+var reportHTMLTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{.Title}}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0c0f; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 32px 16px; }
+  .report { max-width: 680px; margin: 0 auto; }
+  .report-header { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid #1e2330; margin-bottom: 24px; }
+  .report-brand { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; color: #64748b; }
+  .report-title { font-size: 22px; font-weight: 600; color: #f1f5f9; margin-top: 4px; }
+  .report-period { font-size: 13px; color: #64748b; }
+  .section { margin-bottom: 24px; }
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 12px; }
+  .summary-row { display: flex; gap: 24px; margin-bottom: 24px; }
+  .summary-cell { text-align: center; }
+  .summary-value { font-size: 28px; font-weight: 700; }
+  .summary-value.errors { color: #f87171; }
+  .summary-value.events { color: #38bdf8; }
+  .summary-caption { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  table.activity { width: 100%; border-collapse: collapse; }
+  table.activity td { padding: 9px 0; border-bottom: 1px solid #1e2330; font-size: 14px; }
+  table.activity td.app { color: #e2e8f0; }
+  table.activity td.type { color: #64748b; text-align: center; font-size: 12px; }
+  table.activity td.count { text-align: right; font-weight: 600; }
+  td.count.err { color: #f87171; }
+  td.count.ok  { color: #38bdf8; }
+  .empty { color: #64748b; font-size: 14px; padding: 12px 0; }
+  .print-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; background: #1e2330; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 24px; }
+  .print-btn:hover { background: #263044; }
+  @media print {
+    body { background: #fff; color: #000; padding: 0; }
+    .report-header { border-bottom-color: #ccc; }
+    .report-brand, .report-period { color: #666; }
+    .report-title { color: #000; }
+    .section-label { color: #666; }
+    table.activity td { border-bottom-color: #ddd; }
+    table.activity td.app { color: #000; }
+    table.activity td.type { color: #666; }
+    td.count.err { color: #c0392b; }
+    td.count.ok  { color: #2563eb; }
+    .print-btn { display: none; }
+    .summary-value.errors { color: #c0392b; }
+    .summary-value.events { color: #2563eb; }
+  }
+</style>
+</head>
+<body>
+<div class="report">
+  <button class="print-btn" onclick="window.print()">⎙ Print / Save as PDF</button>
+
+  <div class="report-header">
+    <div>
+      <div class="report-brand">NORA</div>
+      <div class="report-title">{{.Title}}</div>
+    </div>
+    <div class="report-period">{{.Period}}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Summary</div>
+    <div class="summary-row">
+      {{if .TotalErrors}}
+      <div class="summary-cell">
+        <div class="summary-value errors">{{.TotalErrors}}</div>
+        <div class="summary-caption">Errors</div>
+      </div>
+      {{end}}
+      <div class="summary-cell">
+        <div class="summary-value events">{{len .AppRows}}</div>
+        <div class="summary-caption">Event Types</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Activity</div>
+    {{if .AppRows}}
+    <table class="activity">
+      {{range .AppRows}}
+      <tr>
+        <td class="app">{{.AppName}}</td>
+        <td class="type">{{.EventType}}</td>
+        <td class="count {{if .HasErrors}}err{{else}}ok{{end}}">{{.Count}}</td>
+      </tr>
+      {{end}}
+    </table>
+    {{else}}
+    <p class="empty">No activity recorded for this period.</p>
+    {{end}}
+  </div>
+</div>
 </body>
 </html>`
