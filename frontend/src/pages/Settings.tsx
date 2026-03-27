@@ -5,8 +5,6 @@ import { InfraIntegrations } from './Integrations'
 import { appTemplates } from '../api/client'
 import type { AppTemplate, CustomProfile } from '../api/types'
 
-// id of the custom template pending delete confirmation, or null
-type ConfirmId = string | null
 import './Settings.css'
 
 type Tab = 'apps' | 'notifications' | 'metrics'
@@ -17,6 +15,47 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'metrics', label: 'Instance Metrics' },
 ]
 
+// ── Delete confirmation modal ─────────────────────────────────────────────────
+
+interface DeleteConfirmModalProps {
+  name: string
+  onConfirm: () => void
+  onCancel: () => void
+  deleting: boolean
+}
+
+function DeleteConfirmModal({ name, onConfirm, onCancel, deleting }: DeleteConfirmModalProps) {
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal modal--destructive" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Delete Custom App Template</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="modal-body">
+          <p className="modal-delete-name">"{name}"</p>
+          <p className="modal-delete-warning">
+            This will permanently delete the template definition. Any apps using this template will lose their field mappings and severity rules.
+          </p>
+          <div className="modal-delete-nonrecoverable">
+            This action cannot be undone.
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="settings-btn secondary" onClick={onCancel}>Cancel</button>
+          <button
+            className="settings-btn danger"
+            onClick={onConfirm}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting…' : 'Delete permanently'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Apps tab ──────────────────────────────────────────────────────────────────
 
 function AppsTab() {
@@ -24,14 +63,15 @@ function AppsTab() {
   const [builtins, setBuiltins] = useState<AppTemplate[]>([])
   const [customs, setCustoms] = useState<CustomProfile[]>([])
   const [loadError, setLoadError] = useState('')
-  const [confirmDelete, setConfirmDelete] = useState<ConfirmId>(null)
+  const [confirmDelete, setConfirmDelete] = useState<CustomProfile | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!confirmDelete) return
     setDeleting(true)
     try {
-      await appTemplates.deleteCustom(id)
-      setCustoms(prev => prev.filter(c => c.id !== id))
+      await appTemplates.deleteCustom(confirmDelete.id)
+      setCustoms(prev => prev.filter(c => c.id !== confirmDelete.id))
     } catch {
       // leave list unchanged on error
     } finally {
@@ -116,45 +156,33 @@ function AppsTab() {
               <div key={cp.id} className="app-row">
                 <span className="app-row-name">{cp.name}</span>
                 <div className="app-row-actions">
-                  {confirmDelete === cp.id ? (
-                    <>
-                      <span className="app-row-confirm-label">Delete template?</span>
-                      <button
-                        className="settings-btn danger settings-btn--sm"
-                        onClick={() => handleDelete(cp.id)}
-                        disabled={deleting}
-                      >
-                        {deleting ? '…' : 'Yes, delete'}
-                      </button>
-                      <button
-                        className="settings-btn secondary settings-btn--sm"
-                        onClick={() => setConfirmDelete(null)}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="settings-btn secondary settings-btn--sm"
-                        onClick={() => navigate(`/app-templates/${cp.id}/edit`)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="settings-btn danger settings-btn--sm"
-                        onClick={() => setConfirmDelete(cp.id)}
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
+                  <button
+                    className="settings-btn secondary settings-btn--sm"
+                    onClick={() => navigate(`/app-templates/${cp.id}/edit`)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="settings-btn danger settings-btn--sm"
+                    onClick={() => setConfirmDelete(cp)}
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      {confirmDelete && (
+        <DeleteConfirmModal
+          name={confirmDelete.name}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(null)}
+          deleting={deleting}
+        />
+      )}
     </div>
   )
 }
