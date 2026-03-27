@@ -48,7 +48,7 @@ func TestHandleIngest_HappyPath(t *testing.T) {
 	limiter := ingest.NewRateLimiter()
 
 	r := chi.NewRouter()
-	r.Post("/api/v1/ingest/{token}", api.HandleIngest(s, &profile.NoopLoader{}, limiter))
+	r.Post("/api/v1/ingest/{token}", api.HandleIngest(s, &apptemplate.NoopLoader{}, limiter))
 
 	appsR := chi.NewRouter()
 	api.NewAppsHandler(appRepo).Routes(appsR)
@@ -135,7 +135,7 @@ func TestHandleIngest_RateLimit(t *testing.T) {
 	limiter := ingest.NewRateLimiter()
 
 	r := chi.NewRouter()
-	r.Post("/api/v1/ingest/{token}", api.HandleIngest(s, &profile.NoopLoader{}, limiter))
+	r.Post("/api/v1/ingest/{token}", api.HandleIngest(s, &apptemplate.NoopLoader{}, limiter))
 
 	// Create app with limit of 1
 	appsR := chi.NewRouter()
