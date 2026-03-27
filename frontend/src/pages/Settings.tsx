@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates } from '../api/client'
-import type { AppTemplate, CustomProfile } from '../api/types'
+import { appTemplates, digestSettings, digestReport, smtpSettings } from '../api/client'
+import type { AppTemplate, CustomProfile, DigestFrequency, DigestSchedule, SMTPSettings } from '../api/types'
 
 import './Settings.css'
 
@@ -187,53 +187,243 @@ function AppsTab() {
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const DAY_OF_WEEK_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
 // ── Notifications tab ─────────────────────────────────────────────────────────
 
 function NotificationsTab() {
+  // SMTP state
+  const [smtp, setSMTP] = useState<SMTPSettings>({ host: '', port: 587, user: '', pass: '', from: '' })
+  const [smtpSaving, setSmtpSaving] = useState(false)
+  const [smtpMsg, setSmtpMsg] = useState('')
+  const [smtpConfigured, setSmtpConfigured] = useState(false)
+
+  // Digest schedule state
+  const [schedule, setSchedule] = useState<DigestSchedule>({ frequency: 'monthly', day_of_week: 1, day_of_month: 1, send_hour: 8 })
+  const [schedSaving, setSchedSaving] = useState(false)
+  const [schedMsg, setSchedMsg] = useState('')
+  const [sendingNow, setSendingNow] = useState(false)
+  const [sendNowMsg, setSendNowMsg] = useState('')
+
+  useEffect(() => {
+    smtpSettings.get()
+      .then(s => { setSMTP(s); setSmtpConfigured(!!s.host) })
+      .catch(() => {/* not yet saved — keep defaults */})
+    digestSettings.getSchedule().then(setSchedule).catch(() => {/* keep defaults */})
+  }, [])
+
+  const saveSMTP = async () => {
+    setSmtpSaving(true)
+    setSmtpMsg('')
+    try {
+      const saved = await smtpSettings.put(smtp)
+      setSmtpConfigured(!!saved.host)
+      setSmtpMsg('Saved.')
+    } catch (e: unknown) {
+      setSmtpMsg(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSmtpSaving(false)
+    }
+  }
+
+  const saveSchedule = async () => {
+    setSchedSaving(true)
+    setSchedMsg('')
+    try {
+      const saved = await digestSettings.putSchedule(schedule)
+      setSchedule(saved)
+      setSchedMsg('Saved.')
+    } catch (e: unknown) {
+      setSchedMsg(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSchedSaving(false)
+    }
+  }
+
+  const sendNow = async () => {
+    setSendingNow(true)
+    setSendNowMsg('')
+    try {
+      const res = await digestSettings.sendNow()
+      setSendNowMsg(`Queued for period ${res.period}`)
+    } catch (e: unknown) {
+      setSendNowMsg(e instanceof Error ? e.message : 'Failed to send')
+    } finally {
+      setSendingNow(false)
+    }
+  }
+
   return (
     <div className="tab-content">
+      {/* SMTP */}
       <section className="settings-section">
         <div className="section-header">
           <span className="section-title">SMTP</span>
         </div>
         <div className="settings-field-row">
           <label className="settings-label">Host</label>
-          <input className="settings-input" placeholder="smtp.example.com" />
+          <input
+            className="settings-input"
+            placeholder="smtp.example.com"
+            value={smtp.host}
+            onChange={e => setSMTP(s => ({ ...s, host: e.target.value }))}
+          />
         </div>
         <div className="settings-field-row">
           <label className="settings-label">Port</label>
-          <input className="settings-input" placeholder="587" style={{ maxWidth: 120 }} />
+          <input
+            className="settings-input"
+            placeholder="587"
+            style={{ maxWidth: 120 }}
+            type="number"
+            value={smtp.port}
+            onChange={e => setSMTP(s => ({ ...s, port: Number(e.target.value) }))}
+          />
         </div>
         <div className="settings-field-row">
           <label className="settings-label">Username</label>
-          <input className="settings-input" placeholder="user@example.com" />
+          <input
+            className="settings-input"
+            placeholder="user@example.com"
+            value={smtp.user}
+            onChange={e => setSMTP(s => ({ ...s, user: e.target.value }))}
+          />
         </div>
         <div className="settings-field-row">
           <label className="settings-label">Password</label>
-          <input className="settings-input" type="password" placeholder="••••••••" />
+          <input
+            className="settings-input"
+            type="password"
+            placeholder="••••••••"
+            value={smtp.pass}
+            onChange={e => setSMTP(s => ({ ...s, pass: e.target.value }))}
+          />
         </div>
         <div className="settings-field-row">
           <label className="settings-label">From</label>
-          <input className="settings-input" placeholder="nora@example.com" />
+          <input
+            className="settings-input"
+            placeholder="nora@example.com"
+            value={smtp.from}
+            onChange={e => setSMTP(s => ({ ...s, from: e.target.value }))}
+          />
         </div>
         <div className="settings-actions">
-          <button className="settings-btn primary">Save</button>
-          <button className="settings-btn secondary">Test Connection</button>
+          <button className="settings-btn primary" onClick={saveSMTP} disabled={smtpSaving}>
+            {smtpSaving ? 'Saving…' : 'Save'}
+          </button>
+          {smtpMsg && <span className="settings-status-msg">{smtpMsg}</span>}
         </div>
       </section>
 
+      {/* Digest Schedule */}
       <section className="settings-section">
         <div className="section-header">
-          <span className="section-title">Digest Schedule</span>
+          <span className="section-title">Digest Email</span>
         </div>
-        <div className="settings-option-cards">
-          <div className="settings-option-card">Disabled</div>
-          <div className="settings-option-card">Daily</div>
-          <div className="settings-option-card active">Weekly</div>
+
+        {!smtpConfigured && (
+          <div className="settings-smtp-warning">
+            SMTP is not configured. Set up SMTP above before enabling the digest schedule.
+          </div>
+        )}
+
+        {/* Frequency — segmented control */}
+        <div className="settings-field-row">
+          <label className="settings-label">Frequency</label>
+          <div className="settings-segmented">
+            {(['daily', 'weekly', 'monthly'] as DigestFrequency[]).map(f => (
+              <button
+                key={f}
+                className={`settings-seg-btn${schedule.frequency === f ? ' active' : ''}`}
+                onClick={() => setSchedule(s => ({ ...s, frequency: f }))}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="settings-field-row" style={{ marginTop: 12 }}>
-          <label className="settings-label">Time of day</label>
-          <input className="settings-input" type="time" defaultValue="08:00" style={{ maxWidth: 120 }} />
+
+        {/* Day-of-week dropdown — weekly only */}
+        {schedule.frequency === 'weekly' && (
+          <div className="settings-field-row">
+            <label className="settings-label">Send on</label>
+            <select
+              className="settings-input settings-select"
+              value={schedule.day_of_week}
+              onChange={e => setSchedule(s => ({ ...s, day_of_week: Number(e.target.value) }))}
+            >
+              {DAY_OF_WEEK_LABELS.map((label, i) => (
+                <option key={i} value={i}>{label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Day-of-month dropdown — monthly only */}
+        {schedule.frequency === 'monthly' && (
+          <div className="settings-field-row">
+            <label className="settings-label">Send on day</label>
+            <select
+              className="settings-input settings-select"
+              value={schedule.day_of_month}
+              onChange={e => setSchedule(s => ({ ...s, day_of_month: Number(e.target.value) }))}
+            >
+              {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>{ordinal(d)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="settings-field-row">
+          <label className="settings-label">Send time</label>
+          <select
+            className="settings-input settings-select"
+            value={schedule.send_hour ?? 8}
+            onChange={e => setSchedule(s => ({ ...s, send_hour: Number(e.target.value) }))}
+          >
+            {Array.from({ length: 24 }, (_, h) => (
+              <option key={h} value={h}>
+                {String(h).padStart(2, '0')}:00
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="settings-actions">
+          <button
+            className="settings-btn primary"
+            onClick={saveSchedule}
+            disabled={schedSaving || !smtpConfigured}
+            title={!smtpConfigured ? 'Configure SMTP first' : undefined}
+          >
+            {schedSaving ? 'Saving…' : 'Save schedule'}
+          </button>
+          <button
+            className="settings-btn secondary"
+            onClick={sendNow}
+            disabled={sendingNow || !smtpConfigured}
+            title={!smtpConfigured ? 'Configure SMTP first' : undefined}
+          >
+            {sendingNow ? 'Sending…' : 'Send test digest now'}
+          </button>
+          <button
+            className="settings-btn secondary"
+            onClick={() => window.open(digestReport.url(), '_blank')}
+          >
+            View Report
+          </button>
+          {schedMsg && <span className="settings-status-msg">{schedMsg}</span>}
+          {sendNowMsg && <span className="settings-status-msg">{sendNowMsg}</span>}
         </div>
       </section>
     </div>
