@@ -258,10 +258,12 @@ export function AppDetail() {
       .finally(() => setLoading(false))
   }, [appId, severityFilter])
 
-  if (!id) {
-    navigate('/apps')
-    return null
-  }
+  // Redirect if no id — must be in an effect, not during render
+  useEffect(() => {
+    if (!id) navigate('/apps')
+  }, [id, navigate])
+
+  if (!id) return null
 
   function handleLoadMore() {
     const nextOffset = offset + PAGE_SIZE
@@ -342,7 +344,7 @@ export function AppDetail() {
         {/* ── Stats row ── */}
         {appSummary && (
           <div className="detail-stats-row">
-            {appSummary.stats.map(stat => (
+            {(appSummary.stats ?? []).map(stat => (
               <div key={stat.label} className="detail-stat-card">
                 <div className="detail-stat-label">{stat.label}</div>
                 <div className={`detail-stat-value${stat.color ? ` color-${stat.color}` : ''}`}>
