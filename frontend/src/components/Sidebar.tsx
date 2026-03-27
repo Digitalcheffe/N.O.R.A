@@ -62,9 +62,8 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const location = useLocation()
-  const onSettings = location.pathname === '/settings'
-  const profileActive = onSettings && location.search === '?tab=profile'
-  const settingsActive = onSettings && !profileActive
+  const settingsActive = location.pathname === '/settings'
+  const profileActive = location.pathname === '/profile'
 
   return (
     <nav className="sidebar">
@@ -97,7 +96,7 @@ export function Sidebar() {
         </Link>
 
         <Link
-          to="/settings?tab=profile"
+          to="/profile"
           title="Profile"
           className={`nav-item${profileActive ? ' active' : ''}`}
         >
