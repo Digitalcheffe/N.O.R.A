@@ -62,7 +62,7 @@ func NewEventRepo(db *sqlx.DB) EventRepo {
 func (r *sqliteEventRepo) Create(ctx context.Context, event *models.Event) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO events (id, app_id, received_at, severity, display_text, raw_payload, fields)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, NULLIF(?, ''), ?, ?, ?, ?, ?)`,
 		event.ID, event.AppID, event.ReceivedAt, event.Severity,
 		event.DisplayText, event.RawPayload, event.Fields)
 	if err != nil {

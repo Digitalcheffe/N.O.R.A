@@ -10,6 +10,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/api"
 	"github.com/digitalcheffe/nora/internal/auth"
 	"github.com/digitalcheffe/nora/internal/config"
+	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/frontend"
 	"github.com/digitalcheffe/nora/internal/ingest"
 	"github.com/digitalcheffe/nora/internal/monitor"
@@ -52,6 +53,15 @@ func main() {
 	schedCtx, schedCancel := context.WithCancel(context.Background())
 	defer schedCancel()
 	go monitor.NewScheduler(store).Start(schedCtx)
+
+	// Docker socket watcher — optional; skipped if the socket is not available.
+	dockerCtx, dockerCancel := context.WithCancel(context.Background())
+	defer dockerCancel()
+	if watcher, err := docker.NewWatcher(store); err != nil {
+		log.Printf("docker watcher: socket not available, skipping (%v)", err)
+	} else {
+		go watcher.Start(dockerCtx)
+	}
 
 	// Router
 	r := chi.NewRouter()
