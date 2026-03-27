@@ -31,9 +31,13 @@ type urlDetails struct {
 }
 
 // sslDetails is stored in last_result for ssl checks.
+// All fields are pointers so they serialise as null on TLS failure.
 type sslDetails struct {
-	DaysRemaining int       `json:"days_remaining"`
-	ExpiresAt     time.Time `json:"expires_at"`
+	DaysRemaining *int       `json:"days_remaining"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	Issuer        *string    `json:"issuer"`
+	Subject       *string    `json:"subject"`
+	Error         *string    `json:"error"`
 }
 
 // RunPing executes a ping check against target using os/exec.
@@ -121,33 +125,44 @@ func RunSSL(ctx context.Context, target string, warnDays, critDays int) Result {
 	}
 	conn, err := dialer.DialContext(ctx, "tcp", host)
 	if err != nil {
-		details, _ := json.Marshal(map[string]string{"error": err.Error()})
+		errStr := err.Error()
+		details, _ := json.Marshal(sslDetails{Error: &errStr})
 		return Result{Status: "down", Details: details, CheckedAt: now}
 	}
 	defer conn.Close()
 
 	tlsConn, ok := conn.(*tls.Conn)
 	if !ok {
-		details, _ := json.Marshal(map[string]string{"error": "not a TLS connection"})
+		errStr := "not a TLS connection"
+		details, _ := json.Marshal(sslDetails{Error: &errStr})
 		return Result{Status: "down", Details: details, CheckedAt: now}
 	}
 
 	certs := tlsConn.ConnectionState().PeerCertificates
 	if len(certs) == 0 {
-		details, _ := json.Marshal(map[string]string{"error": "no certificates"})
+		errStr := "no certificates"
+		details, _ := json.Marshal(sslDetails{Error: &errStr})
 		return Result{Status: "down", Details: details, CheckedAt: now}
 	}
 
-	expiry := certs[0].NotAfter
+	cert := certs[0]
+	expiry := cert.NotAfter.UTC()
 	daysRemaining := int(time.Until(expiry).Hours() / 24)
-	details, _ := json.Marshal(sslDetails{DaysRemaining: daysRemaining, ExpiresAt: expiry.UTC()})
+	issuer := cert.Issuer.CommonName
+	subject := cert.Subject.CommonName
+	details, _ := json.Marshal(sslDetails{
+		DaysRemaining: &daysRemaining,
+		ExpiresAt:     &expiry,
+		Issuer:        &issuer,
+		Subject:       &subject,
+	})
 
 	status := "up"
 	switch {
 	case daysRemaining <= 0:
 		status = "down"
 	case daysRemaining <= critDays:
-		status = "down"
+		status = "critical"
 	case daysRemaining <= warnDays:
 		status = "warn"
 	}
