@@ -20,9 +20,10 @@ function barFillClass(pct: number): string {
 
 interface Props {
   host: HostData
+  onClick?: () => void
 }
 
-export function HostWidget({ host }: Props) {
+export function HostWidget({ host, onClick }: Props) {
   const dotClass =
     host.status === 'online'
       ? 'green'
@@ -33,7 +34,7 @@ export function HostWidget({ host }: Props) {
       : 'grey'
 
   return (
-    <div className="host-widget">
+    <div className="host-widget" onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div className="host-widget-header">
         <div className="host-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -18,15 +18,17 @@ type TopologyHandler struct {
 	virtualHosts  repo.VirtualHostRepo
 	dockerEngines repo.DockerEngineRepo
 	apps          repo.AppRepo
+	rollups       repo.ResourceRollupRepo
 }
 
 // NewTopologyHandler creates a TopologyHandler.
-func NewTopologyHandler(ph repo.PhysicalHostRepo, vh repo.VirtualHostRepo, de repo.DockerEngineRepo, apps repo.AppRepo) *TopologyHandler {
+func NewTopologyHandler(ph repo.PhysicalHostRepo, vh repo.VirtualHostRepo, de repo.DockerEngineRepo, apps repo.AppRepo, rollups repo.ResourceRollupRepo) *TopologyHandler {
 	return &TopologyHandler{
 		physicalHosts: ph,
 		virtualHosts:  vh,
 		dockerEngines: de,
 		apps:          apps,
+		rollups:       rollups,
 	}
 }
 
@@ -55,6 +57,9 @@ func (h *TopologyHandler) Routes(r chi.Router) {
 
 	// Full topology chain
 	r.Get("/topology", h.GetTopology)
+
+	// Resource rollup values for a physical host
+	r.Get("/hosts/physical/{id}/resources", h.GetPhysicalResources)
 }
 
 // ---- request / response types -----------------------------------------------
@@ -88,6 +93,13 @@ type dockerEngineRequest struct {
 	SocketType    string `json:"socket_type"`
 	SocketPath    string `json:"socket_path"`
 	VirtualHostID string `json:"virtual_host_id"`
+}
+
+// hostResourcesResponse holds the latest avg rollup values for CPU, memory, and disk.
+type hostResourcesResponse struct {
+	CPU  float64 `json:"cpu"`
+	Mem  float64 `json:"mem"`
+	Disk float64 `json:"disk"`
 }
 
 // topology chain response types
@@ -653,4 +665,48 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// ---- host resources ---------------------------------------------------------
+
+// GetPhysicalResources returns the latest hourly resource rollup values (CPU/mem/disk %)
+// for a physical host. Returns zeroes when no rollup data exists yet.
+// GET /api/v1/hosts/physical/{id}/resources?period=hour
+func (h *TopologyHandler) GetPhysicalResources(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.physicalHosts.Get(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "physical host not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "hour"
+	}
+	if period != "hour" && period != "day" {
+		writeError(w, http.StatusBadRequest, "period must be hour or day")
+		return
+	}
+
+	rollups, err := h.rollups.LatestForSource(r.Context(), id, "host", period)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := hostResourcesResponse{}
+	for _, rr := range rollups {
+		switch rr.Metric {
+		case "cpu_percent":
+			resp.CPU = rr.Avg
+		case "mem_percent":
+			resp.Mem = rr.Avg
+		case "disk_percent":
+			resp.Disk = rr.Avg
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

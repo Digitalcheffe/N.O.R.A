@@ -97,7 +97,7 @@ func main() {
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
-		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo).Routes(r)
+		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 	})
 

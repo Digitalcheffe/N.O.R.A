@@ -31,6 +31,8 @@ type ResourceRollupRepo interface {
 	PurgeReadings(ctx context.Context, cutoff time.Time) (int64, error)
 	// PurgeHourlyRollups deletes hourly resource_rollups with period_start < cutoff. Returns rows deleted.
 	PurgeHourlyRollups(ctx context.Context, cutoff time.Time) (int64, error)
+	// LatestForSource returns the most recent rollup row per metric for the given source and period type.
+	LatestForSource(ctx context.Context, sourceID, sourceType, periodType string) ([]models.ResourceRollup, error)
 }
 
 type sqliteResourceRollupRepo struct {
@@ -113,4 +115,23 @@ func (r *sqliteResourceRollupRepo) PurgeHourlyRollups(ctx context.Context, cutof
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
+}
+
+func (r *sqliteResourceRollupRepo) LatestForSource(ctx context.Context, sourceID, sourceType, periodType string) ([]models.ResourceRollup, error) {
+	var rows []models.ResourceRollup
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT source_id, source_type, metric, period_type, period_start, avg, min, max
+		FROM resource_rollups r1
+		WHERE source_id = ? AND source_type = ? AND period_type = ?
+		  AND period_start = (
+		      SELECT MAX(period_start) FROM resource_rollups r2
+		      WHERE r2.source_id = r1.source_id
+		        AND r2.metric = r1.metric
+		        AND r2.period_type = r1.period_type
+		  )`,
+		sourceID, sourceType, periodType)
+	if err != nil {
+		return nil, fmt.Errorf("latest for source: %w", err)
+	}
+	return rows, nil
 }

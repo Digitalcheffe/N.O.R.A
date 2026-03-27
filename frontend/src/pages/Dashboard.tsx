@@ -6,8 +6,10 @@ import { AppWidget } from '../components/AppWidget'
 import { MonitorWidget } from '../components/MonitorWidget'
 import { SSLRow } from '../components/SSLRow'
 import { EventRow } from '../components/EventRow'
-import { dashboard as dashboardApi, events as eventsApi } from '../api/client'
-import type { DashboardSummaryResponse, Event } from '../api/types'
+import { HostWidget } from '../components/HostWidget'
+import type { HostData } from '../components/HostWidget'
+import { dashboard as dashboardApi, events as eventsApi, topology as topoApi } from '../api/client'
+import type { DashboardSummaryResponse, Event, PhysicalHost } from '../api/types'
 import './Dashboard.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
@@ -17,6 +19,7 @@ export function Dashboard() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [data, setData] = useState<DashboardSummaryResponse | null>(null)
   const [recentEvents, setRecentEvents] = useState<Event[]>([])
+  const [physicalHosts, setPhysicalHosts] = useState<PhysicalHost[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -24,10 +27,12 @@ export function Dashboard() {
     Promise.all([
       dashboardApi.summary(timeFilter),
       eventsApi.list({ limit: 5 }),
+      topoApi.physicalHosts.list(),
     ])
-      .then(([summary, evts]) => {
+      .then(([summary, evts, hosts]) => {
         setData(summary)
         setRecentEvents(evts.data)
+        setPhysicalHosts(hosts.data)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -242,6 +247,41 @@ export function Dashboard() {
                   {data.ssl_certs.map((cert, i) => (
                     <SSLRow key={cert.domain || i} cert={cert} />
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Infrastructure — only shown when hosts are configured */}
+            {physicalHosts.length > 0 && (
+              <div>
+                <div className="section-header">
+                  <div className="section-title">Infrastructure</div>
+                  <button className="section-action" onClick={() => navigate('/topology')}>
+                    View all →
+                  </button>
+                </div>
+                <div className="widget-grid">
+                  {physicalHosts.map(host => {
+                    const hostData: HostData = {
+                      id:        host.id,
+                      name:      host.name,
+                      type:      host.type === 'proxmox_node' ? 'Proxmox Node' : 'Bare Metal',
+                      ip:        host.ip,
+                      status:    'unknown',
+                      resources: [
+                        { label: 'CPU', pct: 0 },
+                        { label: 'MEM', pct: 0 },
+                        { label: 'DSK', pct: 0 },
+                      ],
+                    }
+                    return (
+                      <HostWidget
+                        key={host.id}
+                        host={hostData}
+                        onClick={() => navigate('/topology')}
+                      />
+                    )
+                  })}
                 </div>
               </div>
             )}
