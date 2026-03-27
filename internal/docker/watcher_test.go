@@ -74,11 +74,20 @@ func (r *mockEventRepo) SparklineBuckets(_ context.Context, _ repo.CategoryFilte
 func (r *mockEventRepo) LatestPerApp(_ context.Context, _ []string) (map[string]*models.Event, error) {
 	return nil, nil
 }
+func (r *mockEventRepo) DeleteBySeverityBefore(_ context.Context, _ string, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (r *mockEventRepo) GroupByTypeAndSeverity(_ context.Context, _ string, _, _ time.Time) ([]repo.EventTypeCount, error) {
+	return nil, nil
+}
+func (r *mockEventRepo) MetricsForApp(_ context.Context, _ string, _, _ time.Time) (repo.EventMetrics, error) {
+	return repo.EventMetrics{}, nil
+}
 
 // --- helpers -------------------------------------------------------------
 
 func newTestWatcher(appRepo repo.AppRepo, eventRepo repo.EventRepo, dc dockerAPI) *Watcher {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return &Watcher{store: store, client: dc}
 }
 

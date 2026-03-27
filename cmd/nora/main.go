@@ -48,7 +48,8 @@ func main() {
 	customProfileRepo := repo.NewCustomProfileRepo(db)
 	infraRepo := repo.NewInfraRepo(db)
 	settingsRepo := repo.NewSettingsRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo, settingsRepo)
+	metricsRepo := repo.NewMetricsRepo(db)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo, settingsRepo, metricsRepo)
 
 	// App template registry — load all bundled YAML app templates
 	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
@@ -69,6 +70,13 @@ func main() {
 	defer rollupCancel()
 	go jobs.StartHourlyRollup(rollupCtx, store)
 	go jobs.StartDailyRollup(rollupCtx, store)
+
+	// Event jobs — monthly rollup (midnight on 1st), nightly retention (02:00), hourly metrics.
+	eventJobCtx, eventJobCancel := context.WithCancel(context.Background())
+	defer eventJobCancel()
+	go jobs.StartMonthlyRollup(eventJobCtx, store)
+	go jobs.StartEventRetention(eventJobCtx, store)
+	go jobs.StartMetricsCollection(eventJobCtx, store)
 
 	// Digest job — fires at 08:00 daily; checks stored schedule before sending.
 	digestJob := jobs.NewDigestJob(store, cfg)
