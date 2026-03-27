@@ -97,6 +97,7 @@ func main() {
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo).Routes(r)
+		api.NewProfilesHandler(registry).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html
