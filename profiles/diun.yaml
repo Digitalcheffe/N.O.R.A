@@ -1,0 +1,31 @@
+meta:
+  name: Diun
+  category: Infrastructure
+  logo: diun.png
+  description: Docker image update notifier
+  capability: webhook_only
+
+webhook:
+  setup_instructions: |
+    In Diun configure a webhook notifier pointing to {base_url}/ingest/{token}.
+    Diun sends a POST on new or updated images.
+  recommended_events:
+    - new
+    - update
+  not_recommended: []
+  field_mappings:
+    entry_image: "$.entry.image"
+    entry_status: "$.entry.status"
+    hostname: "$.hostname"
+  severity_field: entry_status
+  display_template: "Image {entry_status} — {entry_image}"
+  severity_mapping:
+    new: info
+    update: info
+
+digest:
+  categories:
+    - label: Updates
+      match_field: ""
+      match_value: ""
+      match_severity: info

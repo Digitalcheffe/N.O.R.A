@@ -1,0 +1,27 @@
+meta:
+  name: Watchtower
+  category: Infrastructure
+  logo: watchtower.png
+  description: Automatic Docker container base image updates
+  capability: webhook_only
+
+webhook:
+  setup_instructions: |
+    Configure Watchtower with the HTTP API notifications flag pointing to
+    {base_url}/ingest/{token}. Watchtower posts on each update cycle.
+  recommended_events:
+    - Container updated
+  not_recommended: []
+  field_mappings:
+    updated: "$.updated"
+    hostname: "$.hostname"
+  severity_field: ""
+  display_template: "Containers updated — {hostname}"
+  severity_mapping: {}
+
+digest:
+  categories:
+    - label: Updates
+      match_field: ""
+      match_value: ""
+      match_severity: info

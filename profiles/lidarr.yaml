@@ -1,0 +1,55 @@
+meta:
+  name: Lidarr
+  category: Media
+  logo: lidarr.png
+  description: Music management and download automation
+  capability: full
+
+webhook:
+  setup_instructions: |
+    In Lidarr go to Settings → Connect → Add → Webhook.
+    Set the URL to {base_url}/ingest/{token} and select the event types below.
+  recommended_events:
+    - On Release Import
+    - On Upgrade
+    - On Health Issue
+    - On Application Update
+  not_recommended:
+    - On Grab
+  field_mappings:
+    event_type: "$.eventType"
+    artist_name: "$.artist.name"
+    album_title: "$.albums[0].title"
+    quality: "$.trackFiles[0].quality.quality.name"
+    health_type: "$.healthCheck.type"
+    health_message: "$.healthCheck.message"
+  severity_field: event_type
+  display_template: "{event_type} — {artist_name} — {album_title}"
+  severity_mapping:
+    AlbumDownload: info
+    Upgrade: info
+    HealthIssue: warn
+    HealthRestored: info
+    ApplicationUpdate: info
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/v1/system/status"
+  auth_header: "X-Api-Key: {api_key}"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Downloads
+      match_field: event_type
+      match_value: AlbumDownload
+      match_severity: ""
+    - label: Upgrades
+      match_field: event_type
+      match_value: Upgrade
+      match_severity: ""
+    - label: Health Issues
+      match_field: event_type
+      match_value: HealthIssue
+      match_severity: ""

@@ -233,3 +233,218 @@ func TestMapSeverity_NoSeverityConfig(t *testing.T) {
 		t.Errorf("want info, got %q", got)
 	}
 }
+
+// ---- n8n ----
+
+const n8nYAML = `
+meta:
+  name: n8n
+  category: Automation
+  logo: n8n.png
+  description: Workflow automation platform
+  capability: full
+webhook:
+  field_mappings:
+    event_type: "$.eventName"
+    workflow_name: "$.workflowData.name"
+    error_message: "$.error.message"
+  severity_field: event_type
+  display_template: "{event_type} — {workflow_name}"
+  severity_mapping:
+    "workflow.finished": info
+    "workflow.error": error
+    "node.error": warn
+monitor:
+  check_type: url
+  check_url: "{base_url}/healthz"
+  healthy_status: 200
+  check_interval: 5m
+digest:
+  categories:
+    - label: Workflows
+      match_field: event_type
+      match_value: "workflow.finished"
+      match_severity: ""
+    - label: Errors
+      match_field: ""
+      match_value: ""
+      match_severity: error
+`
+
+func newN8nRegistry(t *testing.T) *profile.Registry {
+	t.Helper()
+	fsys := fstest.MapFS{
+		"n8n.yaml": {Data: []byte(n8nYAML)},
+	}
+	reg, err := profile.NewRegistry(fsys)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return reg
+}
+
+// TestN8n_ExtractFields verifies n8n field extraction from a workflow error payload.
+func TestN8n_ExtractFields(t *testing.T) {
+	reg := newN8nRegistry(t)
+
+	payload := []byte(`{
+		"eventName": "workflow.error",
+		"workflowData": {"name": "Daily Sync", "id": "42"},
+		"executionId": "99",
+		"error": {"message": "Connection refused"}
+	}`)
+
+	fields, err := reg.ExtractFields("n8n", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	cases := map[string]string{
+		"event_type":    "workflow.error",
+		"workflow_name": "Daily Sync",
+		"error_message": "Connection refused",
+	}
+	for tag, want := range cases {
+		if got := fields[tag]; got != want {
+			t.Errorf("fields[%q] = %q, want %q", tag, got, want)
+		}
+	}
+}
+
+// TestN8n_SeverityMapping verifies n8n event names map to correct severity levels.
+func TestN8n_SeverityMapping(t *testing.T) {
+	reg := newN8nRegistry(t)
+
+	cases := []struct {
+		event string
+		want  string
+	}{
+		{"workflow.finished", "info"},
+		{"workflow.error", "error"},
+		{"node.error", "warn"},
+		{"unknown.event", "info"},
+	}
+
+	for _, c := range cases {
+		fields := map[string]string{"event_type": c.event}
+		got := reg.MapSeverity("n8n", fields)
+		if got != c.want {
+			t.Errorf("MapSeverity(event=%q) = %q, want %q", c.event, got, c.want)
+		}
+	}
+}
+
+// ---- Duplicati ----
+
+const duplicatiYAML = `
+meta:
+  name: Duplicati
+  category: Storage
+  logo: duplicati.png
+  description: Open-source backup software
+  capability: webhook_only
+webhook:
+  field_mappings:
+    event_type: "$.Data.ParsedResult"
+    backup_name: "$.Data.OperationName"
+    duration: "$.Data.Duration"
+    error_message: "$.Data.Message"
+  severity_field: event_type
+  display_template: "Backup {event_type} — {backup_name}"
+  severity_mapping:
+    Success: info
+    Warning: warn
+    Error: error
+    Fatal: critical
+digest:
+  categories:
+    - label: Backups
+      match_field: event_type
+      match_value: Success
+      match_severity: ""
+    - label: Backup Errors
+      match_field: ""
+      match_value: ""
+      match_severity: error
+`
+
+func newDuplicatiRegistry(t *testing.T) *profile.Registry {
+	t.Helper()
+	fsys := fstest.MapFS{
+		"duplicati.yaml": {Data: []byte(duplicatiYAML)},
+	}
+	reg, err := profile.NewRegistry(fsys)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return reg
+}
+
+// TestDuplicati_ExtractFields verifies Duplicati field extraction from a backup payload.
+func TestDuplicati_ExtractFields(t *testing.T) {
+	reg := newDuplicatiRegistry(t)
+
+	payload := []byte(`{
+		"Data": {
+			"ParsedResult": "Success",
+			"OperationName": "Home NAS",
+			"Duration": "00:03:21",
+			"Message": ""
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("duplicati", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	cases := map[string]string{
+		"event_type":  "Success",
+		"backup_name": "Home NAS",
+		"duration":    "00:03:21",
+	}
+	for tag, want := range cases {
+		if got := fields[tag]; got != want {
+			t.Errorf("fields[%q] = %q, want %q", tag, got, want)
+		}
+	}
+}
+
+// TestDuplicati_SeverityMapping verifies Success/Failure map to correct severity levels.
+func TestDuplicati_SeverityMapping(t *testing.T) {
+	reg := newDuplicatiRegistry(t)
+
+	cases := []struct {
+		result string
+		want   string
+	}{
+		{"Success", "info"},
+		{"Warning", "warn"},
+		{"Error", "error"},
+		{"Fatal", "critical"},
+		{"Unknown", "info"},
+	}
+
+	for _, c := range cases {
+		fields := map[string]string{"event_type": c.result}
+		got := reg.MapSeverity("duplicati", fields)
+		if got != c.want {
+			t.Errorf("MapSeverity(result=%q) = %q, want %q", c.result, got, c.want)
+		}
+	}
+}
+
+// TestDuplicati_RenderDisplayText verifies display template renders correctly.
+func TestDuplicati_RenderDisplayText(t *testing.T) {
+	reg := newDuplicatiRegistry(t)
+
+	fields := map[string]string{
+		"event_type":  "Success",
+		"backup_name": "Home NAS",
+	}
+	got := reg.RenderDisplayText("duplicati", fields)
+	want := "Backup Success — Home NAS"
+	if got != want {
+		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}

@@ -1,0 +1,32 @@
+meta:
+  name: Uptime Kuma
+  category: Monitoring
+  logo: uptime-kuma.png
+  description: Self-hosted uptime monitoring tool
+  capability: webhook_only
+
+webhook:
+  setup_instructions: |
+    In Uptime Kuma go to Settings → Notifications → Add → Webhook.
+    Set the URL to {base_url}/ingest/{token}.
+  recommended_events:
+    - Monitor down
+    - Monitor up
+  not_recommended: []
+  field_mappings:
+    monitor_name: "$.monitor.name"
+    monitor_url: "$.monitor.url"
+    status: "$.heartbeat.status"
+    msg: "$.heartbeat.msg"
+  severity_field: status
+  display_template: "{monitor_name} — {msg}"
+  severity_mapping:
+    "0": error
+    "1": info
+
+digest:
+  categories:
+    - label: Incidents
+      match_field: ""
+      match_value: ""
+      match_severity: error
