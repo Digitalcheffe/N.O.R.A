@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -26,6 +27,7 @@ func NewSettingsHandler(store *repo.Store) *SettingsHandler {
 func (h *SettingsHandler) Routes(r chi.Router) {
 	r.Get("/settings/smtp", h.GetSMTP)
 	r.Put("/settings/smtp", h.PutSMTP)
+	r.Post("/settings/smtp/test", h.TestSMTP)
 }
 
 // GetSMTP returns the stored SMTP config: GET /api/v1/settings/smtp
@@ -71,4 +73,36 @@ func (h *SettingsHandler) PutSMTP(w http.ResponseWriter, r *http.Request) {
 		resp.Pass = "••••••••"
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// TestSMTP sends a test email using the stored SMTP config: POST /api/v1/settings/smtp/test
+func (h *SettingsHandler) TestSMTP(w http.ResponseWriter, r *http.Request) {
+	var s models.SMTPSettings
+	err := h.store.Settings.GetJSON(r.Context(), smtpSettingsAPIKey, &s)
+	if errors.Is(err, repo.ErrNotFound) || s.Host == "" {
+		writeError(w, http.StatusBadRequest, "SMTP is not configured")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	to := s.From
+	if to == "" {
+		writeError(w, http.StatusBadRequest, "SMTP 'from' address is not configured")
+		return
+	}
+
+	if err := jobs.SendMail(
+		s.Host, s.Port, s.User, s.Pass, s.From,
+		[]string{to},
+		"NORA SMTP Test",
+		"<p>This is a test email from NORA. If you received this, your SMTP configuration is working correctly.</p>",
+	); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent", "to": to})
 }

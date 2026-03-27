@@ -1,0 +1,118 @@
+package api
+
+import (
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+
+	"github.com/digitalcheffe/nora/internal/models"
+	"github.com/digitalcheffe/nora/internal/repo"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+)
+
+// UsersHandler serves user management endpoints.
+type UsersHandler struct {
+	users repo.UserRepo
+}
+
+// NewUsersHandler creates a UsersHandler.
+func NewUsersHandler(users repo.UserRepo) *UsersHandler {
+	return &UsersHandler{users: users}
+}
+
+// Routes registers user endpoints on r.
+func (h *UsersHandler) Routes(r chi.Router) {
+	r.Get("/users", h.List)
+	r.Post("/users", h.Create)
+	r.Delete("/users/{id}", h.Delete)
+}
+
+// --- request / response types ---
+
+type createUserRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+}
+
+type listUsersResponse struct {
+	Data  []models.User `json:"data"`
+	Total int           `json:"total"`
+}
+
+// --- handlers ---
+
+// List returns all users: GET /api/v1/users
+func (h *UsersHandler) List(w http.ResponseWriter, r *http.Request) {
+	users, err := h.users.List(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, listUsersResponse{Data: users, Total: len(users)})
+}
+
+// Create adds a new user: POST /api/v1/users
+func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var req createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Email == "" {
+		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	if req.Password == "" {
+		writeError(w, http.StatusBadRequest, "password is required")
+		return
+	}
+	role := req.Role
+	if role == "" {
+		role = "member"
+	}
+	if role != "admin" && role != "member" {
+		writeError(w, http.StatusBadRequest, "role must be admin or member")
+		return
+	}
+
+	u := &models.User{
+		ID:    uuid.NewString(),
+		Email: req.Email,
+		Role:  role,
+	}
+	// NOTE: SHA-256 is used as a placeholder until T-10 implements full auth with bcrypt.
+	hash := sha256.Sum256([]byte(req.Password))
+	passwordHash := fmt.Sprintf("%x", hash)
+
+	if err := h.users.Create(r.Context(), u, passwordHash); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Fetch the created user to get the DB-populated created_at.
+	created, err := h.users.GetByID(r.Context(), u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusCreated, u)
+		return
+	}
+	writeJSON(w, http.StatusCreated, created)
+}
+
+// Delete removes a user: DELETE /api/v1/users/{id}
+func (h *UsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	err := h.users.Delete(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

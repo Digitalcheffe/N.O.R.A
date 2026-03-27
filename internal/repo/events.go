@@ -47,6 +47,13 @@ type EventMetrics struct {
 	PeakPerMinute   int
 }
 
+// AppEventCount is a per-app event count row returned by CountPerApp.
+type AppEventCount struct {
+	AppID   string `db:"app_id"`
+	AppName string `db:"app_name"`
+	Count   int    `db:"count"`
+}
+
 // EventRepo defines read/write operations for the events table.
 type EventRepo interface {
 	// Create persists a new event.
@@ -71,6 +78,9 @@ type EventRepo interface {
 	// MetricsForApp computes event count, average payload size, and peak
 	// per-minute rate for a single app over [since, until).
 	MetricsForApp(ctx context.Context, appID string, since, until time.Time) (EventMetrics, error)
+	// CountPerApp returns the event count grouped by app for the window [since, now].
+	// Results are ordered by count descending.
+	CountPerApp(ctx context.Context, since time.Time) ([]AppEventCount, error)
 }
 
 type sqliteEventRepo struct {
@@ -362,4 +372,25 @@ func (r *sqliteEventRepo) LatestPerApp(ctx context.Context, appIDs []string) (ma
 		result[events[i].AppID] = &events[i]
 	}
 	return result, nil
+}
+
+func (r *sqliteEventRepo) CountPerApp(ctx context.Context, since time.Time) ([]AppEventCount, error) {
+	var rows []AppEventCount
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT e.app_id, COALESCE(a.name, e.app_id) AS app_name, COUNT(*) AS count
+		FROM events e
+		LEFT JOIN apps a ON a.id = e.app_id
+		WHERE e.app_id IS NOT NULL
+		  AND datetime(e.received_at) >= datetime(?)
+		GROUP BY e.app_id
+		ORDER BY count DESC`,
+		since.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("count per app: %w", err)
+	}
+	if rows == nil {
+		rows = []AppEventCount{}
+	}
+	return rows, nil
 }

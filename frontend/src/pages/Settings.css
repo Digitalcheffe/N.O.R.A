@@ -535,3 +535,34 @@
   margin-bottom: 16px;
 }
 
+
+/* ── Metrics table ───────────────────────────────────────────────────────── */
+
+.settings-metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.settings-metrics-table th {
+  text-align: left;
+  color: var(--text2);
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-metrics-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text1);
+}
+
+.settings-metrics-table tr:last-child td {
+  border-bottom: none;
+}
+
+.settings-metrics-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

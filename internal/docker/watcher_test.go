@@ -83,11 +83,14 @@ func (r *mockEventRepo) GroupByTypeAndSeverity(_ context.Context, _ string, _, _
 func (r *mockEventRepo) MetricsForApp(_ context.Context, _ string, _, _ time.Time) (repo.EventMetrics, error) {
 	return repo.EventMetrics{}, nil
 }
+func (r *mockEventRepo) CountPerApp(_ context.Context, _ time.Time) ([]repo.AppEventCount, error) {
+	return nil, nil
+}
 
 // --- helpers -------------------------------------------------------------
 
 func newTestWatcher(appRepo repo.AppRepo, eventRepo repo.EventRepo, dc dockerAPI) *Watcher {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return &Watcher{store: store, client: dc}
 }
 

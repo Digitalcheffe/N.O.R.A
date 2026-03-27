@@ -14,10 +14,11 @@ type Store struct {
 	Infra           InfraRepo
 	Settings        SettingsRepo
 	Metrics         MetricsRepo
+	Users           UserRepo
 }
 
 // NewStore creates a Store backed by the given repositories.
-func NewStore(apps AppRepo, events EventRepo, checks CheckRepo, rollups RollupRepo, resources ResourceReadingRepo, resourceRollups ResourceRollupRepo, physicalHosts PhysicalHostRepo, virtualHosts VirtualHostRepo, dockerEngines DockerEngineRepo, infra InfraRepo, settings SettingsRepo, metrics MetricsRepo) *Store {
+func NewStore(apps AppRepo, events EventRepo, checks CheckRepo, rollups RollupRepo, resources ResourceReadingRepo, resourceRollups ResourceRollupRepo, physicalHosts PhysicalHostRepo, virtualHosts VirtualHostRepo, dockerEngines DockerEngineRepo, infra InfraRepo, settings SettingsRepo, metrics MetricsRepo, users UserRepo) *Store {
 	return &Store{
 		Apps:            apps,
 		Events:          events,
@@ -31,5 +32,6 @@ func NewStore(apps AppRepo, events EventRepo, checks CheckRepo, rollups RollupRe
 		Infra:           infra,
 		Settings:        settings,
 		Metrics:         metrics,
+		Users:           users,
 	}
 }

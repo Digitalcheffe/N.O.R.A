@@ -313,3 +313,23 @@ export interface AppMetric {
   avg_payload_bytes: number
   peak_per_minute: number
 }
+
+export interface TopAppItem {
+  app_id: string
+  app_name: string
+  events_per_hour: number
+}
+
+export interface AppEventItem {
+  app_id: string
+  app_name: string
+  count: number
+}
+
+export interface InstanceMetrics {
+  db_size_bytes: number
+  events_last_24h: number
+  uptime_seconds: number
+  top_apps: TopAppItem[]
+  app_events_24h: AppEventItem[]
+}

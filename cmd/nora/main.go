@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/digitalcheffe/nora/internal/api"
 	"github.com/digitalcheffe/nora/internal/apptemplate"
@@ -26,6 +27,7 @@ import (
 
 func main() {
 	cfg := config.Load()
+	startTime := time.Now()
 
 	db, err := repo.Open(cfg, migrations.Files)
 	if err != nil {
@@ -49,7 +51,8 @@ func main() {
 	infraRepo := repo.NewInfraRepo(db)
 	settingsRepo := repo.NewSettingsRepo(db)
 	metricsRepo := repo.NewMetricsRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo, settingsRepo, metricsRepo)
+	userRepo := repo.NewUserRepo(db)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo, settingsRepo, metricsRepo, userRepo)
 
 	// App template registry — load all bundled YAML app templates
 	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
@@ -134,6 +137,8 @@ func main() {
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)
 		api.NewSettingsHandler(store).Routes(r)
+		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
+		api.NewUsersHandler(userRepo).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html
