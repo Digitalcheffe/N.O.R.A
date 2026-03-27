@@ -60,6 +60,7 @@ func main() {
 		r.Use(auth.RequireAuth(cfg.DevMode))
 		api.NewAppsHandler(appRepo).Routes(r)
 		api.NewEventsHandler(eventRepo).Routes(r)
+		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 	})
 
