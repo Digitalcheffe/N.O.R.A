@@ -420,7 +420,7 @@ function NotificationsTab() {
             className="settings-btn secondary"
             onClick={() => window.open(digestReport.url(), '_blank')}
           >
-            Export PDF
+            View Report
           </button>
           {schedMsg && <span className="settings-status-msg">{schedMsg}</span>}
           {sendNowMsg && <span className="settings-status-msg">{sendNowMsg}</span>}
