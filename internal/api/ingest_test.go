@@ -21,7 +21,7 @@ func newIngestRouter(t *testing.T) (http.Handler, *repo.Store) {
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
 	eventRepo := repo.NewEventRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil)
+	store := repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil, nil, nil, nil)
 	limiter := ingest.NewRateLimiter()
 	profiler := &profile.NoopLoader{}
 
@@ -44,7 +44,7 @@ func TestHandleIngest_HappyPath(t *testing.T) {
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
 	eventRepo := repo.NewEventRepo(db)
-	s := repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil)
+	s := repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil, nil, nil, nil)
 	limiter := ingest.NewRateLimiter()
 
 	r := chi.NewRouter()
@@ -131,7 +131,7 @@ func TestHandleIngest_RateLimit(t *testing.T) {
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
 	eventRepo := repo.NewEventRepo(db)
-	s := repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil)
+	s := repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil, nil, nil, nil)
 	limiter := ingest.NewRateLimiter()
 
 	r := chi.NewRouter()

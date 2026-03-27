@@ -39,7 +39,10 @@ func main() {
 	checkRepo := repo.NewCheckRepo(db)
 	rollupRepo := repo.NewRollupRepo(db)
 	resourceRepo := repo.NewResourceReadingRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo)
+	physicalHostRepo := repo.NewPhysicalHostRepo(db)
+	virtualHostRepo := repo.NewVirtualHostRepo(db)
+	dockerEngineRepo := repo.NewDockerEngineRepo(db)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo)
 
 	// Profile registry — load all bundled YAML profiles
 	registry, err := profile.NewRegistry(noraprofiles.Files)
@@ -85,6 +88,7 @@ func main() {
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
+		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html

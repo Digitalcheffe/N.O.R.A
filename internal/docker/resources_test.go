@@ -49,7 +49,7 @@ func (r *mockResourceReadingRepo) Create(_ context.Context, reading *models.Reso
 // --- helpers --------------------------------------------------------------
 
 func newTestResourcePoller(appRepo repo.AppRepo, eventRepo repo.EventRepo, resRepo repo.ResourceReadingRepo, cli resourcePollerAPI) *ResourcePoller {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, resRepo)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, resRepo, nil, nil, nil)
 	return newResourcePollerWithClient(store, cli)
 }
 
