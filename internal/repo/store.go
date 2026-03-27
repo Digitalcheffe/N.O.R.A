@@ -2,13 +2,14 @@ package repo
 
 // Store bundles all repository interfaces into a single dependency.
 type Store struct {
-	Apps    AppRepo
-	Events  EventRepo
-	Checks  CheckRepo
-	Rollups RollupRepo
+	Apps      AppRepo
+	Events    EventRepo
+	Checks    CheckRepo
+	Rollups   RollupRepo
+	Resources ResourceReadingRepo
 }
 
 // NewStore creates a Store backed by the given repositories.
-func NewStore(apps AppRepo, events EventRepo, checks CheckRepo, rollups RollupRepo) *Store {
-	return &Store{Apps: apps, Events: events, Checks: checks, Rollups: rollups}
+func NewStore(apps AppRepo, events EventRepo, checks CheckRepo, rollups RollupRepo, resources ResourceReadingRepo) *Store {
+	return &Store{Apps: apps, Events: events, Checks: checks, Rollups: rollups, Resources: resources}
 }

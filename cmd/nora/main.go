@@ -38,7 +38,8 @@ func main() {
 	eventRepo := repo.NewEventRepo(db)
 	checkRepo := repo.NewCheckRepo(db)
 	rollupRepo := repo.NewRollupRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo)
+	resourceRepo := repo.NewResourceReadingRepo(db)
+	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo)
 
 	// Profile registry — load all bundled YAML profiles
 	registry, err := profile.NewRegistry(noraprofiles.Files)
@@ -54,13 +55,18 @@ func main() {
 	defer schedCancel()
 	go monitor.NewScheduler(store).Start(schedCtx)
 
-	// Docker socket watcher — optional; skipped if the socket is not available.
+	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
 	if watcher, err := docker.NewWatcher(store); err != nil {
 		log.Printf("docker watcher: socket not available, skipping (%v)", err)
 	} else {
 		go watcher.Start(dockerCtx)
+	}
+	if poller, err := docker.NewResourcePoller(store); err != nil {
+		log.Printf("resource poller: socket not available, skipping (%v)", err)
+	} else {
+		go poller.Start(dockerCtx)
 	}
 
 	// Router
