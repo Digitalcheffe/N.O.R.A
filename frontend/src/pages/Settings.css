@@ -260,6 +260,148 @@
   text-align: right;
 }
 
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-label {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.modal-template-desc {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: var(--bg3);
+  border-radius: 6px;
+}
+
+.modal-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  padding: 8px 10px;
+  background: var(--red-dim);
+  border-radius: 6px;
+}
+
+.modal-loading {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  text-align: center;
+  padding: 16px 0;
+}
+
+.settings-select {
+  cursor: pointer;
+}
+
+/* ── App list ─────────────────────────────────────────────────────────────── */
+
+.apps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-row:last-child {
+  border-bottom: none;
+}
+
+.app-row-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.app-row-id {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
 /* ── Profile avatar ───────────────────────────────────────────────────────── */
 
 .settings-avatar-row {
