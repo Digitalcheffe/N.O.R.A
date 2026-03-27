@@ -10,9 +10,6 @@ import (
 	"github.com/digitalcheffe/nora/internal/repo"
 )
 
-// SSLChecker is a stub for the SSL check runner, implemented in T-15.
-type SSLChecker struct{ store *repo.Store }
-
 // Scheduler loads monitor checks from the database and runs each one on its
 // configured interval. Every check runs in its own goroutine, so a slow or
 // blocked check cannot delay others. The check list is refreshed every 5
@@ -33,7 +30,7 @@ func NewScheduler(store *repo.Store) *Scheduler {
 		store:  store,
 		ping:   NewPingChecker(store),
 		url:    NewURLChecker(store),
-		ssl:    &SSLChecker{store: store},
+		ssl:    NewSSLChecker(store),
 		active: make(map[string]context.CancelFunc),
 	}
 }
@@ -150,8 +147,7 @@ func (s *Scheduler) dispatch(ctx context.Context, check *models.MonitorCheck) {
 	case "url":
 		err = s.url.Run(ctx, check)
 	case "ssl":
-		// T-15: SSL checker not yet implemented.
-		log.Printf("monitor scheduler: ssl check %q skipped — ssl checker not yet implemented (T-15)", check.Name)
+		err = s.ssl.Run(ctx, check)
 	default:
 		log.Printf("monitor scheduler: unknown check type %q for check %q", check.Type, check.Name)
 	}
