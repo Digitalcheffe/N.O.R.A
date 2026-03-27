@@ -11,5 +11,5 @@ CREATE TABLE settings (
 -- Seed default digest schedule
 INSERT INTO settings (key, value) VALUES (
     'digest_schedule',
-    '{"frequency":"monthly","day_of_week":1,"day_of_month":1}'
+    '{"frequency":"monthly","day_of_week":1,"day_of_month":1,"send_hour":8}'
 );

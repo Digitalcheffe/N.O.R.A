@@ -172,6 +172,31 @@ func TestRenderHTML_NoActivity(t *testing.T) {
 	}
 }
 
+// ── EffectiveSendHour ────────────────────────────────────────────────────────
+
+func TestEffectiveSendHour_Default(t *testing.T) {
+	sched := models.DigestSchedule{Frequency: "daily"}
+	if got := sched.EffectiveSendHour(); got != 8 {
+		t.Errorf("expected 8, got %d", got)
+	}
+}
+
+func TestEffectiveSendHour_Explicit(t *testing.T) {
+	h := 14
+	sched := models.DigestSchedule{Frequency: "daily", SendHour: &h}
+	if got := sched.EffectiveSendHour(); got != 14 {
+		t.Errorf("expected 14, got %d", got)
+	}
+}
+
+func TestEffectiveSendHour_Midnight(t *testing.T) {
+	h := 0
+	sched := models.DigestSchedule{Frequency: "daily", SendHour: &h}
+	if got := sched.EffectiveSendHour(); got != 0 {
+		t.Errorf("expected 0 (midnight), got %d", got)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }

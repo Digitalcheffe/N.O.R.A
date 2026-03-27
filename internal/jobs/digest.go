@@ -52,19 +52,23 @@ func NewDigestJob(store *repo.Store, cfg *config.Config) *DigestJob {
 	return &DigestJob{store: store, config: cfg}
 }
 
-// Run is called daily at 08:00. It reads the stored schedule and decides
-// whether to send today.
+// Run is called every hour. It reads the stored schedule and decides whether
+// to send based on the configured frequency, day, and send_hour.
 func (d *DigestJob) Run(ctx context.Context) error {
 	var schedule models.DigestSchedule
 	err := d.store.Settings.GetJSON(ctx, digestScheduleKey, &schedule)
 	if errors.Is(err, repo.ErrNotFound) {
-		// No schedule stored — use the default (monthly, 1st).
-		schedule = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1}
+		// No schedule stored — use the default (monthly, 1st, 08:00).
+		h := 8
+		schedule = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1, SendHour: &h}
 	} else if err != nil {
 		return fmt.Errorf("digest: read schedule: %w", err)
 	}
 
 	now := time.Now()
+	if now.Hour() != schedule.EffectiveSendHour() {
+		return nil
+	}
 	if !d.ShouldSendToday(schedule, now) {
 		log.Printf("digest: skipping — not scheduled for today (%s)", now.Format("2006-01-02"))
 		return nil
@@ -306,10 +310,12 @@ func subjectLine(period string) string {
 	return "Your Homelab Digest"
 }
 
-// StartDigestJob waits until 08:00 local time, then runs DigestJob.Run every 24h.
+// StartDigestJob waits until the next whole hour boundary, then calls
+// DigestJob.Run every hour. Run reads the stored send_hour and decides
+// whether this is the right time to fire.
 func StartDigestJob(ctx context.Context, job *DigestJob) {
-	delay := durationUntilNextEightAM()
-	log.Printf("digest: job waiting %s until next 08:00", delay.Round(time.Minute))
+	delay := durationUntilNextHour()
+	log.Printf("digest: job waiting %s until next hour boundary", delay.Round(time.Minute))
 
 	select {
 	case <-ctx.Done():
@@ -324,7 +330,7 @@ func StartDigestJob(ctx context.Context, job *DigestJob) {
 	}
 	run()
 
-	ticker := time.NewTicker(24 * time.Hour)
+	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
@@ -336,13 +342,10 @@ func StartDigestJob(ctx context.Context, job *DigestJob) {
 	}
 }
 
-// durationUntilNextEightAM returns duration from now until next local 08:00.
-func durationUntilNextEightAM() time.Duration {
+// durationUntilNextHour returns the duration from now until the next whole hour (HH:00:00).
+func durationUntilNextHour() time.Duration {
 	now := time.Now()
-	next := time.Date(now.Year(), now.Month(), now.Day(), 8, 0, 0, 0, now.Location())
-	if !next.After(now) {
-		next = next.Add(24 * time.Hour)
-	}
+	next := now.Truncate(time.Hour).Add(time.Hour)
 	return next.Sub(now)
 }
 

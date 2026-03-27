@@ -206,7 +206,7 @@ function NotificationsTab() {
   const [smtpMsg, setSmtpMsg] = useState('')
 
   // Digest schedule state
-  const [schedule, setSchedule] = useState<DigestSchedule>({ frequency: 'monthly', day_of_week: 1, day_of_month: 1 })
+  const [schedule, setSchedule] = useState<DigestSchedule>({ frequency: 'monthly', day_of_week: 1, day_of_month: 1, send_hour: 8 })
   const [schedSaving, setSchedSaving] = useState(false)
   const [schedMsg, setSchedMsg] = useState('')
   const [sendingNow, setSendingNow] = useState(false)
@@ -376,7 +376,17 @@ function NotificationsTab() {
 
         <div className="settings-field-row">
           <label className="settings-label">Send time</label>
-          <span className="settings-kv-val" style={{ alignSelf: 'center' }}>08:00 (fixed)</span>
+          <select
+            className="settings-input settings-select"
+            value={schedule.send_hour ?? 8}
+            onChange={e => setSchedule(s => ({ ...s, send_hour: Number(e.target.value) }))}
+          >
+            {Array.from({ length: 24 }, (_, h) => (
+              <option key={h} value={h}>
+                {String(h).padStart(2, '0')}:00
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="settings-actions">

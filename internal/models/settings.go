@@ -9,6 +9,16 @@ type DigestSchedule struct {
 	DayOfWeek int `json:"day_of_week"`
 	// DayOfMonth is 1–28. Only used when Frequency = "monthly".
 	DayOfMonth int `json:"day_of_month"`
+	// SendHour is 0–23 (local server time). Nil means use the default (8).
+	SendHour *int `json:"send_hour,omitempty"`
+}
+
+// EffectiveSendHour returns the configured send hour, defaulting to 8 when unset.
+func (s DigestSchedule) EffectiveSendHour() int {
+	if s.SendHour == nil {
+		return 8
+	}
+	return *s.SendHour
 }
 
 // SMTPSettings holds the outbound mail server configuration.

@@ -69,6 +69,10 @@ func (h *DigestHandler) PutSchedule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "day_of_month must be 1–28")
 		return
 	}
+	if req.SendHour != nil && (*req.SendHour < 0 || *req.SendHour > 23) {
+		writeError(w, http.StatusBadRequest, "send_hour must be 0–23")
+		return
+	}
 
 	if err := h.store.Settings.SetJSON(r.Context(), digestScheduleKey, req); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

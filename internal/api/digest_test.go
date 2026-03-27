@@ -165,6 +165,37 @@ func TestPutDigestSchedule_InvalidBody(t *testing.T) {
 	}
 }
 
+func TestPutDigestSchedule_InvalidSendHour(t *testing.T) {
+	r, _ := newDigestRouter(t)
+
+	tests := []struct {
+		hour int
+		want int
+	}{
+		{-1, http.StatusBadRequest},
+		{24, http.StatusBadRequest},
+		{0, http.StatusOK},
+		{8, http.StatusOK},
+		{23, http.StatusOK},
+	}
+	for _, tc := range tests {
+		h := tc.hour
+		body, _ := json.Marshal(map[string]any{
+			"frequency":    "daily",
+			"day_of_week":  1,
+			"day_of_month": 1,
+			"send_hour":    h,
+		})
+		req := httptest.NewRequest(http.MethodPut, "/digest/schedule", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != tc.want {
+			t.Errorf("send_hour=%d: expected %d got %d: %s", tc.hour, tc.want, rr.Code, rr.Body.String())
+		}
+	}
+}
+
 // --- POST /digest/send-now ---
 
 func TestSendNow_Accepted(t *testing.T) {

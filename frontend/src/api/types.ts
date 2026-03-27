@@ -286,8 +286,9 @@ export type DigestFrequency = 'daily' | 'weekly' | 'monthly'
 
 export interface DigestSchedule {
   frequency: DigestFrequency
-  day_of_week: number   // 0–6, used when frequency=weekly
-  day_of_month: number  // 1–28, used when frequency=monthly
+  day_of_week: number    // 0–6, used when frequency=weekly
+  day_of_month: number   // 1–28, used when frequency=monthly
+  send_hour?: number     // 0–23, defaults to 8 when absent
 }
 
 export interface SMTPSettings {
