@@ -19,12 +19,13 @@ type mockCheckRepo struct {
 }
 
 type updateStatusCall struct {
-	id     string
-	status string
+	id      string
+	status  string
+	details string
 }
 
-func (m *mockCheckRepo) UpdateStatus(_ context.Context, id, status, _ string, _ time.Time) error {
-	m.updateStatusCalls = append(m.updateStatusCalls, updateStatusCall{id: id, status: status})
+func (m *mockCheckRepo) UpdateStatus(_ context.Context, id, status, details string, _ time.Time) error {
+	m.updateStatusCalls = append(m.updateStatusCalls, updateStatusCall{id: id, status: status, details: details})
 	return m.updateErr
 }
 
