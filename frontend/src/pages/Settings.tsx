@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { apps as appsApi, appTemplates } from '../api/client'
-import type { App, AppTemplate } from '../api/types'
+import { appTemplates } from '../api/client'
+import type { AppTemplate, CustomProfile } from '../api/types'
 import './Settings.css'
 
 type Tab = 'apps' | 'notifications' | 'metrics'
@@ -14,129 +14,44 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'metrics', label: 'Instance Metrics' },
 ]
 
-// ── Add App Modal ─────────────────────────────────────────────────────────────
+// ── Capability badge ──────────────────────────────────────────────────────────
 
-interface AddAppModalProps {
-  onClose: () => void
-  onCreated: () => void
+const CAPABILITY_LABEL: Record<string, string> = {
+  full: 'Full',
+  webhook_only: 'Webhook',
+  monitor_only: 'Monitor',
+  docker_only: 'Docker',
+  limited: 'Limited',
 }
 
-function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
-  const [templates, setTemplates] = useState<AppTemplate[]>([])
-  const [loadError, setLoadError] = useState('')
-  const [selectedTemplateId, setSelectedTemplateId] = useState('')
-  const [name, setName] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    appTemplates.list()
-      .then(r => {
-        setTemplates(r.data)
-        if (r.data.length > 0) setSelectedTemplateId(r.data[0].id)
-      })
-      .catch(() => setLoadError('Failed to load app templates — check backend logs'))
-  }, [])
-
-  const handleSubmit = async () => {
-    if (!name.trim()) { setError('Name is required'); return }
-    setSubmitting(true)
-    setError('')
-    try {
-      await appsApi.create({ name: name.trim(), profile_id: selectedTemplateId || undefined })
-      onCreated()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to create app')
-      setSubmitting(false)
-    }
-  }
-
-  // Group templates by category for the select
-  const byCategory: Record<string, AppTemplate[]> = {}
-  for (const t of templates) {
-    ;(byCategory[t.category] ??= []).push(t)
-  }
-
-  const selected = templates.find(t => t.id === selectedTemplateId)
-
+function CapBadge({ capability }: { capability: string }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">Add App</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-
-        <div className="modal-body">
-          {loadError ? (
-            <div className="modal-error">{loadError}</div>
-          ) : templates.length === 0 ? (
-            <div className="modal-loading">Loading templates…</div>
-          ) : (
-            <>
-              <div className="modal-field">
-                <label className="modal-label">App name</label>
-                <input
-                  className="settings-input"
-                  placeholder="e.g. My Sonarr"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-
-              <div className="modal-field">
-                <label className="modal-label">Template</label>
-                <select
-                  className="settings-input settings-select"
-                  value={selectedTemplateId}
-                  onChange={e => setSelectedTemplateId(e.target.value)}
-                >
-                  {Object.entries(byCategory).sort().map(([cat, items]) => (
-                    <optgroup key={cat} label={cat}>
-                      {items.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-
-              {selected && (
-                <div className="modal-template-desc">{selected.description}</div>
-              )}
-
-              {error && <div className="modal-error">{error}</div>}
-            </>
-          )}
-        </div>
-
-        <div className="modal-footer">
-          <button className="settings-btn secondary" onClick={onClose}>Cancel</button>
-          <button
-            className="settings-btn primary"
-            onClick={handleSubmit}
-            disabled={submitting || templates.length === 0}
-          >
-            {submitting ? 'Creating…' : 'Create App'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <span className={`cap-badge cap-badge--${capability}`}>
+      {CAPABILITY_LABEL[capability] ?? capability}
+    </span>
   )
 }
 
 // ── Apps tab ──────────────────────────────────────────────────────────────────
 
 function AppsTab() {
-  const [appList, setAppList] = useState<App[]>([])
-  const [showModal, setShowModal] = useState(false)
+  const navigate = useNavigate()
+  const [builtins, setBuiltins] = useState<AppTemplate[]>([])
+  const [customs, setCustoms] = useState<CustomProfile[]>([])
+  const [loadError, setLoadError] = useState('')
 
-  const loadApps = () => {
-    appsApi.list().then(r => setAppList(r.data)).catch(() => {})
-  }
-
-  useEffect(() => { loadApps() }, [])
+  useEffect(() => {
+    Promise.all([appTemplates.list(), appTemplates.listCustom()])
+      .then(([bt, ct]) => {
+        // Sort built-ins by category then name
+        const sorted = [...bt.data].sort((a, b) =>
+          a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
+        )
+        setBuiltins(sorted)
+        setCustoms(ct.data ?? [])
+      })
+      .catch(() => setLoadError('Failed to load app templates'))
+  }, [])
 
   return (
     <div className="tab-content">
@@ -161,31 +76,61 @@ function AppsTab() {
         <InfraIntegrations />
       </section>
 
+      {/* Built-in app templates */}
       <section className="settings-section">
         <div className="section-header">
           <span className="section-title">Apps</span>
-          <button className="settings-btn primary" onClick={() => setShowModal(true)}>+ Add app</button>
         </div>
-        {appList.length === 0 ? (
-          <div className="settings-placeholder">No apps configured. Add an app to start receiving webhook events.</div>
+        {loadError ? (
+          <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{loadError}</div>
+        ) : builtins.length === 0 ? (
+          <div className="settings-placeholder">Loading…</div>
         ) : (
           <div className="apps-list">
-            {appList.map(app => (
-              <div key={app.id} className="app-row">
-                <span className="app-row-name">{app.name}</span>
-                <span className="app-row-id">{app.profile_id ?? 'no template'}</span>
+            {builtins.map(t => (
+              <div key={t.id} className="app-row">
+                <div className="app-row-info">
+                  <span className="app-row-name">{t.name}</span>
+                  <span className="app-row-category">{t.category}</span>
+                </div>
+                <CapBadge capability={t.capability} />
               </div>
             ))}
           </div>
         )}
       </section>
 
-      {showModal && (
-        <AddAppModal
-          onClose={() => setShowModal(false)}
-          onCreated={() => { setShowModal(false); loadApps() }}
-        />
-      )}
+      {/* Custom app templates */}
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Custom Apps</span>
+          <button
+            className="settings-btn primary"
+            onClick={() => navigate('/app-templates/new')}
+          >
+            + Add Custom App
+          </button>
+        </div>
+        {customs.length === 0 ? (
+          <div className="settings-placeholder">
+            No custom apps yet. Click "+ Add Custom App" to write a YAML template for an app not in the library.
+          </div>
+        ) : (
+          <div className="apps-list">
+            {customs.map(cp => (
+              <div key={cp.id} className="app-row">
+                <span className="app-row-name">{cp.name}</span>
+                <button
+                  className="settings-btn secondary settings-btn--sm"
+                  onClick={() => navigate(`/app-templates/${cp.id}/edit`)}
+                >
+                  Edit
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

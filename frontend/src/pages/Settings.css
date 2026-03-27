@@ -260,122 +260,11 @@
   text-align: right;
 }
 
-/* ── Modal ────────────────────────────────────────────────────────────────── */
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.modal {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  width: 420px;
-  max-width: calc(100vw - 40px);
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal-title {
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--text3);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.modal-close:hover {
-  color: var(--text);
-  background: var(--bg3);
-}
-
-.modal-body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px 16px;
-  border-top: 1px solid var(--border);
-}
-
-.modal-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.modal-label {
-  font-family: var(--sans);
-  font-size: 12px;
-  color: var(--text2);
-}
-
-.modal-template-desc {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text3);
-  line-height: 1.5;
-  padding: 8px 10px;
-  background: var(--bg3);
-  border-radius: 6px;
-}
-
-.modal-error {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--red);
-  padding: 8px 10px;
-  background: var(--red-dim);
-  border-radius: 6px;
-}
-
-.modal-loading {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text3);
-  text-align: center;
-  padding: 16px 0;
-}
-
-.settings-select {
-  cursor: pointer;
-}
-
 /* ── App list ─────────────────────────────────────────────────────────────── */
 
 .apps-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
 }
 
 .app-row {
@@ -390,17 +279,46 @@
   border-bottom: none;
 }
 
+.app-row-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .app-row-name {
   font-family: var(--sans);
   font-size: 13px;
   color: var(--text);
 }
 
-.app-row-id {
+.app-row-category {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text3);
 }
+
+.settings-btn--sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+/* ── Capability badges ────────────────────────────────────────────────────── */
+
+.cap-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.cap-badge--full        { color: var(--green);  border-color: var(--green);  background: var(--green-dim); }
+.cap-badge--webhook_only { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+.cap-badge--monitor_only { color: var(--yellow); border-color: var(--yellow); background: var(--yellow-dim); }
+.cap-badge--docker_only  { color: var(--text2);  border-color: var(--border); background: var(--bg3); }
+.cap-badge--limited      { color: var(--text3);  border-color: var(--border); background: var(--bg3); }
 
 /* ── Profile avatar ───────────────────────────────────────────────────────── */
 
