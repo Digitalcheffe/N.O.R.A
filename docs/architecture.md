@@ -135,6 +135,8 @@ interval_secs   int
 expected_status int           for URL checks
 ssl_warn_days   int           default 30
 ssl_crit_days   int           default 7
+ssl_source      text          traefik | standalone   (nullable, only relevant for ssl type)
+integration_id  uuid          FK → infrastructure_integrations (nullable, only for traefik source)
 enabled         bool
 last_checked_at timestamp
 last_status     text          up | warn | down
@@ -187,6 +189,32 @@ PRIMARY KEY (source_id, metric, period_type, period_start)
 ```
 Hourly rollups retained 90 days. Daily rollups kept indefinitely.
 
+### infrastructure_integrations
+```
+id              uuid          PK
+type            text          traefik | (future: npm, caddy)
+name            text          user-assigned label
+api_url         text          e.g. http://traefik:8080
+api_key         text          nullable — if dashboard auth enabled
+enabled         bool
+last_synced_at  timestamp
+last_status     text          ok | error
+last_error      text          nullable
+created_at      timestamp
+```
+
+### traefik_certs
+```
+id              uuid          PK
+integration_id  uuid          FK → infrastructure_integrations
+domain          text
+issuer          text
+expires_at      timestamp
+sans            json          subject alternative names
+last_seen_at    timestamp
+```
+Populated by the Traefik sync job. Stale entries (not seen in last 2 sync cycles) are marked but not deleted — cert may have been temporarily removed.
+
 ### alert_rules (schema stubbed — v2 implementation)
 ```
 id              uuid          PK
@@ -199,6 +227,35 @@ notif_body      text          template string
 enabled         bool
 created_at      timestamp
 ```
+
+---
+
+## Infrastructure Integrations
+
+NORA treats Docker and Traefik as infrastructure providers — not apps.
+They are connected once and power capabilities across the whole system.
+
+```
+Infrastructure Layer  →  Docker socket, Traefik API
+App Profile Layer     →  Sonarr, Radarr, n8n, etc.
+Check Engine          →  Ping, URL, SSL (consumes data from above)
+```
+
+### Docker Socket
+Already connected via volume mount. Provides:
+- Container state events (start, stop, restart, crash)
+- Container health check state (healthy | unhealthy | starting) — if HEALTHCHECK defined
+- Container resource metrics (CPU, memory)
+- Internal DNS resolution for container-to-container routing
+
+### Traefik (optional)
+Connect via Traefik API URL + optional API key. Provides:
+- HTTP router inventory — all proxied services with internal targets
+- TLS certificate inventory — domain + expiry date for all ACME-managed certs
+- Router and service health state
+
+Connection config stored in infrastructure_integrations table.
+Polled on a configurable interval (default: 60s).
 
 ---
 
@@ -258,9 +315,22 @@ Provides per-container: up/down state, restart events, image update available.
 ### 3. Active Monitoring
 NORA polls on a schedule. No agent required.
 
-**Ping** — ICMP, is host alive  
-**URL Check** — HTTP, expected status code  
-**SSL Check** — cert validity and expiry warning at 30 / 7 days
+| Check Type | Requires Integration | Target Source | Notes |
+|---|---|---|---|
+| Ping | None | User-provided IP or hostname | For infrastructure hosts, not containers |
+| URL | None | User-provided or Traefik-discovered internal target | |
+| SSL (Traefik) | Traefik | Dropdown from traefik_certs cache | Expiry from API, no TLS handshake |
+| SSL (Standalone) | None | User-provided external URL | Warn shown for same-host URLs |
+| Container state | Docker socket | Auto from socket events | running / stopped / restarting |
+| Container health | Docker socket | Auto from container inspect | Only if HEALTHCHECK defined on image |
+
+**SSL check modes:**
+- **Traefik mode** reads cert expiry from the Traefik API — no outbound TLS connection made. Reliable, no hairpin problem. Requires Traefik integration connected.
+- **Standalone mode** makes a direct TLS connection to an external URL. Works correctly for genuinely external services. Unreliable for same-host proxied services — user is warned inline at check creation.
+
+**Ping** targets are for non-containerised infrastructure with stable IPs: NAS boxes, routers, Proxmox nodes, Raspberry Pis. Containers are covered by Docker socket health checks — not ping.
+
+**Container health** reads Docker's native HEALTHCHECK state from container inspect. Distinct from container state. Absent if the image does not define HEALTHCHECK — this is normal and expected for many homelab images.
 
 ---
 
@@ -603,6 +673,11 @@ Schema stubbed in DB from day one. UI shows placeholder. Implementation is v2.
 | Remote Docker socket | Out of scope. Local Docker socket only for v1. Remote nodes are a future consideration. |
 | Profile contribution | File upload to a GitHub issue or discussion. Community drops a YAML file, gets reviewed, merged into profiles folder. No custom tooling needed. |
 | Topology nudge UX | Deferred. UX detail resolved during build, not an architecture decision. |
+| SSL check data source | Two modes: Traefik (cert from API, no hairpin issue) and Standalone (direct TLS, external URLs only). Both available in v1. |
+| Same-host SSL reliability | Docker hairpin NAT makes TLS handshakes to same-host proxied domains unreliable. Traefik mode sidesteps this entirely. Standalone mode warns the user inline for same-host URLs. |
+| Ping target scope | Ping is for infrastructure hosts with stable IPs (NAS, router, Proxmox). Containers are covered by Docker socket health checks, not ping. |
+| Container health checks | NORA reads Docker native HEALTHCHECK state from container inspect. Distinct from container state. Absent if image does not define HEALTHCHECK — this is normal. |
+| Infrastructure integration layer | Docker socket and Traefik are infrastructure providers, not app profiles. Connected once, power capabilities across the system. |
 
 ---
 
