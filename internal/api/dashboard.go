@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/digitalcheffe/nora/internal/profile"
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
 )
@@ -20,11 +20,11 @@ type DashboardHandler struct {
 	events   repo.EventRepo
 	checks   repo.CheckRepo
 	rollups  repo.RollupRepo
-	profiler profile.Loader
+	profiler apptemplate.Loader
 }
 
 // NewDashboardHandler creates a DashboardHandler with the given dependencies.
-func NewDashboardHandler(apps repo.AppRepo, events repo.EventRepo, checks repo.CheckRepo, rollups repo.RollupRepo, profiler profile.Loader) *DashboardHandler {
+func NewDashboardHandler(apps repo.AppRepo, events repo.EventRepo, checks repo.CheckRepo, rollups repo.RollupRepo, profiler apptemplate.Loader) *DashboardHandler {
 	return &DashboardHandler{
 		apps:     apps,
 		events:   events,
@@ -146,7 +146,7 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 
 	// categoryEntry accumulates cross-app data for one label.
 	type categoryEntry struct {
-		cats    []profile.DigestCategory // all matching category definitions
+		cats    []apptemplate.DigestCategory // all matching category definitions
 		perApp  map[string]int           // appID → count
 		total   int
 		sparkline [7]int

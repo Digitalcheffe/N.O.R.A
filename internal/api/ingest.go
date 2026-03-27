@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/ingest"
-	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
 )
@@ -17,7 +17,7 @@ const maxPayloadBytes = 1 << 20 // 1 MB
 // HandleIngest handles POST /api/v1/ingest/{token}.
 // This handler must be mounted outside the session auth middleware group —
 // the token in the URL path is the only credential.
-func HandleIngest(store *repo.Store, profiler profile.Loader, limiter *ingest.RateLimiter) http.HandlerFunc {
+func HandleIngest(store *repo.Store, profiler apptemplate.Loader, limiter *ingest.RateLimiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := chi.URLParam(r, "token")
 

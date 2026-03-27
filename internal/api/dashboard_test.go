@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/api"
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/models"
-	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -18,7 +18,7 @@ import (
 )
 
 // newDashboardTestSetup creates an in-memory DB + router with the dashboard handler.
-func newDashboardTestSetup(t *testing.T, profiler profile.Loader) (http.Handler, *sqlx.DB) {
+func newDashboardTestSetup(t *testing.T, profiler apptemplate.Loader) (http.Handler, *sqlx.DB) {
 	t.Helper()
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
@@ -72,24 +72,24 @@ func insertEventWithFields(t *testing.T, db *sqlx.DB, appID, severity, displayTe
 	return ev
 }
 
-// makeTestProfiler returns a Loader that serves a minimal profile with digest categories.
-func makeTestProfiler(profileID string, categories []profile.DigestCategory) profile.Loader {
+// makeTestProfiler returns a Loader that serves a minimal app template with digest categories.
+func makeTestProfiler(templateID string, categories []apptemplate.DigestCategory) apptemplate.Loader {
 	return &staticTestLoader{
-		profileID: profileID,
-		profile: &profile.Profile{
-			Digest: profile.Digest{Categories: categories},
+		templateID: templateID,
+		template: &apptemplate.AppTemplate{
+			Digest: apptemplate.Digest{Categories: categories},
 		},
 	}
 }
 
 type staticTestLoader struct {
-	profileID string
-	profile   *profile.Profile
+	templateID string
+	template   *apptemplate.AppTemplate
 }
 
-func (l *staticTestLoader) Get(id string) (*profile.Profile, error) {
-	if id == l.profileID {
-		return l.profile, nil
+func (l *staticTestLoader) Get(id string) (*apptemplate.AppTemplate, error) {
+	if id == l.templateID {
+		return l.template, nil
 	}
 	return nil, nil
 }
@@ -97,7 +97,7 @@ func (l *staticTestLoader) Get(id string) (*profile.Profile, error) {
 // --- zero app scenario ---
 
 func TestDashboardSummary_ZeroApps(t *testing.T) {
-	handler, _ := newDashboardTestSetup(t, &profile.NoopLoader{})
+	handler, _ := newDashboardTestSetup(t, &apptemplate.NoopLoader{})
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/summary", nil)
 	rec := httptest.NewRecorder()
@@ -143,7 +143,7 @@ func TestDashboardSummary_ZeroApps(t *testing.T) {
 // --- single app scenario ---
 
 func TestDashboardSummary_SingleApp(t *testing.T) {
-	categories := []profile.DigestCategory{
+	categories := []apptemplate.DigestCategory{
 		{Label: "Downloads", MatchField: "event_type", MatchValue: "Download"},
 		{Label: "Errors", MatchSeverity: "error"},
 	}
@@ -238,19 +238,19 @@ func TestDashboardSummary_SingleApp(t *testing.T) {
 
 func TestDashboardSummary_MultiApp(t *testing.T) {
 	// Two apps sharing the same "Downloads" category label
-	sonarrCats := []profile.DigestCategory{
+	sonarrCats := []apptemplate.DigestCategory{
 		{Label: "Downloads", MatchField: "event_type", MatchValue: "Download"},
 	}
-	radarrCats := []profile.DigestCategory{
+	radarrCats := []apptemplate.DigestCategory{
 		{Label: "Downloads", MatchField: "event_type", MatchValue: "Download"},
 		{Label: "Errors", MatchSeverity: "error"},
 	}
 
-	// Multi-profile loader
+	// Multi-template loader
 	profiler := &multiTestLoader{
-		profiles: map[string]*profile.Profile{
-			"sonarr": {Digest: profile.Digest{Categories: sonarrCats}},
-			"radarr": {Digest: profile.Digest{Categories: radarrCats}},
+		templates: map[string]*apptemplate.AppTemplate{
+			"sonarr": {Digest: apptemplate.Digest{Categories: sonarrCats}},
+			"radarr": {Digest: apptemplate.Digest{Categories: radarrCats}},
 		},
 	}
 	handler, db := newDashboardTestSetup(t, profiler)
@@ -342,14 +342,14 @@ func TestDashboardSummary_MultiApp(t *testing.T) {
 	}
 }
 
-// multiTestLoader serves multiple profiles.
+// multiTestLoader serves multiple app templates.
 type multiTestLoader struct {
-	profiles map[string]*profile.Profile
+	templates map[string]*apptemplate.AppTemplate
 }
 
-func (l *multiTestLoader) Get(id string) (*profile.Profile, error) {
-	if p, ok := l.profiles[id]; ok {
-		return p, nil
+func (l *multiTestLoader) Get(id string) (*apptemplate.AppTemplate, error) {
+	if t, ok := l.templates[id]; ok {
+		return t, nil
 	}
 	return nil, nil
 }
@@ -357,7 +357,7 @@ func (l *multiTestLoader) Get(id string) (*profile.Profile, error) {
 // --- period parameter tests ---
 
 func TestDashboardSummary_PeriodDefault(t *testing.T) {
-	handler, _ := newDashboardTestSetup(t, &profile.NoopLoader{})
+	handler, _ := newDashboardTestSetup(t, &apptemplate.NoopLoader{})
 
 	// no period param — should default to "week"
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/summary", nil)
@@ -378,7 +378,7 @@ func TestDashboardSummary_PeriodDefault(t *testing.T) {
 }
 
 func TestDashboardSummary_PeriodDay(t *testing.T) {
-	handler, _ := newDashboardTestSetup(t, &profile.NoopLoader{})
+	handler, _ := newDashboardTestSetup(t, &apptemplate.NoopLoader{})
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/summary?period=day", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -395,7 +395,7 @@ func TestDashboardSummary_PeriodDay(t *testing.T) {
 }
 
 func TestDashboardSummary_PeriodMonth(t *testing.T) {
-	handler, _ := newDashboardTestSetup(t, &profile.NoopLoader{})
+	handler, _ := newDashboardTestSetup(t, &apptemplate.NoopLoader{})
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/summary?period=month", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -414,7 +414,7 @@ func TestDashboardSummary_PeriodMonth(t *testing.T) {
 // --- digest endpoint ---
 
 func TestDashboardDigest_Empty(t *testing.T) {
-	handler, _ := newDashboardTestSetup(t, &profile.NoopLoader{})
+	handler, _ := newDashboardTestSetup(t, &apptemplate.NoopLoader{})
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/digest/2026-03", nil)
 	rec := httptest.NewRecorder()
@@ -442,7 +442,7 @@ func TestDashboardDigest_Empty(t *testing.T) {
 }
 
 func TestDashboardDigest_WithRollups(t *testing.T) {
-	handler, db := newDashboardTestSetup(t, &profile.NoopLoader{})
+	handler, db := newDashboardTestSetup(t, &apptemplate.NoopLoader{})
 
 	app := insertApp(t, db, "Sonarr", "sonarr")
 
@@ -489,7 +489,7 @@ func TestDashboardDigest_WithRollups(t *testing.T) {
 }
 
 func TestDashboardDigest_InvalidPeriod(t *testing.T) {
-	handler, _ := newDashboardTestSetup(t, &profile.NoopLoader{})
+	handler, _ := newDashboardTestSetup(t, &apptemplate.NoopLoader{})
 
 	req := httptest.NewRequest(http.MethodGet, "/dashboard/digest/notaperiod", nil)
 	rec := httptest.NewRecorder()
@@ -505,7 +505,7 @@ func TestDashboardDigest_InvalidPeriod(t *testing.T) {
 // TestDashboardSummary_OmitsZeroCategories verifies that categories with count=0
 // are not included in summary_bar.
 func TestDashboardSummary_OmitsZeroCategories(t *testing.T) {
-	categories := []profile.DigestCategory{
+	categories := []apptemplate.DigestCategory{
 		{Label: "Downloads", MatchField: "event_type", MatchValue: "Download"},
 		{Label: "Backups", MatchField: "event_type", MatchValue: "Backup"},
 	}

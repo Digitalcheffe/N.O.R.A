@@ -254,19 +254,19 @@ export interface DashboardSummaryResponse {
   ssl_certs: SSLCert[]
 }
 
-// ── Profile Library ──────────────────────────────────────────────────────────
+// ── App Template Library ──────────────────────────────────────────────────────
 
-export type ProfileCapability = 'full' | 'webhook_only' | 'monitor_only' | 'docker_only' | 'limited'
+export type AppTemplateCapability = 'full' | 'webhook_only' | 'monitor_only' | 'docker_only' | 'limited'
 
-export interface Profile {
+export interface AppTemplate {
   id: string
   name: string
   category: string
   description: string
-  capability: ProfileCapability
+  capability: AppTemplateCapability
 }
 
-// ── Custom Profiles ───────────────────────────────────────────────────────────
+// ── Custom App Templates ───────────────────────────────────────────────────────
 
 export interface ValidationResult {
   valid: boolean

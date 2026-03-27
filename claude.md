@@ -83,14 +83,14 @@ git checkout -b <type>/<short-description>
   jobs/             — scheduled background jobs (rollups, retention, metrics, digest)
   models/           — Go structs for all DB entities
   repo/             — repository interfaces + SQLite implementations
-  profile/          — YAML profile loader + field extraction engine
+  apptemplate/      — YAML app template loader + field extraction engine
 /frontend/          — React + Vite app
   src/
     components/     — shared UI components
     pages/          — one file per screen (Dashboard, AppDetail, Checks, etc.)
     api/            — typed API client (one function per endpoint)
     hooks/          — shared React hooks
-/profiles/          — app YAML profiles (embedded in binary at build)
+/appprofiles/       — app YAML templates (embedded in binary at build)
 /migrations/        — SQL migration files (embedded, auto-run on startup)
 /docs/              — architecture.md, dashboard.html
 ```
@@ -128,12 +128,12 @@ git checkout -b <type>/<short-description>
 - The `alert_rules` table is created in the initial migration (T-03) even though the feature is v2
 - The `web_push_subscriptions` table is created in the initial migration
 
-### App Profiles
-- Profiles are YAML files in `/profiles/*.yaml`
-- They are embedded in the binary using `//go:embed profiles`
-- The Go struct for a profile lives in `/internal/profile/profile.go`
+### App Templates
+- App templates are YAML files in `/appprofiles/*.yaml`
+- They are embedded in the binary using `//go:embed *.yaml` in `/appprofiles/embed.go`
+- The Go package lives in `/internal/apptemplate/` — main struct is `AppTemplate`
 - JSONPath field extraction uses `github.com/PaesslerAG/jsonpath` or equivalent
-- When writing a new profile, validate it loads correctly before committing
+- When writing a new app template, validate it loads correctly before committing
 
 ### Scheduler / Background Jobs
 - All scheduled jobs use a simple ticker-based runner in `/internal/jobs/scheduler.go`
@@ -165,7 +165,7 @@ NORA_VAPID_PRIVATE     VAPID private key (auto-generated on first run if absent)
 2. Read `/docs/architecture.md` if your change touches data model or API surface
 3. Check `/migrations/` before adding a new table — it may already be there
 4. Check `/internal/repo/` before writing DB queries — the interface may exist
-5. If adding a new profile, check `/profiles/` first
+5. If adding a new app template, check `/appprofiles/` first
 
 ---
 

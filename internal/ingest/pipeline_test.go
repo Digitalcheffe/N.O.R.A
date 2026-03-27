@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/config"
 	"github.com/digitalcheffe/nora/internal/ingest"
 	"github.com/digitalcheffe/nora/internal/models"
-	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/migrations"
 	"github.com/google/uuid"
@@ -49,7 +49,7 @@ func TestProcess_HappyPath(t *testing.T) {
 	app := seedApp(t, store, token, 100)
 
 	limiter := ingest.NewRateLimiter()
-	result, err := ingest.Process(context.Background(), store, &profile.NoopLoader{}, limiter, token, []byte(`{"event":"test"}`))
+	result, err := ingest.Process(context.Background(), store, &apptemplate.NoopLoader{}, limiter, token, []byte(`{"event":"test"}`))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestProcess_InvalidToken(t *testing.T) {
 	store := newTestStore(t)
 	limiter := ingest.NewRateLimiter()
 
-	_, err := ingest.Process(context.Background(), store, &profile.NoopLoader{}, limiter, "no-such-token", []byte(`{}`))
+	_, err := ingest.Process(context.Background(), store, &apptemplate.NoopLoader{}, limiter, "no-such-token", []byte(`{}`))
 	if err == nil {
 		t.Fatal("expected error for invalid token")
 	}
@@ -100,14 +100,14 @@ func TestProcess_RateLimit(t *testing.T) {
 
 	// First two should succeed.
 	for i := 0; i < 2; i++ {
-		_, err := ingest.Process(context.Background(), store, &profile.NoopLoader{}, limiter, token, payload)
+		_, err := ingest.Process(context.Background(), store, &apptemplate.NoopLoader{}, limiter, token, payload)
 		if err != nil {
 			t.Fatalf("call %d: unexpected error: %v", i+1, err)
 		}
 	}
 
 	// Third should be rate-limited.
-	_, err := ingest.Process(context.Background(), store, &profile.NoopLoader{}, limiter, token, payload)
+	_, err := ingest.Process(context.Background(), store, &apptemplate.NoopLoader{}, limiter, token, payload)
 	if err == nil {
 		t.Fatal("expected rate limit error on third call")
 	}
@@ -132,9 +132,9 @@ func TestProcess_ProfileFieldExtraction(t *testing.T) {
 		t.Fatalf("seed app: %v", err)
 	}
 
-	// Profile with field mappings, severity mapping, and display template.
-	p := &profile.Profile{
-		Webhook: profile.Webhook{
+	// App template with field mappings, severity mapping, and display template.
+	tmpl := &apptemplate.AppTemplate{
+		Webhook: apptemplate.Webhook{
 			FieldMappings: map[string]string{
 				"eventType": "$.eventType",
 				"series":    "$.series.title",
@@ -149,7 +149,7 @@ func TestProcess_ProfileFieldExtraction(t *testing.T) {
 		},
 	}
 
-	loader := &stubLoader{profile: p}
+	loader := &stubLoader{template: tmpl}
 	limiter := ingest.NewRateLimiter()
 	payload := []byte(`{"eventType":"Grabbed","series":{"title":"Breaking Bad"}}`)
 
@@ -170,11 +170,11 @@ func TestProcess_ProfileFieldExtraction(t *testing.T) {
 	}
 }
 
-// stubLoader returns a fixed profile for any profileID.
+// stubLoader returns a fixed app template for any templateID.
 type stubLoader struct {
-	profile *profile.Profile
+	template *apptemplate.AppTemplate
 }
 
-func (s *stubLoader) Get(_ string) (*profile.Profile, error) {
-	return s.profile, nil
+func (s *stubLoader) Get(_ string) (*apptemplate.AppTemplate, error) {
+	return s.template, nil
 }

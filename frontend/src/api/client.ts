@@ -6,6 +6,7 @@
 import type {
   App,
   AppMetric,
+  AppTemplate,
   AuthUser,
   CreateAppInput,
   CreateCheckInput,
@@ -22,7 +23,6 @@ import type {
   LoginInput,
   MonitorCheck,
   PhysicalHost,
-  Profile,
   SyncResult,
   TraefikCert,
   User,
@@ -212,23 +212,23 @@ export const dashboard = {
     request<unknown>('GET', `/dashboard/digest/${period}`),
 }
 
-// ── Profile Library ───────────────────────────────────────────────────────────
+// ── App Template Library ──────────────────────────────────────────────────────
 
-export const profiles = {
+export const appTemplates = {
   list: () =>
-    request<ListResponse<Profile>>('GET', '/profiles'),
+    request<ListResponse<AppTemplate>>('GET', '/app-templates'),
 
   get: (id: string) =>
-    request<Profile>('GET', `/profiles/${id}`),
+    request<AppTemplate>('GET', `/app-templates/${id}`),
 
   validate: (yamlContent: string) =>
-    request<ValidationResult>('POST', '/profiles/validate', { yaml: yamlContent }),
+    request<ValidationResult>('POST', '/app-templates/validate', { yaml: yamlContent }),
 
   createCustom: (yamlContent: string) =>
-    request<CustomProfile>('POST', '/profiles/custom', { yaml: yamlContent }),
+    request<CustomProfile>('POST', '/app-templates/custom', { yaml: yamlContent }),
 
   listCustom: () =>
-    request<ListResponse<CustomProfile>>('GET', '/profiles/custom'),
+    request<ListResponse<CustomProfile>>('GET', '/app-templates/custom'),
 }
 
 // ── Infrastructure Integrations ───────────────────────────────────────────────
