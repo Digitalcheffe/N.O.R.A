@@ -73,6 +73,8 @@ export interface Event {
   fields: Record<string, unknown>
 }
 
+export type EventSort = 'newest' | 'oldest' | 'severity_desc' | 'severity_asc'
+
 export interface EventFilter {
   app_id?: string
   severity?: Severity
@@ -80,6 +82,20 @@ export interface EventFilter {
   to?: string
   limit?: number
   offset?: number
+  sort?: EventSort
+}
+
+export interface TimeseriesBucket {
+  time: string
+  count: number
+}
+
+export interface TimeseriesFilter {
+  since: string
+  until: string
+  granularity: 'hour' | 'day'
+  app_id?: string
+  severity?: string
 }
 
 // ── Monitor Checks ──────────────────────────────────────────────────────────

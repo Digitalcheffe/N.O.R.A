@@ -28,6 +28,8 @@ import type {
   SMTPSettings,
   SendNowResult,
   SyncResult,
+  TimeseriesBucket,
+  TimeseriesFilter,
   TraefikCert,
   User,
   ValidationResult,
@@ -137,12 +139,23 @@ export const events = {
     if (filter?.to) params.set('until', filter.to)
     if (filter?.limit) params.set('limit', String(filter.limit))
     if (filter?.offset) params.set('offset', String(filter.offset))
+    if (filter?.sort) params.set('sort', filter.sort)
     const qs = params.toString()
     return request<ListResponse<Event>>('GET', `/events${qs ? '?' + qs : ''}`)
   },
 
   get: (id: string) =>
     request<Event>('GET', `/events/${id}`),
+
+  timeseries: (filter: TimeseriesFilter) => {
+    const params = new URLSearchParams()
+    params.set('since', filter.since)
+    params.set('until', filter.until)
+    params.set('granularity', filter.granularity)
+    if (filter.app_id) params.set('app_id', filter.app_id)
+    if (filter.severity) params.set('severity', filter.severity)
+    return request<{ data: TimeseriesBucket[] }>('GET', `/events/timeseries?${params.toString()}`)
+  },
 }
 
 // ── Monitor Checks ────────────────────────────────────────────────────────────

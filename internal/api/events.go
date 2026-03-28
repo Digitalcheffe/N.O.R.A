@@ -27,6 +27,7 @@ func NewEventsHandler(events repo.EventRepo) *EventsHandler {
 // Routes registers all event endpoints on r.
 func (h *EventsHandler) Routes(r chi.Router) {
 	r.Get("/events", h.List)
+	r.Get("/events/timeseries", h.Timeseries) // must be before /events/{id}
 	r.Get("/events/{id}", h.Get)
 	r.Get("/apps/{id}/events", h.ListByApp)
 }
@@ -62,6 +63,11 @@ type listEventsResponse struct {
 	Total  int         `json:"total"`
 	Limit  int         `json:"limit"`
 	Offset int         `json:"offset"`
+}
+
+// timeseriesResponse wraps a slice of timeseries buckets.
+type timeseriesResponse struct {
+	Data []repo.TimeseriesBucket `json:"data"`
 }
 
 // rawOrEmpty returns the string as a RawMessage, falling back to {} for empty/null.
@@ -148,7 +154,55 @@ func parseFilter(r *http.Request) (repo.ListFilter, error) {
 		f.Offset = n
 	}
 
+	if s := q.Get("sort"); s != "" {
+		switch s {
+		case "newest", "oldest", "severity_desc", "severity_asc":
+			f.Sort = s
+		}
+	}
+
 	return f, nil
+}
+
+// Timeseries returns event counts grouped by time bucket: GET /api/v1/events/timeseries
+func (h *EventsHandler) Timeseries(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	granularity := q.Get("granularity")
+	if granularity != "hour" && granularity != "day" {
+		granularity = "day"
+	}
+
+	var since, until time.Time
+	var err error
+	if s := q.Get("since"); s != "" {
+		since, err = time.Parse(time.RFC3339, s)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid since: must be RFC3339")
+			return
+		}
+	} else {
+		since = time.Now().UTC().Add(-7 * 24 * time.Hour)
+	}
+	if s := q.Get("until"); s != "" {
+		until, err = time.Parse(time.RFC3339, s)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid until: must be RFC3339")
+			return
+		}
+	} else {
+		until = time.Now().UTC()
+	}
+
+	appID := q.Get("app_id")
+	severity := q.Get("severity")
+
+	buckets, err := h.events.Timeseries(r.Context(), since, until, granularity, appID, severity)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, timeseriesResponse{Data: buckets})
 }
 
 // --- handlers ---

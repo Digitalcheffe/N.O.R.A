@@ -20,6 +20,8 @@ type ListFilter struct {
 	Until    *time.Time
 	Limit    int
 	Offset   int
+	// Sort controls ordering: "newest" (default), "oldest", "severity_desc", "severity_asc"
+	Sort string
 }
 
 // CategoryFilter defines criteria for matching events to a digest category.
@@ -54,6 +56,12 @@ type AppEventCount struct {
 	Count   int    `db:"count"`
 }
 
+// TimeseriesBucket holds a single time bucket in a timeseries query.
+type TimeseriesBucket struct {
+	Time  string `db:"time"  json:"time"`
+	Count int    `db:"count" json:"count"`
+}
+
 // EventRepo defines read/write operations for the events table.
 type EventRepo interface {
 	// Create persists a new event.
@@ -62,6 +70,9 @@ type EventRepo interface {
 	List(ctx context.Context, f ListFilter) (events []models.Event, total int, err error)
 	// Get returns a single event by ID, including raw_payload.
 	Get(ctx context.Context, id string) (*models.Event, error)
+	// Timeseries returns event counts grouped by time bucket over [since, until].
+	// granularity is "hour" or "day". appID and severity may be empty to include all.
+	Timeseries(ctx context.Context, since, until time.Time, granularity, appID, severity string) ([]TimeseriesBucket, error)
 	// CountForCategory returns the number of events matching f.
 	CountForCategory(ctx context.Context, f CategoryFilter) (int, error)
 	// SparklineBuckets returns exactly 7 event counts, one per time bucket.
@@ -142,8 +153,8 @@ func (r *sqliteEventRepo) List(ctx context.Context, f ListFilter) ([]models.Even
 	if f.Limit <= 0 {
 		f.Limit = 50
 	}
-	if f.Limit > 200 {
-		f.Limit = 200
+	if f.Limit > 500 {
+		f.Limit = 500
 	}
 	if f.Offset < 0 {
 		f.Offset = 0
@@ -158,15 +169,26 @@ func (r *sqliteEventRepo) List(ctx context.Context, f ListFilter) ([]models.Even
 		return nil, 0, fmt.Errorf("count events: %w", err)
 	}
 
+	// Dynamic ORDER BY based on Sort field.
+	const sevOrder = `CASE e.severity WHEN 'critical' THEN 5 WHEN 'error' THEN 4 WHEN 'warn' THEN 3 WHEN 'info' THEN 2 WHEN 'debug' THEN 1 ELSE 0 END`
+	orderBy := " ORDER BY e.received_at DESC"
+	switch f.Sort {
+	case "oldest":
+		orderBy = " ORDER BY e.received_at ASC"
+	case "severity_desc":
+		orderBy = " ORDER BY " + sevOrder + " DESC, e.received_at DESC"
+	case "severity_asc":
+		orderBy = " ORDER BY " + sevOrder + " ASC, e.received_at DESC"
+	}
+
 	// Fetch the page. raw_payload is excluded from list results.
 	pageQ := `
 		SELECT e.id, COALESCE(e.app_id, '') AS app_id, COALESCE(a.name, '') AS app_name,
 		       e.received_at, e.severity, e.display_text, e.fields
 		FROM events e
 		LEFT JOIN apps a ON a.id = e.app_id` +
-		where +
-		` ORDER BY e.received_at DESC
-		 LIMIT ? OFFSET ?`
+		where + orderBy +
+		` LIMIT ? OFFSET ?`
 
 	pageArgs := append(whereArgs, f.Limit, f.Offset)
 	var events []models.Event
@@ -372,6 +394,44 @@ func (r *sqliteEventRepo) LatestPerApp(ctx context.Context, appIDs []string) (ma
 		result[events[i].AppID] = &events[i]
 	}
 	return result, nil
+}
+
+func (r *sqliteEventRepo) Timeseries(ctx context.Context, since, until time.Time, granularity, appID, severity string) ([]TimeseriesBucket, error) {
+	// fmtStr is controlled, not user-provided — safe to interpolate.
+	fmtStr := "%Y-%m-%d"
+	if granularity == "hour" {
+		fmtStr = "%Y-%m-%dT%H:00:00Z"
+	}
+
+	var parts []string
+	var args []interface{}
+	parts = append(parts, "datetime(received_at) >= datetime(?)")
+	args = append(args, since.UTC().Format(time.RFC3339))
+	parts = append(parts, "datetime(received_at) <= datetime(?)")
+	args = append(args, until.UTC().Format(time.RFC3339))
+	if appID != "" {
+		parts = append(parts, "app_id = ?")
+		args = append(args, appID)
+	}
+	if severity != "" {
+		parts = append(parts, "severity = ?")
+		args = append(args, severity)
+	}
+	where := " WHERE " + strings.Join(parts, " AND ")
+
+	q := fmt.Sprintf(
+		"SELECT strftime('%s', received_at) AS time, COUNT(*) AS count FROM events%s GROUP BY strftime('%s', received_at) ORDER BY time",
+		fmtStr, where, fmtStr,
+	)
+
+	var rows []TimeseriesBucket
+	if err := r.db.SelectContext(ctx, &rows, q, args...); err != nil {
+		return nil, fmt.Errorf("timeseries: %w", err)
+	}
+	if rows == nil {
+		rows = []TimeseriesBucket{}
+	}
+	return rows, nil
 }
 
 func (r *sqliteEventRepo) CountPerApp(ctx context.Context, since time.Time) ([]AppEventCount, error) {
