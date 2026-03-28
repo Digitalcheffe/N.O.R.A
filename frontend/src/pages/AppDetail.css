@@ -151,8 +151,8 @@
 }
 
 .detail-delete-confirm {
-  background: var(--red-dim);
-  border: 1px solid var(--red);
+  background: var(--bg3);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px;
 }
