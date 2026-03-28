@@ -20,6 +20,7 @@ import type {
   EventFilter,
   HostResources,
   InfraIntegration,
+  InstanceMetrics,
   ListResponse,
   LoginInput,
   MonitorCheck,
@@ -281,6 +282,9 @@ export const smtpSettings = {
 
   put: (s: SMTPSettings) =>
     request<SMTPSettings>('PUT', '/settings/smtp', s),
+
+  test: () =>
+    request<{ status: string; to: string }>('POST', '/settings/smtp/test'),
 }
 
 export const digestReport = {
@@ -292,5 +296,5 @@ export const digestReport = {
 
 export const metrics = {
   instance: () =>
-    request<unknown>('GET', '/metrics'),
+    request<InstanceMetrics>('GET', '/metrics'),
 }

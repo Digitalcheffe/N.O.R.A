@@ -2,17 +2,26 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates, digestSettings, digestReport, smtpSettings } from '../api/client'
-import type { AppTemplate, CustomProfile, DigestFrequency, DigestSchedule, SMTPSettings } from '../api/types'
+import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users } from '../api/client'
+import type {
+  AppTemplate,
+  CustomProfile,
+  DigestFrequency,
+  DigestSchedule,
+  InstanceMetrics,
+  SMTPSettings,
+  User,
+} from '../api/types'
 
 import './Settings.css'
 
-type Tab = 'apps' | 'notifications' | 'metrics'
+type Tab = 'apps' | 'notifications' | 'metrics' | 'users'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'apps', label: 'Apps' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'metrics', label: 'Instance Metrics' },
+  { id: 'users', label: 'Users' },
 ]
 
 // ── Delete confirmation modal ─────────────────────────────────────────────────
@@ -83,7 +92,6 @@ function AppsTab() {
   useEffect(() => {
     Promise.all([appTemplates.list(), appTemplates.listCustom()])
       .then(([bt, ct]) => {
-        // Sort built-ins by category then name
         const sorted = [...bt.data].sort((a, b) => a.name.localeCompare(b.name))
         setBuiltins(sorted)
         setCustoms(ct.data ?? [])
@@ -204,6 +212,8 @@ function NotificationsTab() {
   const [smtp, setSMTP] = useState<SMTPSettings>({ host: '', port: 587, user: '', pass: '', from: '' })
   const [smtpSaving, setSmtpSaving] = useState(false)
   const [smtpMsg, setSmtpMsg] = useState('')
+  const [smtpTesting, setSmtpTesting] = useState(false)
+  const [smtpTestMsg, setSmtpTestMsg] = useState('')
   const [smtpConfigured, setSmtpConfigured] = useState(false)
 
   // Digest schedule state
@@ -231,6 +241,19 @@ function NotificationsTab() {
       setSmtpMsg(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setSmtpSaving(false)
+    }
+  }
+
+  const testSMTP = async () => {
+    setSmtpTesting(true)
+    setSmtpTestMsg('')
+    try {
+      const res = await smtpSettings.test()
+      setSmtpTestMsg(`Test email sent to ${res.to}`)
+    } catch (e: unknown) {
+      setSmtpTestMsg(e instanceof Error ? e.message : 'Test failed')
+    } finally {
+      setSmtpTesting(false)
     }
   }
 
@@ -320,7 +343,26 @@ function NotificationsTab() {
           <button className="settings-btn primary" onClick={saveSMTP} disabled={smtpSaving}>
             {smtpSaving ? 'Saving…' : 'Save'}
           </button>
+          <button
+            className="settings-btn secondary"
+            onClick={testSMTP}
+            disabled={smtpTesting || !smtpConfigured}
+            title={!smtpConfigured ? 'Configure and save SMTP first' : 'Send a test email to the configured from address'}
+          >
+            {smtpTesting ? 'Sending…' : 'Send test email'}
+          </button>
           {smtpMsg && <span className="settings-status-msg">{smtpMsg}</span>}
+          {smtpTestMsg && <span className="settings-status-msg">{smtpTestMsg}</span>}
+        </div>
+      </section>
+
+      {/* Web Push */}
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Web Push</span>
+        </div>
+        <div className="settings-placeholder" style={{ fontStyle: 'italic' }}>
+          Push notifications — coming soon
         </div>
       </section>
 
@@ -432,34 +474,53 @@ function NotificationsTab() {
 
 // ── Instance Metrics tab ──────────────────────────────────────────────────────
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return `${h}h ${m}m`
+}
+
 function MetricsTab() {
+  const [data, setData] = useState<InstanceMetrics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    metrics.instance()
+      .then(setData)
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load metrics'))
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <div className="tab-content">
       <section className="settings-section">
         <div className="section-header">
-          <span className="section-title">NORA Process</span>
+          <span className="section-title">Instance</span>
         </div>
-        <div className="settings-kv-grid">
-          <span className="settings-kv-key">Version</span><span className="settings-kv-val">v0.1.0</span>
-          <span className="settings-kv-key">Uptime</span><span className="settings-kv-val">—</span>
-          <span className="settings-kv-key">Go runtime</span><span className="settings-kv-val">go1.22</span>
-          <span className="settings-kv-key">Goroutines</span><span className="settings-kv-val">—</span>
-        </div>
-      </section>
-
-      <section className="settings-section">
-        <div className="section-header">
-          <span className="section-title">Database</span>
-        </div>
-        <div className="settings-kv-grid">
-          <span className="settings-kv-key">Engine</span><span className="settings-kv-val">SQLite</span>
-          <span className="settings-kv-key">File size</span><span className="settings-kv-val">—</span>
-          <span className="settings-kv-key">Last vacuum</span><span className="settings-kv-val">—</span>
-        </div>
-        <div className="settings-actions" style={{ marginTop: 12 }}>
-          <button className="settings-btn secondary">Run Vacuum</button>
-          <button className="settings-btn secondary">Export DB</button>
-        </div>
+        {loading ? (
+          <div className="settings-placeholder">Loading…</div>
+        ) : error ? (
+          <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{error}</div>
+        ) : data ? (
+          <div className="settings-kv-grid">
+            <span className="settings-kv-key">DB size</span>
+            <span className="settings-kv-val">{formatBytes(data.db_size_bytes)}</span>
+            <span className="settings-kv-key">Events last 24h</span>
+            <span className="settings-kv-val">{data.events_last_24h.toLocaleString()}</span>
+            <span className="settings-kv-key">Uptime</span>
+            <span className="settings-kv-val">{formatUptime(data.uptime_seconds)}</span>
+          </div>
+        ) : null}
       </section>
 
       <section className="settings-section">
@@ -467,39 +528,185 @@ function MetricsTab() {
           <span className="section-title">Retention Policy</span>
         </div>
         <div className="settings-kv-grid">
-          <span className="settings-kv-key">Raw events</span><span className="settings-kv-val">7 days</span>
+          <span className="settings-kv-key">Debug events</span><span className="settings-kv-val">24 hours</span>
+          <span className="settings-kv-key">Info events</span><span className="settings-kv-val">7 days</span>
+          <span className="settings-kv-key">Warn events</span><span className="settings-kv-val">30 days</span>
+          <span className="settings-kv-key">Error / Critical</span><span className="settings-kv-val">90 days</span>
           <span className="settings-kv-key">Hourly rollups</span><span className="settings-kv-val">90 days</span>
           <span className="settings-kv-key">Daily rollups</span><span className="settings-kv-val">Forever</span>
-          <span className="settings-kv-key">Error events</span><span className="settings-kv-val">90 days</span>
         </div>
       </section>
 
       <section className="settings-section">
         <div className="section-header">
-          <span className="section-title">Resource Usage</span>
+          <span className="section-title">Events per App (last 24h)</span>
         </div>
-        <div className="settings-resource-bars">
-          <div className="settings-resource-row">
-            <span className="settings-resource-label">CPU</span>
-            <div className="settings-progress-track">
-              <div className="settings-progress-fill" style={{ width: '12%' }} />
-            </div>
-            <span className="settings-resource-pct">12%</span>
+        {loading ? (
+          <div className="settings-placeholder">Loading…</div>
+        ) : data && data.app_events_24h.length === 0 ? (
+          <div className="settings-placeholder">No events in the last 24 hours.</div>
+        ) : data ? (
+          <table className="settings-metrics-table">
+            <thead>
+              <tr>
+                <th>App</th>
+                <th className="settings-metrics-num">Events</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.app_events_24h.map(row => (
+                <tr key={row.app_id}>
+                  <td>{row.app_name}</td>
+                  <td className="settings-metrics-num">{row.count.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
+// ── Users tab ─────────────────────────────────────────────────────────────────
+
+function UsersTab() {
+  const [userList, setUserList] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  // Create form state
+  const [newEmail, setNewEmail] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newRole, setNewRole] = useState<'admin' | 'member'>('member')
+  const [creating, setCreating] = useState(false)
+  const [createMsg, setCreateMsg] = useState('')
+
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const load = () => {
+    setLoading(true)
+    users.list()
+      .then(res => setUserList(res.data ?? []))
+      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load users'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleCreate = async () => {
+    if (!newEmail || !newPassword) {
+      setCreateMsg('Email and password are required.')
+      return
+    }
+    setCreating(true)
+    setCreateMsg('')
+    try {
+      await users.create({ email: newEmail, password: newPassword, role: newRole })
+      setNewEmail('')
+      setNewPassword('')
+      setNewRole('member')
+      setCreateMsg('User created.')
+      load()
+    } catch (e: unknown) {
+      setCreateMsg(e instanceof Error ? e.message : 'Create failed')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id)
+    try {
+      await users.delete(id)
+      setUserList(prev => prev.filter(u => u.id !== id))
+    } catch {
+      // ignore — keep list unchanged
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  return (
+    <div className="tab-content">
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Users</span>
+        </div>
+        {loading ? (
+          <div className="settings-placeholder">Loading…</div>
+        ) : error ? (
+          <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{error}</div>
+        ) : userList.length === 0 ? (
+          <div className="settings-placeholder">No users yet.</div>
+        ) : (
+          <div className="apps-list">
+            {userList.map(u => (
+              <div key={u.id} className="app-row">
+                <div>
+                  <span className="app-row-name">{u.email}</span>
+                  <span className="app-pill-type" style={{ marginLeft: 8 }}>{u.role}</span>
+                </div>
+                <div className="app-row-actions">
+                  <span className="settings-kv-val" style={{ fontSize: '0.8em', marginRight: 8 }}>
+                    {new Date(u.created_at).toLocaleDateString()}
+                  </span>
+                  <button
+                    className="settings-btn danger settings-btn--sm"
+                    onClick={() => handleDelete(u.id)}
+                    disabled={deletingId === u.id}
+                  >
+                    {deletingId === u.id ? '…' : 'Remove'}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="settings-resource-row">
-            <span className="settings-resource-label">MEM</span>
-            <div className="settings-progress-track">
-              <div className="settings-progress-fill" style={{ width: '34%' }} />
-            </div>
-            <span className="settings-resource-pct">34%</span>
+        )}
+      </section>
+
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Invite User</span>
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-label">Email</label>
+          <input
+            className="settings-input"
+            placeholder="user@example.com"
+            value={newEmail}
+            onChange={e => setNewEmail(e.target.value)}
+          />
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-label">Password</label>
+          <input
+            className="settings-input"
+            type="password"
+            placeholder="Initial password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+          />
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-label">Role</label>
+          <div className="settings-segmented">
+            {(['member', 'admin'] as const).map(r => (
+              <button
+                key={r}
+                className={`settings-seg-btn${newRole === r ? ' active' : ''}`}
+                onClick={() => setNewRole(r)}
+              >
+                {r.charAt(0).toUpperCase() + r.slice(1)}
+              </button>
+            ))}
           </div>
-          <div className="settings-resource-row">
-            <span className="settings-resource-label">DISK</span>
-            <div className="settings-progress-track">
-              <div className="settings-progress-fill" style={{ width: '8%' }} />
-            </div>
-            <span className="settings-resource-pct">8%</span>
-          </div>
+        </div>
+        <div className="settings-actions">
+          <button className="settings-btn primary" onClick={handleCreate} disabled={creating}>
+            {creating ? 'Creating…' : 'Add User'}
+          </button>
+          {createMsg && <span className="settings-status-msg">{createMsg}</span>}
         </div>
       </section>
     </div>
@@ -530,6 +737,7 @@ export function Settings() {
         {activeTab === 'apps' && <AppsTab />}
         {activeTab === 'notifications' && <NotificationsTab />}
         {activeTab === 'metrics' && <MetricsTab />}
+        {activeTab === 'users' && <UsersTab />}
       </div>
     </>
   )
