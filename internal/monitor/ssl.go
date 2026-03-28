@@ -30,8 +30,7 @@ func NewSSLChecker(store *repo.Store) *SSLChecker {
 // cache — no outbound TLS connection is made. Otherwise the existing standalone
 // mode dials the target and reads the cert off the TLS handshake.
 //
-// On a status transition an event is created, but only when the check is
-// linked to an app (events require a valid app_id).
+// On a status transition an event is always created. app_id is optional.
 func (s *SSLChecker) Run(ctx context.Context, check *models.MonitorCheck) error {
 	if check.SSLSource != nil && *check.SSLSource == "traefik" {
 		return s.runTraefikSSL(ctx, check)
@@ -103,7 +102,7 @@ func (s *SSLChecker) runTraefikSSL(ctx context.Context, check *models.MonitorChe
 	}
 
 	prevStatus := check.LastStatus
-	if prevStatus != "" && prevStatus != newStatus && check.AppID != "" {
+	if prevStatus != "" && prevStatus != newStatus {
 		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, daysRemaining, now); evErr != nil {
 			log.Printf("ssl checker (traefik): create event for check %s: %v", check.ID, evErr)
 		}
@@ -142,7 +141,7 @@ func (s *SSLChecker) runStandaloneSSL(ctx context.Context, check *models.Monitor
 	prevStatus := check.LastStatus
 	newStatus := result.Status
 
-	if prevStatus != "" && prevStatus != newStatus && check.AppID != "" {
+	if prevStatus != "" && prevStatus != newStatus {
 		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, days, now); evErr != nil {
 			log.Printf("ssl checker: create event for check %s: %v", check.ID, evErr)
 		}

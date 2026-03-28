@@ -34,6 +34,7 @@ func (h *ChecksHandler) Routes(r chi.Router) {
 	r.Put("/checks/{id}", h.Update)
 	r.Delete("/checks/{id}", h.Delete)
 	r.Post("/checks/{id}/run", h.Run)
+	r.Get("/checks/{id}/events", h.ListEvents)
 }
 
 // --- request / response types ---
@@ -47,8 +48,10 @@ type checkRequest struct {
 	ExpectedStatus int     `json:"expected_status"`
 	SSLWarnDays    int     `json:"ssl_warn_days"`
 	SSLCritDays    int     `json:"ssl_crit_days"`
-	SSLSource      *string `json:"ssl_source"`       // "traefik" | "standalone" | nil
-	IntegrationID  *string `json:"integration_id"`   // required when ssl_source == "traefik"
+	SSLSource      *string `json:"ssl_source"`     // "traefik" | "standalone" | nil
+	IntegrationID  *string `json:"integration_id"` // required when ssl_source == "traefik"
+	Enabled        *bool   `json:"enabled"`         // nil = no change, false = disable, true = enable
+	SkipTLSVerify  *bool   `json:"skip_tls_verify"` // nil = no change; for url checks only
 }
 
 type listChecksResponse struct {
@@ -130,6 +133,8 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		critDays = 7
 	}
 
+	skipTLS := req.SkipTLSVerify != nil && *req.SkipTLSVerify
+
 	check := &models.MonitorCheck{
 		ID:             uuid.New().String(),
 		AppID:          req.AppID,
@@ -142,6 +147,7 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		SSLCritDays:    critDays,
 		SSLSource:      req.SSLSource,
 		IntegrationID:  req.IntegrationID,
+		SkipTLSVerify:  skipTLS,
 		Enabled:        true,
 		CreatedAt:      time.Now().UTC(),
 	}
@@ -219,13 +225,21 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.IntegrationID != nil {
 		existing.IntegrationID = req.IntegrationID
 	}
+	if req.Enabled != nil {
+		existing.Enabled = *req.Enabled
+	}
+	if req.SkipTLSVerify != nil {
+		existing.SkipTLSVerify = *req.SkipTLSVerify
+	}
 
-	// Re-validate the merged state.
+	// Re-validate the merged state. Include SSLSource so Traefik-mode checks
+	// are not incorrectly rejected for using a bare domain target.
 	merged := checkRequest{
 		Name:         existing.Name,
 		Type:         existing.Type,
 		Target:       existing.Target,
 		IntervalSecs: existing.IntervalSecs,
+		SSLSource:    existing.SSLSource,
 	}
 	if msg := validateCheck(merged); msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
@@ -271,7 +285,7 @@ func (h *ChecksHandler) Run(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays)
+	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays, check.SkipTLSVerify)
 	if runErr != nil {
 		writeError(w, http.StatusInternalServerError, runErr.Error())
 		return
@@ -285,8 +299,8 @@ func (h *ChecksHandler) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create an event if the status changed to non-up and check is associated with an app.
-	if result.Status != "up" && result.Status != prevStatus && check.AppID != "" {
+	// Create an event on status change (always — app_id is optional).
+	if result.Status != prevStatus {
 		h.createStatusEvent(r.Context(), check, result)
 	}
 
@@ -297,13 +311,42 @@ func (h *ChecksHandler) Run(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// createStatusEvent records a monitor check failure as an app event.
+// ListEvents returns recent status-change events for a specific check: GET /api/v1/checks/{id}/events
+func (h *ChecksHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.checks.Get(r.Context(), id); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "check not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	events, _, err := h.events.List(r.Context(), repo.ListFilter{
+		CheckID: id,
+		Limit:   50,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data":  events,
+		"total": len(events),
+	})
+}
+
+// createStatusEvent records a monitor check status change as an event.
+// app_id is optional — checks not linked to an app still generate events.
 func (h *ChecksHandler) createStatusEvent(ctx context.Context, check *models.MonitorCheck, result monitor.Result) {
-	severity := "error"
-	if result.Status == "warn" {
+	severity := "info"
+	if result.Status == "down" || result.Status == "critical" {
+		severity = "error"
+	} else if result.Status == "warn" {
 		severity = "warn"
 	}
-	displayText := check.Name + " check status: " + result.Status
+	displayText := check.Name + " — " + result.Status
 
 	event := &models.Event{
 		ID:          uuid.New().String(),
@@ -312,7 +355,7 @@ func (h *ChecksHandler) createStatusEvent(ctx context.Context, check *models.Mon
 		Severity:    severity,
 		DisplayText: displayText,
 		RawPayload:  string(result.Details),
-		Fields:      `{"source":"monitor","check_id":"` + check.ID + `","status":"` + result.Status + `"}`,
+		Fields:      `{"source":"monitor","check_id":"` + check.ID + `","check_type":"` + check.Type + `","status":"` + result.Status + `"}`,
 	}
 	// Log failure but don't fail the response.
 	_ = h.events.Create(ctx, event)

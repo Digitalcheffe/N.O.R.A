@@ -15,6 +15,7 @@ import (
 // ListFilter constrains an event list query. Zero values mean "no filter".
 type ListFilter struct {
 	AppID    string
+	CheckID  string   // filter by json_extract(fields, '$.check_id')
 	Severity []string
 	Since    *time.Time
 	Until    *time.Time
@@ -123,6 +124,11 @@ func buildWhere(f ListFilter) (clause string, args []interface{}) {
 	if f.AppID != "" {
 		parts = append(parts, "e.app_id = ?")
 		args = append(args, f.AppID)
+	}
+
+	if f.CheckID != "" {
+		parts = append(parts, "json_extract(e.fields, '$.check_id') = ?")
+		args = append(args, f.CheckID)
 	}
 
 	if len(f.Severity) > 0 {

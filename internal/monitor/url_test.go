@@ -233,8 +233,9 @@ func TestURLChecker_DefaultExpected200(t *testing.T) {
 	}
 }
 
-// TestURLChecker_NoEventWithoutApp verifies no event is created for app-less checks.
-func TestURLChecker_NoEventWithoutApp(t *testing.T) {
+// TestURLChecker_EventWithoutApp verifies a status-change event IS created for
+// app-less checks (app_id nullable; events queryable by check_id).
+func TestURLChecker_EventWithoutApp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -244,13 +245,16 @@ func TestURLChecker_NoEventWithoutApp(t *testing.T) {
 	events := &mockEventRepo{}
 	checker := newURLChecker(checks, events)
 
-	check := makeURLCheck(srv.URL, "up", "", 200) // no AppID
+	check := makeURLCheck(srv.URL, "up", "", 200) // no AppID, up→down transition
 	if err := checker.Run(context.Background(), check); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events.created) != 0 {
-		t.Errorf("expected no events for check without app, got %d", len(events.created))
+	if len(events.created) != 1 {
+		t.Errorf("expected 1 event for check without app on status change, got %d", len(events.created))
+	}
+	if events.created[0].AppID != "" {
+		t.Errorf("expected empty app_id on event, got %s", events.created[0].AppID)
 	}
 }
 

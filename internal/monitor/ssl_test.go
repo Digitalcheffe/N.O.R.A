@@ -168,19 +168,23 @@ func TestSSLChecker_Recovery(t *testing.T) {
 	}
 }
 
-// TestSSLChecker_NoEventWithoutApp verifies no event is created for checks not linked to an app.
-func TestSSLChecker_NoEventWithoutApp(t *testing.T) {
+// TestSSLChecker_EventWithoutApp verifies a status-change event IS created for
+// checks not linked to an app (app_id nullable; events queryable by check_id).
+func TestSSLChecker_EventWithoutApp(t *testing.T) {
 	checks := &mockCheckRepo{}
 	events := &mockEventRepo{}
 	checker := newSSLChecker(checks, events, fakeSSLRunner("warn", 20, ""))
 
-	check := makeSSLCheck("https://example.com", "up", "", 30, 7) // no AppID
+	check := makeSSLCheck("https://example.com", "up", "", 30, 7) // no AppID, up→warn transition
 	if err := checker.Run(context.Background(), check); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(events.created) != 0 {
-		t.Errorf("expected no events for check without app, got %d", len(events.created))
+	if len(events.created) != 1 {
+		t.Errorf("expected 1 event for check without app on status change, got %d", len(events.created))
+	}
+	if events.created[0].AppID != "" {
+		t.Errorf("expected empty app_id on event, got %s", events.created[0].AppID)
 	}
 }
 

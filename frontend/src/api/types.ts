@@ -101,7 +101,7 @@ export interface TimeseriesFilter {
 // ── Monitor Checks ──────────────────────────────────────────────────────────
 
 export type CheckType = 'ping' | 'url' | 'ssl'
-export type CheckStatus = 'up' | 'warn' | 'down'
+export type CheckStatus = 'up' | 'warn' | 'down' | 'critical'
 export type SSLSource = 'traefik' | 'standalone'
 
 export interface MonitorCheck {
@@ -116,6 +116,7 @@ export interface MonitorCheck {
   ssl_crit_days: number
   ssl_source: SSLSource | null
   integration_id: string | null
+  skip_tls_verify: boolean
   enabled: boolean
   last_checked_at: string | null
   last_status: CheckStatus | null
@@ -134,6 +135,7 @@ export interface CreateCheckInput {
   ssl_crit_days?: number
   ssl_source?: SSLSource
   integration_id?: string
+  skip_tls_verify?: boolean
   enabled?: boolean
 }
 

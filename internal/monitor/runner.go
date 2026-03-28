@@ -12,6 +12,16 @@ import (
 	"time"
 )
 
+// tlsTransport returns an http.Transport with optional InsecureSkipVerify.
+func tlsTransport(skipVerify bool) *http.Transport {
+	if !skipVerify {
+		return &http.Transport{}
+	}
+	return &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+	}
+}
+
 // Result is the outcome of a single check execution.
 type Result struct {
 	Status    string          `json:"status"`     // up | warn | down
@@ -62,14 +72,16 @@ func RunPing(ctx context.Context, target string) Result {
 }
 
 // RunURL executes an HTTP check against target, verifying the response status code.
-func RunURL(ctx context.Context, target string, expectedStatus int) Result {
+// Set skipTLSVerify to true for services using self-signed certificates.
+func RunURL(ctx context.Context, target string, expectedStatus int, skipTLSVerify bool) Result {
 	now := time.Now().UTC()
 	if expectedStatus == 0 {
 		expectedStatus = 200
 	}
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout:   10 * time.Second,
+		Transport: tlsTransport(skipTLSVerify),
 		// Don't follow redirects — check the actual status code returned.
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -173,12 +185,13 @@ func RunSSL(ctx context.Context, target string, warnDays, critDays int) Result {
 // Run dispatches a check by type and returns the result.
 // checkType must be one of "ping", "url", "ssl".
 // expectedStatus is used for url checks; warnDays/critDays for ssl checks.
-func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays, critDays int) (Result, error) {
+// skipTLSVerify applies only to url checks (ignore self-signed cert errors).
+func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays, critDays int, skipTLSVerify bool) (Result, error) {
 	switch checkType {
 	case "ping":
 		return RunPing(ctx, target), nil
 	case "url":
-		return RunURL(ctx, target, expectedStatus), nil
+		return RunURL(ctx, target, expectedStatus, skipTLSVerify), nil
 	case "ssl":
 		return RunSSL(ctx, target, warnDays, critDays), nil
 	default:
