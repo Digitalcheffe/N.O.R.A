@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { apps as appsApi, appTemplates as templatesApi } from '../api/client'
 import type { App, AppTemplate } from '../api/types'
+import '../styles/Modal.css'
 import './Apps.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -25,9 +26,50 @@ const CAPABILITY_LABEL: Record<string, string> = {
   limited:      'Limited',
 }
 
+// ── Confirm Delete Modal ──────────────────────────────────────────────────────
+
+interface ConfirmDeleteProps {
+  appName: string
+  onCancel: () => void
+  onConfirm: () => void
+  deleting: boolean
+  error: string
+}
+
+function ConfirmDeleteModal({ appName, onCancel, onConfirm, deleting, error }: ConfirmDeleteProps) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal" style={{ width: 400 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title modal-title-danger">Delete App</div>
+          <div className="modal-subtitle">
+            This will permanently delete <strong style={{ color: 'var(--text)' }}>{appName}</strong> and all its events and metrics. This cannot be undone.
+          </div>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="modal-body">
+          {error && <div className="modal-error">{error}</div>}
+        </div>
+        <div className="modal-footer">
+          <button className="modal-btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="modal-btn-danger" onClick={onConfirm} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Delete App'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── AddApp Modal ──────────────────────────────────────────────────────────────
 
-type Step = 'name' | 'template' | 'config' | 'done'
+type AddStep = 'name' | 'template' | 'config' | 'done'
 
 interface AddAppModalProps {
   onClose: () => void
@@ -36,34 +78,26 @@ interface AddAppModalProps {
 
 function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
   const navigate = useNavigate()
-  const [step, setStep] = useState<Step>('name')
+  const [step, setStep] = useState<AddStep>('name')
 
-  // Step 1 — name
   const [appName, setAppName] = useState('')
   const nameRef = useRef<HTMLInputElement>(null)
 
-  // Step 2 — template
   const [templates, setTemplates] = useState<AppTemplate[]>([])
   const [templatesLoading, setTemplatesLoading] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<AppTemplate | null>(null)
 
-  // Step 3 — config
   const [baseUrl, setBaseUrl] = useState('')
   const [monitorUrl, setMonitorUrl] = useState('')
   const [rateLimit, setRateLimit] = useState('0')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
-  // Step 4 — done
   const [createdApp, setCreatedApp] = useState<App | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // Focus name input on mount
-  useEffect(() => {
-    nameRef.current?.focus()
-  }, [])
+  useEffect(() => { nameRef.current?.focus() }, [])
 
-  // Load templates when moving to step 2
   useEffect(() => {
     if (step !== 'template') return
     setTemplatesLoading(true)
@@ -73,33 +107,19 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
       .finally(() => setTemplatesLoading(false))
   }, [step])
 
-  // Close on Escape
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
-    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  function handleNameNext() {
-    if (!appName.trim()) return
-    setStep('template')
-  }
-
-  function handleTemplateSelect(tmpl: AppTemplate | null) {
-    setSelectedTemplate(tmpl)
-    setStep('config')
-  }
 
   async function handleCreate() {
     setSubmitError('')
     setSubmitting(true)
     try {
       const config: Record<string, unknown> = {}
-      if (baseUrl.trim()) config.base_url = baseUrl.trim()
+      if (baseUrl.trim())    config.base_url    = baseUrl.trim()
       if (monitorUrl.trim()) config.monitor_url = monitorUrl.trim()
-
       const app = await appsApi.create({
         name: appName.trim(),
         profile_id: selectedTemplate?.id,
@@ -116,7 +136,7 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
     }
   }
 
-  function webhookUrl(token: string): string {
+  function webhookUrl(token: string) {
     return `${window.location.origin}/api/v1/ingest/${token}`
   }
 
@@ -129,18 +149,11 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
   }
 
   function handleAddAnother() {
-    setStep('name')
-    setAppName('')
-    setSelectedTemplate(null)
-    setBaseUrl('')
-    setMonitorUrl('')
-    setRateLimit('0')
-    setCreatedApp(null)
-    setCopied(false)
-    setSubmitError('')
+    setStep('name'); setAppName(''); setSelectedTemplate(null)
+    setBaseUrl(''); setMonitorUrl(''); setRateLimit('0')
+    setCreatedApp(null); setCopied(false); setSubmitError('')
   }
 
-  // Group templates by category
   const grouped = templates.reduce<Record<string, AppTemplate[]>>((acc, t) => {
     if (!acc[t.category]) acc[t.category] = []
     acc[t.category].push(t)
@@ -155,7 +168,6 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
 
-        {/* ── Step: name ── */}
         {step === 'name' && (
           <>
             <div className="modal-header">
@@ -171,23 +183,18 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
                 placeholder="e.g. Sonarr, Home Assistant…"
                 value={appName}
                 onChange={e => setAppName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleNameNext()}
+                onKeyDown={e => e.key === 'Enter' && appName.trim() && setStep('template')}
               />
             </div>
             <div className="modal-footer">
               <button className="modal-btn-ghost" onClick={onClose}>Cancel</button>
-              <button
-                className="modal-btn-primary"
-                onClick={handleNameNext}
-                disabled={!appName.trim()}
-              >
+              <button className="modal-btn-primary" onClick={() => setStep('template')} disabled={!appName.trim()}>
                 Next →
               </button>
             </div>
           </>
         )}
 
-        {/* ── Step: template ── */}
         {step === 'template' && (
           <>
             <div className="modal-header">
@@ -196,16 +203,14 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
               <button className="modal-close" onClick={onClose}>✕</button>
             </div>
             <div className="modal-body modal-body-templates">
-              {/* Generic / no-template option */}
               <div className="tmpl-group-label">Generic</div>
               <div className="tmpl-grid">
-                <button className="tmpl-card" onClick={() => handleTemplateSelect(null)}>
+                <button className="tmpl-card" onClick={() => { setSelectedTemplate(null); setStep('config') }}>
                   <div className="tmpl-icon">⚡</div>
                   <div className="tmpl-name">Generic Webhook</div>
                   <div className="tmpl-desc">Raw JSON ingest, no field mapping</div>
                 </button>
               </div>
-
               {templatesLoading ? (
                 <div className="tmpl-loading">Loading templates…</div>
               ) : (
@@ -214,7 +219,7 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
                     <div className="tmpl-group-label">{cat}</div>
                     <div className="tmpl-grid">
                       {items.map(t => (
-                        <button key={t.id} className="tmpl-card" onClick={() => handleTemplateSelect(t)}>
+                        <button key={t.id} className="tmpl-card" onClick={() => { setSelectedTemplate(t); setStep('config') }}>
                           <div className="tmpl-icon">{monogram(t.name)}</div>
                           <div className="tmpl-name">{t.name}</div>
                           <div className="tmpl-cap">{CAPABILITY_LABEL[t.capability] ?? t.capability}</div>
@@ -232,17 +237,12 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
           </>
         )}
 
-        {/* ── Step: config ── */}
         {step === 'config' && (
           <>
             <div className="modal-header">
-              <div className="modal-title">
-                Configure{selectedTemplate ? ` ${selectedTemplate.name}` : ' App'}
-              </div>
+              <div className="modal-title">Configure{selectedTemplate ? ` ${selectedTemplate.name}` : ' App'}</div>
               <div className="modal-subtitle">
-                {selectedTemplate
-                  ? selectedTemplate.description
-                  : 'Set optional details for this app connection'}
+                {selectedTemplate ? selectedTemplate.description : 'Set optional details for this app connection'}
               </div>
               <button className="modal-close" onClick={onClose}>✕</button>
             </div>
@@ -250,92 +250,62 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
               <label className="modal-label">
                 App URL <span className="modal-hint">(optional — enables the Launch button)</span>
               </label>
-              <input
-                className="modal-input"
-                placeholder="https://sonarr.yourdomain.com"
-                value={baseUrl}
-                onChange={e => setBaseUrl(e.target.value)}
-              />
+              <input className="modal-input" placeholder="https://sonarr.yourdomain.com"
+                value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
 
               {needsMonitor && (
                 <>
                   <label className="modal-label" style={{ marginTop: 16 }}>
                     Monitor URL <span className="modal-hint">(NORA will ping this to check uptime)</span>
                   </label>
-                  <input
-                    className="modal-input"
-                    placeholder="https://sonarr.yourdomain.com/ping"
-                    value={monitorUrl}
-                    onChange={e => setMonitorUrl(e.target.value)}
-                  />
+                  <input className="modal-input" placeholder="https://sonarr.yourdomain.com/ping"
+                    value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
                 </>
               )}
 
               <label className="modal-label" style={{ marginTop: 16 }}>
                 Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>
               </label>
-              <input
-                className="modal-input modal-input-sm"
-                type="number"
-                min="0"
-                value={rateLimit}
-                onChange={e => setRateLimit(e.target.value)}
-              />
+              <input className="modal-input modal-input-sm" type="number" min="0"
+                value={rateLimit} onChange={e => setRateLimit(e.target.value)} />
 
               {submitError && <div className="modal-error">{submitError}</div>}
             </div>
             <div className="modal-footer">
               <button className="modal-btn-ghost" onClick={() => setStep('template')}>← Back</button>
-              <button
-                className="modal-btn-primary"
-                onClick={handleCreate}
-                disabled={submitting}
-              >
+              <button className="modal-btn-primary" onClick={handleCreate} disabled={submitting}>
                 {submitting ? 'Creating…' : 'Create App'}
               </button>
             </div>
           </>
         )}
 
-        {/* ── Step: done ── */}
         {step === 'done' && createdApp && (
           <>
             <div className="modal-header">
               <div className="modal-title modal-title-success">✓ App Created</div>
               <div className="modal-subtitle">
-                Copy the webhook URL below and paste it into your app's notification settings
+                Copy the webhook URL and paste it into your app's notification settings
               </div>
               <button className="modal-close" onClick={onClose}>✕</button>
             </div>
             <div className="modal-body">
               <label className="modal-label">Webhook URL</label>
               <div className="webhook-url-row">
-                <input
-                  className="modal-input modal-input-mono"
-                  readOnly
-                  value={webhookUrl(createdApp.token)}
-                  onFocus={e => e.target.select()}
-                />
-                <button
-                  className={`webhook-copy-btn${copied ? ' copied' : ''}`}
-                  onClick={handleCopy}
-                >
+                <input className="modal-input modal-input-mono" readOnly
+                  value={webhookUrl(createdApp.token)} onFocus={e => e.target.select()} />
+                <button className={`webhook-copy-btn${copied ? ' copied' : ''}`} onClick={handleCopy}>
                   {copied ? '✓ Copied' : 'Copy'}
                 </button>
               </div>
               <div className="webhook-hint">
-                Send a POST request with a JSON body to this URL to ingest events.
-                {selectedTemplate && (
-                  <> The <strong>{selectedTemplate.name}</strong> template will parse and display them automatically.</>
-                )}
+                POST a JSON body to this URL to ingest events.
+                {selectedTemplate && <> The <strong>{selectedTemplate.name}</strong> template will parse them automatically.</>}
               </div>
             </div>
             <div className="modal-footer">
               <button className="modal-btn-ghost" onClick={handleAddAnother}>+ Add Another</button>
-              <button
-                className="modal-btn-primary"
-                onClick={() => navigate(`/apps/${createdApp.id}`)}
-              >
+              <button className="modal-btn-primary" onClick={() => navigate(`/apps/${createdApp.id}`)}>
                 View App →
               </button>
             </div>
@@ -353,7 +323,13 @@ export function Apps() {
   const navigate = useNavigate()
   const [appList, setAppList] = useState<App[]>([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
+
+  // card kebab state
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     appsApi.list()
@@ -362,17 +338,38 @@ export function Apps() {
       .finally(() => setLoading(false))
   }, [])
 
-  function handleCreated(app: App) {
-    setAppList(prev => [...prev, app])
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!openMenuId) return
+    function handler() { setOpenMenuId(null) }
+    window.addEventListener('click', handler)
+    return () => window.removeEventListener('click', handler)
+  }, [openMenuId])
+
+  async function handleDelete() {
+    if (!confirmDeleteId) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await appsApi.delete(confirmDeleteId)
+      setAppList(prev => prev.filter(a => a.id !== confirmDeleteId))
+      setConfirmDeleteId(null)
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete app')
+    } finally {
+      setDeleting(false)
+    }
   }
+
+  const confirmApp = appList.find(a => a.id === confirmDeleteId)
 
   return (
     <>
-      <Topbar title="Apps" onAdd={() => setShowModal(true)} />
+      <Topbar title="Apps" onAdd={() => setShowAdd(true)} />
       <div className="content">
         <div className="section-header">
           <span className="section-title">Configured Apps</span>
-          <button className="section-action" onClick={() => setShowModal(true)}>+ Add app</button>
+          <button className="section-action" onClick={() => setShowAdd(true)}>+ Add app</button>
         </div>
 
         <div className="widget-grid">
@@ -383,7 +380,7 @@ export function Apps() {
           ) : appList.length === 0 ? (
             <div className="apps-empty">
               No apps configured yet.{' '}
-              <button className="apps-empty-link" onClick={() => setShowModal(true)}>
+              <button className="apps-empty-link" onClick={() => setShowAdd(true)}>
                 Add your first app →
               </button>
             </div>
@@ -394,6 +391,29 @@ export function Apps() {
                 className="app-widget"
                 onClick={() => navigate(`/apps/${app.id}`)}
               >
+                {/* kebab menu button */}
+                <button
+                  className={`app-card-menu-btn${openMenuId === app.id ? ' open' : ''}`}
+                  title="Options"
+                  onClick={e => {
+                    e.stopPropagation()
+                    setOpenMenuId(prev => prev === app.id ? null : app.id)
+                  }}
+                >
+                  ···
+                </button>
+
+                {openMenuId === app.id && (
+                  <div className="app-card-dropdown" onClick={e => e.stopPropagation()}>
+                    <button className="card-dropdown-item" onClick={() => { setOpenMenuId(null); navigate(`/apps/${app.id}`) }}>
+                      ⚙ Settings
+                    </button>
+                    <button className="card-dropdown-item danger" onClick={() => { setOpenMenuId(null); setConfirmDeleteId(app.id) }}>
+                      🗑 Delete App
+                    </button>
+                  </div>
+                )}
+
                 <div className="app-widget-header">
                   <div className="app-icon">{monogram(app.name)}</div>
                   <div className="app-name">{app.name}</div>
@@ -410,13 +430,23 @@ export function Apps() {
         </div>
       </div>
 
-      {showModal && (
+      {showAdd && (
         <AddAppModal
-          onClose={() => setShowModal(false)}
+          onClose={() => setShowAdd(false)}
           onCreated={app => {
-            handleCreated(app)
-            setShowModal(false)
+            setAppList(prev => [...prev, app])
+            setShowAdd(false)
           }}
+        />
+      )}
+
+      {confirmDeleteId && confirmApp && (
+        <ConfirmDeleteModal
+          appName={confirmApp.name}
+          onCancel={() => { setConfirmDeleteId(null); setDeleteError('') }}
+          onConfirm={handleDelete}
+          deleting={deleting}
+          error={deleteError}
         />
       )}
     </>
