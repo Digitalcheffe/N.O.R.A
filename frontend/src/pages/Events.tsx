@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
+import { EventRow } from '../components/EventRow'
 import { events as eventsApi } from '../api/client'
 import type { Event, Severity } from '../api/types'
 import './Events.css'
@@ -16,12 +18,8 @@ function sinceFromTimeFilter(tf: TimeFilter): string {
   return d.toISOString()
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
 export function Events() {
+  const navigate = useNavigate()
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [severity, setSeverity] = useState<Severity | ''>('')
   const [eventList, setEventList] = useState<Event[]>([])
@@ -85,13 +83,12 @@ export function Events() {
           )}
 
           {!loading && !error && eventList.map((ev) => (
-            <div key={ev.id} className="event-row">
-              <span className="event-time">{formatTime(ev.received_at)}</span>
-              <span className={`severity-badge ${ev.severity}`} />
-              <span className="event-app">{ev.app_name}</span>
-              <span className="event-text">{ev.display_text}</span>
-              <span className={`event-sev-label ${ev.severity}`}>{ev.severity}</span>
-            </div>
+            <EventRow
+              key={ev.id}
+              event={ev}
+              appName={ev.app_name}
+              onAppClick={ev.app_id ? (id) => navigate(`/apps/${id}`) : undefined}
+            />
           ))}
         </div>
       </div>

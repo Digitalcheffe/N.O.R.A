@@ -160,7 +160,7 @@ func (r *sqliteEventRepo) List(ctx context.Context, f ListFilter) ([]models.Even
 
 	// Fetch the page. raw_payload is excluded from list results.
 	pageQ := `
-		SELECT e.id, e.app_id, COALESCE(a.name, '') AS app_name,
+		SELECT e.id, COALESCE(e.app_id, '') AS app_id, COALESCE(a.name, '') AS app_name,
 		       e.received_at, e.severity, e.display_text, e.fields
 		FROM events e
 		LEFT JOIN apps a ON a.id = e.app_id` +
@@ -181,7 +181,7 @@ func (r *sqliteEventRepo) List(ctx context.Context, f ListFilter) ([]models.Even
 
 func (r *sqliteEventRepo) Get(ctx context.Context, id string) (*models.Event, error) {
 	const q = `
-		SELECT e.id, e.app_id, COALESCE(a.name, '') AS app_name,
+		SELECT e.id, COALESCE(e.app_id, '') AS app_id, COALESCE(a.name, '') AS app_name,
 		       e.received_at, e.severity, e.display_text, e.raw_payload, e.fields
 		FROM events e
 		LEFT JOIN apps a ON a.id = e.app_id
@@ -353,7 +353,7 @@ func (r *sqliteEventRepo) LatestPerApp(ctx context.Context, appIDs []string) (ma
 	}
 
 	q := `
-		SELECT e.id, e.app_id, COALESCE(a.name, '') AS app_name,
+		SELECT e.id, COALESCE(e.app_id, '') AS app_id, COALESCE(a.name, '') AS app_name,
 		       e.received_at, e.severity, e.display_text, e.fields
 		FROM events e
 		LEFT JOIN apps a ON a.id = e.app_id

@@ -19,9 +19,11 @@ function formatEventTime(iso: string): string {
 interface Props {
   event: Event
   appName: string
+  /** When provided, the app name becomes a clickable link */
+  onAppClick?: (appId: string) => void
 }
 
-export function EventRow({ event, appName }: Props) {
+export function EventRow({ event, appName, onAppClick }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
   const [fetching, setFetching] = useState(false)
@@ -32,7 +34,9 @@ export function EventRow({ event, appName }: Props) {
       setFetching(true)
       eventsApi
         .get(event.id)
-        .then(e => setDetail((e as Event & { raw_payload: Record<string, unknown> }).raw_payload ?? e.fields ?? {}))
+        .then(e => setDetail((e.raw_payload && Object.keys(e.raw_payload).length > 0)
+          ? e.raw_payload as Record<string, unknown>
+          : e.fields as Record<string, unknown> ?? {}))
         .catch(() => setDetail({}))
         .finally(() => setFetching(false))
     }
@@ -44,7 +48,13 @@ export function EventRow({ event, appName }: Props) {
       <div className="event-row" onClick={handleClick}>
         <div className="event-time">{formatEventTime(event.received_at)}</div>
         <div className={`severity-badge ${sev}`} />
-        <div className="event-app">{appName || event.app_id}</div>
+        <div
+          className={`event-app${onAppClick && event.app_id ? ' event-app-link' : ''}`}
+          onClick={onAppClick && event.app_id ? (e) => { e.stopPropagation(); onAppClick(event.app_id) } : undefined}
+          title={onAppClick && event.app_id ? `Go to ${appName}` : undefined}
+        >
+          {appName || '—'}
+        </div>
         <div className="event-text">{event.display_text}</div>
         <div className={`event-sev-label ${sev}`}>{sev}</div>
       </div>
