@@ -45,6 +45,12 @@
   justify-content: space-between;
 }
 
+.events-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
 .events-empty {
   padding: 40px;
   text-align: center;

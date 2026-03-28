@@ -65,6 +65,7 @@ export type Severity = 'debug' | 'info' | 'warn' | 'error' | 'critical'
 export interface Event {
   id: string
   app_id: string
+  app_name: string
   received_at: string
   severity: Severity
   display_text: string
