@@ -79,3 +79,13 @@
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
 }
+
+/* ── Mobile scroll area ── */
+.mobile-scroll-area {
+  padding-top: 52px;
+  padding-bottom: calc(56px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  min-height: 100vh;
+}
