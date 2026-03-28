@@ -163,6 +163,9 @@ func mapSeverity(fields map[string]string, severityField string, mapping map[str
 
 // renderTemplate substitutes {field_name} tokens in tmpl with values from fields.
 // Returns "Event received" if tmpl is empty.
+// If unresolved {tokens} remain after substitution (payload didn't match this
+// template shape), falls back to the event_type field value or "Event received"
+// so every event always gets a clean, readable display_text.
 func renderTemplate(tmpl string, fields map[string]string) string {
 	if tmpl == "" {
 		return "Event received"
@@ -170,6 +173,14 @@ func renderTemplate(tmpl string, fields map[string]string) string {
 	result := tmpl
 	for k, v := range fields {
 		result = strings.ReplaceAll(result, "{"+k+"}", v)
+	}
+	// Unresolved tokens mean the payload shape didn't match this template.
+	// Fall back to a clean label rather than leaving raw {placeholders}.
+	if strings.Contains(result, "{") {
+		if et := fields["event_type"]; et != "" {
+			return et
+		}
+		return "Event received"
 	}
 	return result
 }

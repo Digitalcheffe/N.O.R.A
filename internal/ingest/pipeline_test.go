@@ -170,6 +170,60 @@ func TestProcess_ProfileFieldExtraction(t *testing.T) {
 	}
 }
 
+// TestProcess_UnmatchedEventType verifies that events whose payload doesn't
+// satisfy the display template (e.g. a Sonarr "Test" ping with no series data)
+// are still persisted and get a clean display_text instead of raw {placeholders}.
+func TestProcess_UnmatchedEventType(t *testing.T) {
+	store := newTestStore(t)
+	token := "unmatched-token"
+	app := &models.App{
+		ID:        uuid.NewString(),
+		Name:      "sonarr",
+		Token:     token,
+		ProfileID: "sonarr",
+		RateLimit: 100,
+		Config:    models.ConfigJSON("{}"),
+	}
+	if err := store.Apps.Create(context.Background(), app); err != nil {
+		t.Fatalf("seed app: %v", err)
+	}
+
+	// Template designed for Download events — won't resolve for a Test ping.
+	tmpl := &apptemplate.AppTemplate{
+		Webhook: apptemplate.Webhook{
+			FieldMappings: map[string]string{
+				"event_type":   "$.eventType",
+				"series_title": "$.series.title",
+			},
+			SeverityField:   "event_type",
+			SeverityMapping: map[string]string{"Download": "info"},
+			DisplayTemplate: "{event_type} — {series_title}",
+		},
+	}
+
+	loader := &stubLoader{template: tmpl}
+	limiter := ingest.NewRateLimiter()
+	// Sonarr Test ping: has eventType but no series data.
+	payload := []byte(`{"eventType":"Test","instanceName":"Sonarr"}`)
+
+	result, err := ingest.Process(context.Background(), store, loader, limiter, token, payload)
+	if err != nil {
+		t.Fatalf("unexpected error — event must always be persisted: %v", err)
+	}
+
+	ev, err := store.Events.Get(context.Background(), result.EventID)
+	if err != nil {
+		t.Fatalf("get event: %v", err)
+	}
+	// Must fall back to event_type, not leave raw {placeholders} in display_text.
+	if ev.DisplayText != "Test" {
+		t.Errorf("display_text: want 'Test' got %q", ev.DisplayText)
+	}
+	if ev.Severity != "info" {
+		t.Errorf("severity: want info got %s", ev.Severity)
+	}
+}
+
 // stubLoader returns a fixed app template for any templateID.
 type stubLoader struct {
 	template *apptemplate.AppTemplate
