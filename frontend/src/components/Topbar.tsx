@@ -13,9 +13,9 @@ interface TopbarProps {
 }
 
 const STATUS_LABELS: Record<OverallStatus, string> = {
-  ok: 'All systems normal',
-  warn: 'Degraded',
-  down: 'Outage detected',
+  ok: 'Healthy',
+  warn: 'Warning',
+  down: 'Alert',
 }
 
 export function Topbar({
