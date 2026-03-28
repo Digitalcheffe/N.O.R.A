@@ -2,7 +2,6 @@ package ingest_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 
@@ -36,7 +35,7 @@ func seedApp(t *testing.T, store *repo.Store, token string, rateLimit int) model
 		Token:     token,
 		ProfileID: "",
 		RateLimit: rateLimit,
-		Config:    json.RawMessage("{}"),
+		Config:    models.ConfigJSON("{}"),
 	}
 	if err := store.Apps.Create(context.Background(), app); err != nil {
 		t.Fatalf("seed app: %v", err)
@@ -127,7 +126,7 @@ func TestProcess_ProfileFieldExtraction(t *testing.T) {
 		Token:     token,
 		ProfileID: "sonarr",
 		RateLimit: 100,
-		Config:    json.RawMessage("{}"),
+		Config:    models.ConfigJSON("{}"),
 	}
 	if err := store.Apps.Create(context.Background(), app); err != nil {
 		t.Fatalf("seed app: %v", err)
