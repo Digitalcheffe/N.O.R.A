@@ -101,7 +101,7 @@ func TestRunEventRetention_NeverDeletesRollups(t *testing.T) {
 	// Create an app and a rollup row.
 	app := &models.App{
 		ID: uuid.NewString(), Name: "test-app", Token: uuid.NewString(),
-		Config: "{}", RateLimit: 100,
+		Config: models.ConfigJSON("{}"), RateLimit: 100,
 	}
 	if err := store.Apps.Create(ctx, app); err != nil {
 		t.Fatalf("create app: %v", err)

@@ -85,9 +85,9 @@ func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := "{}"
+	cfg := models.ConfigJSON("{}")
 	if len(req.Config) > 0 {
-		cfg = string(req.Config)
+		cfg = models.ConfigJSON(req.Config)
 	}
 	rateLimit := req.RateLimit
 	if rateLimit <= 0 {
@@ -154,7 +154,7 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		existing.ProfileID = req.ProfileID
 	}
 	if len(req.Config) > 0 {
-		existing.Config = string(req.Config)
+		existing.Config = models.ConfigJSON(req.Config)
 	}
 	if req.RateLimit > 0 {
 		existing.RateLimit = req.RateLimit

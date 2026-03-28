@@ -18,7 +18,7 @@ func createApp(t *testing.T, store *repo.Store) string {
 		ID:        uuid.NewString(),
 		Name:      "test-app-" + uuid.NewString()[:8],
 		Token:     uuid.NewString(),
-		Config:    "{}",
+		Config:    models.ConfigJSON("{}"),
 		RateLimit: 100,
 	}
 	if err := store.Apps.Create(context.Background(), app); err != nil {

@@ -10,7 +10,19 @@
   border-radius: 8px;
 }
 
-/* App widget — extracted from dashboard mockup */
+.apps-empty-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* ── App widget ── */
+
 .app-widget {
   background: var(--bg2);
   border: 1px solid var(--border);
@@ -29,9 +41,7 @@
 .app-widget::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   height: 2px;
   background: var(--green);
   opacity: 0;
@@ -90,6 +100,20 @@
 .app-status.down    { color: var(--red); }
 .app-status.unknown { color: var(--text3); }
 
+.app-profile-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 3px;
+  padding: 2px 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
 .app-widget-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -126,4 +150,72 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── Card kebab menu ── */
+
+.app-card-menu-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text3);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  z-index: 2;
+  line-height: 1;
+}
+
+.app-widget:hover .app-card-menu-btn { opacity: 1; }
+.app-card-menu-btn:hover { background: var(--bg4); color: var(--text); }
+.app-card-menu-btn.open  { opacity: 1; color: var(--text); background: var(--bg4); }
+
+.app-card-dropdown {
+  position: absolute;
+  top: 36px;
+  right: 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 4px;
+  z-index: 10;
+  min-width: 130px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: modalSlideUp 0.12s ease;
+}
+
+.card-dropdown-item {
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  text-align: left;
+  font-size: 12px;
+  font-family: var(--sans);
+  color: var(--text2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-dropdown-item:hover { background: var(--bg4); color: var(--text); }
+.card-dropdown-item.danger { color: var(--red); }
+.card-dropdown-item.danger:hover { background: var(--red-dim); color: var(--red); }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
