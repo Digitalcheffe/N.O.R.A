@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Topbar } from '../components/Topbar'
 import { SSLRow } from '../components/SSLRow'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
-import type { MonitorCheck, CreateCheckInput, CheckType, SSLCert, InfraIntegration, TraefikCert, SSLSource } from '../api/types'
+import type { MonitorCheck, CreateCheckInput, CheckType, SSLCert, InfraIntegration, TraefikCert, SSLSource, Event } from '../api/types'
 import './Checks.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -18,7 +18,8 @@ type FormFields = {
   ssl_crit_days: string
   ssl_source: SSLSource
   integration_id: string
-  traefik_domain: string   // domain selection when ssl_source === 'traefik'
+  traefik_domain: string
+  skip_tls_verify: string  // 'true' | 'false'
 }
 
 const defaultForm: FormFields = {
@@ -32,23 +33,37 @@ const defaultForm: FormFields = {
   ssl_source: 'standalone',
   integration_id: '',
   traefik_domain: '',
+  skip_tls_verify: 'false',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function sslDaysFromResult(lastResult: string | null): number | null {
+  if (!lastResult) return null
+  try {
+    const r = JSON.parse(lastResult) as { days_remaining?: number }
+    return r.days_remaining ?? null
+  } catch {
+    return null
+  }
+}
+
 function statusLabel(check: MonitorCheck): string {
-  if (check.type === 'ssl') return 'SSL'
+  if (check.type === 'ssl') {
+    const days = sslDaysFromResult(check.last_result)
+    if (days != null) return `${days}d`
+    return 'SSL'
+  }
   if (check.last_status === 'up') return 'UP'
   if (check.last_status === 'down') return 'DOWN'
   if (check.last_status === 'warn') return 'WARN'
-  return '?'
+  return '—'
 }
 
-function statusClass(status: string | null, type: string): string {
-  if (type === 'ssl' && status === 'warn') return 'monitor-status-block warn'
+function statusClass(status: string | null): string {
   if (status === 'up') return 'monitor-status-block up'
   if (status === 'warn') return 'monitor-status-block warn'
-  if (status === 'down') return 'monitor-status-block down'
+  if (status === 'down' || status === 'critical') return 'monitor-status-block down'
   return 'monitor-status-block unknown'
 }
 
@@ -87,15 +102,6 @@ function extractSSLCerts(checkList: MonitorCheck[]): SSLCert[] {
       }
     })
     .sort((a, b) => a.days_remaining - b.days_remaining)
-}
-
-function formatResult(lastResult: string | null): string {
-  if (!lastResult) return 'No result yet'
-  try {
-    return JSON.stringify(JSON.parse(lastResult), null, 2)
-  } catch {
-    return lastResult
-  }
 }
 
 function validateForm(form: FormFields): string | null {
@@ -138,6 +144,7 @@ function checkToForm(check: MonitorCheck): FormFields {
     ssl_source: (check.ssl_source as SSLSource) ?? 'standalone',
     integration_id: check.integration_id ?? '',
     traefik_domain: check.ssl_source === 'traefik' ? check.target : '',
+    skip_tls_verify: check.skip_tls_verify ? 'true' : 'false',
   }
 }
 
@@ -152,6 +159,7 @@ function formToInput(form: FormFields, integrationID?: string): CreateCheckInput
   }
   if (form.type === 'url') {
     input.expected_status = parseInt(form.expected_status, 10)
+    input.skip_tls_verify = form.skip_tls_verify === 'true'
   }
   if (form.type === 'ssl') {
     input.ssl_warn_days = parseInt(form.ssl_warn_days, 10)
@@ -162,6 +170,71 @@ function formToInput(form: FormFields, integrationID?: string): CreateCheckInput
     }
   }
   return input
+}
+
+// ── Result display ────────────────────────────────────────────────────────────
+
+function renderCheckResult(check: MonitorCheck): ReactNode {
+  if (!check.last_result) return <span className="check-result-empty">No result recorded yet</span>
+  try {
+    const r = JSON.parse(check.last_result) as Record<string, unknown>
+    if (check.type === 'ping') {
+      return (
+        <div className="check-result-grid">
+          <span className="check-result-label">Latency</span>
+          <span className="check-result-value">{r.latency_ms != null ? `${r.latency_ms}ms` : '—'}</span>
+        </div>
+      )
+    }
+    if (check.type === 'url') {
+      return (
+        <div className="check-result-grid">
+          <span className="check-result-label">HTTP Status</span>
+          <span className="check-result-value">{r.status_code != null ? String(r.status_code) : '—'}</span>
+          <span className="check-result-label">Latency</span>
+          <span className="check-result-value">{r.latency_ms != null ? `${r.latency_ms}ms` : '—'}</span>
+          {!!r.error && <>
+            <span className="check-result-label">Error</span>
+            <span className="check-result-value check-result-error">{String(r.error)}</span>
+          </>}
+        </div>
+      )
+    }
+    if (check.type === 'ssl') {
+      if (r.error) return (
+        <div className="check-result-grid">
+          <span className="check-result-label">Error</span>
+          <span className="check-result-value check-result-error">{String(r.error)}</span>
+        </div>
+      )
+      const expiresStr = r.expires_at
+        ? new Date(r.expires_at as string).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+        : '—'
+      return (
+        <div className="check-result-grid">
+          <span className="check-result-label">Days remaining</span>
+          <span className="check-result-value">{r.days_remaining != null ? String(r.days_remaining) : '—'}</span>
+          <span className="check-result-label">Expires</span>
+          <span className="check-result-value">{expiresStr}</span>
+          {!!r.issuer && <>
+            <span className="check-result-label">Issuer</span>
+            <span className="check-result-value">{String(r.issuer)}</span>
+          </>}
+          {!!r.subject && <>
+            <span className="check-result-label">Subject</span>
+            <span className="check-result-value">{String(r.subject)}</span>
+          </>}
+        </div>
+      )
+    }
+  } catch { /* fall through */ }
+  return <span className="check-result-empty">{check.last_result}</span>
+}
+
+// ── Severity badge ────────────────────────────────────────────────────────────
+
+function severityBadge(severity: string) {
+  return <span className={`event-severity-badge ${severity}`}>{severity}</span>
 }
 
 // ── CheckForm component ───────────────────────────────────────────────────────
@@ -176,7 +249,6 @@ interface CheckFormProps {
   title: string
   submitLabel: string
   extraAction?: ReactNode
-  // Traefik context
   traefikIntegrations: InfraIntegration[]
   traefikCerts: TraefikCert[]
   onIntegrationChange: (integrationId: string) => void
@@ -327,18 +399,36 @@ function CheckForm({
             onChange={e => onChange('interval_secs', e.target.value)}
           />
         </div>
+
         {form.type === 'url' && (
-          <div className="form-field">
-            <div className="form-label">Expected Status</div>
-            <input
-              className="form-input"
-              type="number"
-              value={form.expected_status}
-              onChange={e => onChange('expected_status', e.target.value)}
-              placeholder="200"
-            />
-          </div>
+          <>
+            <div className="form-field">
+              <div className="form-label">Expected Status</div>
+              <input
+                className="form-input"
+                type="number"
+                value={form.expected_status}
+                onChange={e => onChange('expected_status', e.target.value)}
+                placeholder="200"
+              />
+            </div>
+            <div className="form-field form-field-full">
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  className="form-checkbox"
+                  checked={form.skip_tls_verify === 'true'}
+                  onChange={e => onChange('skip_tls_verify', e.target.checked ? 'true' : 'false')}
+                />
+                <span className="form-checkbox-text">
+                  Accept self-signed certificates
+                  <span className="form-checkbox-hint"> — skips TLS verification; use for internal services only</span>
+                </span>
+              </label>
+            </div>
+          </>
         )}
+
         {form.type === 'ssl' && (
           <>
             <div className="form-field">
@@ -380,13 +470,263 @@ function CheckForm({
   )
 }
 
+// ── Check card expand panel ───────────────────────────────────────────────────
+
+interface CheckDetailProps {
+  check: MonitorCheck
+  editForm: FormFields
+  editError: string | null
+  editSubmitting: boolean
+  deletingIds: Set<string>
+  runningIds: Set<string>
+  events: Event[]
+  eventsLoading: boolean
+  traefikIntegrations: InfraIntegration[]
+  traefikCerts: TraefikCert[]
+  onEditChange: (field: keyof FormFields, value: string) => void
+  onEditSubmit: () => void
+  onClose: () => void
+  onDelete: () => void
+  onRun: () => void
+  onIntegrationChange: (id: string) => void
+}
+
+function CheckDetail({
+  check,
+  editForm,
+  editError,
+  editSubmitting,
+  deletingIds,
+  runningIds,
+  events,
+  eventsLoading,
+  traefikIntegrations,
+  traefikCerts,
+  onEditChange,
+  onEditSubmit,
+  onClose,
+  onDelete,
+  onRun,
+  onIntegrationChange,
+}: CheckDetailProps) {
+  const [tab, setTab] = useState<'result' | 'history' | 'edit'>('result')
+
+  return (
+    <div className="check-detail-panel">
+      <div className="check-detail-tabs">
+        <button
+          className={`check-detail-tab${tab === 'result' ? ' active' : ''}`}
+          onClick={() => setTab('result')}
+        >
+          Last Result
+        </button>
+        <button
+          className={`check-detail-tab${tab === 'history' ? ' active' : ''}`}
+          onClick={() => setTab('history')}
+        >
+          History
+        </button>
+        <button
+          className={`check-detail-tab${tab === 'edit' ? ' active' : ''}`}
+          onClick={() => setTab('edit')}
+        >
+          Edit
+        </button>
+        <div className="check-detail-tab-actions">
+          <button
+            className={`check-run-btn${runningIds.has(check.id) ? ' running' : ''}`}
+            title="Run now"
+            onClick={e => { e.stopPropagation(); onRun() }}
+            disabled={runningIds.has(check.id)}
+          >
+            {runningIds.has(check.id) ? <span className="check-spinner" /> : '▶'}
+          </button>
+          <button className="check-detail-close" onClick={onClose} title="Close">✕</button>
+        </div>
+      </div>
+
+      {tab === 'result' && (
+        <div className="check-detail-content">
+          <div className="check-result-box">
+            {renderCheckResult(check)}
+          </div>
+          <div className="check-result-meta">
+            <span className="check-result-meta-label">Last checked</span>
+            <span className="check-result-meta-value">{check.last_checked_at
+              ? new Date(check.last_checked_at).toLocaleString()
+              : 'Never'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="check-detail-content">
+          {eventsLoading ? (
+            <div className="check-history-empty">Loading…</div>
+          ) : events.length === 0 ? (
+            <div className="check-history-empty">
+              No status-change events recorded yet. Events are created on first status transition.
+            </div>
+          ) : (
+            <div className="check-history-list">
+              {events.map(ev => (
+                <div key={ev.id} className="check-history-row">
+                  {severityBadge(ev.severity)}
+                  <span className="check-history-text">{ev.display_text}</span>
+                  <span className="check-history-time">{formatTimeAgo(ev.received_at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'edit' && (
+        <div className="check-detail-content">
+          <CheckForm
+            form={editForm}
+            onChange={onEditChange}
+            onSubmit={onEditSubmit}
+            onCancel={onClose}
+            error={editError}
+            submitting={editSubmitting}
+            title="Edit Check"
+            submitLabel="Save"
+            traefikIntegrations={traefikIntegrations}
+            traefikCerts={traefikCerts}
+            onIntegrationChange={onIntegrationChange}
+            extraAction={
+              <button
+                className="form-btn danger"
+                onClick={onDelete}
+                disabled={deletingIds.has(check.id)}
+                style={{ marginLeft: 'auto' }}
+              >
+                {deletingIds.has(check.id) ? 'Deleting…' : 'Delete'}
+              </button>
+            }
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Check card ────────────────────────────────────────────────────────────────
+
+interface CheckCardProps {
+  check: MonitorCheck
+  expanded: boolean
+  editForm: FormFields
+  editError: string | null
+  editSubmitting: boolean
+  deletingIds: Set<string>
+  runningIds: Set<string>
+  checkEvents: Event[]
+  checkEventsLoading: boolean
+  traefikIntegrations: InfraIntegration[]
+  traefikCerts: TraefikCert[]
+  onToggleExpand: () => void
+  onToggleEnabled: () => void
+  onEditChange: (field: keyof FormFields, value: string) => void
+  onEditSubmit: () => void
+  onDelete: () => void
+  onRun: () => void
+  onIntegrationChange: (id: string) => void
+}
+
+function CheckCard({
+  check,
+  expanded,
+  editForm,
+  editError,
+  editSubmitting,
+  deletingIds,
+  runningIds,
+  checkEvents,
+  checkEventsLoading,
+  traefikIntegrations,
+  traefikCerts,
+  onToggleExpand,
+  onToggleEnabled,
+  onEditChange,
+  onEditSubmit,
+  onDelete,
+  onRun,
+  onIntegrationChange,
+}: CheckCardProps) {
+  const disabled = !check.enabled
+
+  return (
+    <div className={`check-card-wrapper${expanded ? ' expanded' : ''}${disabled ? ' disabled' : ''}`}>
+      <div className={`check-card${expanded ? ' expanded' : ''}`} onClick={onToggleExpand}>
+
+        {/* Top row: status block + type badge */}
+        <div className="check-card-top">
+          <div className={statusClass(check.last_status)}>
+            {statusLabel(check)}
+          </div>
+          <span className={`check-type-badge check-type-${check.type}`}>
+            {check.type.toUpperCase()}
+          </span>
+          {disabled && <span className="check-paused-badge">PAUSED</span>}
+        </div>
+
+        {/* Name */}
+        <div className="check-card-name">{check.name}</div>
+
+        {/* Target */}
+        <div className="check-card-target" title={check.target}>
+          {check.target}
+          {check.ssl_source === 'traefik' && <span className="check-card-target-tag">Traefik</span>}
+          {check.skip_tls_verify && <span className="check-card-target-tag warn">self-signed</span>}
+        </div>
+
+        {/* Footer: interval + last checked + toggle */}
+        <div className="check-card-footer">
+          <span className="check-card-interval">every {check.interval_secs}s</span>
+          <span className="check-card-last">{formatTimeAgo(check.last_checked_at)}</span>
+          <button
+            className={`check-toggle-btn${check.enabled ? ' enabled' : ' paused'}`}
+            title={check.enabled ? 'Pause check' : 'Resume check'}
+            onClick={e => { e.stopPropagation(); onToggleEnabled() }}
+          >
+            {check.enabled ? '⏸' : '▶'}
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <CheckDetail
+          check={check}
+          editForm={editForm}
+          editError={editError}
+          editSubmitting={editSubmitting}
+          deletingIds={deletingIds}
+          runningIds={runningIds}
+          events={checkEvents}
+          eventsLoading={checkEventsLoading}
+          traefikIntegrations={traefikIntegrations}
+          traefikCerts={traefikCerts}
+          onEditChange={onEditChange}
+          onEditSubmit={onEditSubmit}
+          onClose={onToggleExpand}
+          onDelete={onDelete}
+          onRun={onRun}
+          onIntegrationChange={onIntegrationChange}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function Checks() {
   const [checkList, setCheckList] = useState<MonitorCheck[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Traefik integrations for SSL source toggle
   const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
   const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
 
@@ -402,10 +742,12 @@ export function Checks() {
   const [editError, setEditError] = useState<string | null>(null)
   const [editSubmitting, setEditSubmitting] = useState(false)
 
-  // Run
-  const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
+  // Per-check events (for history tab)
+  const [checkEvents, setCheckEvents] = useState<Event[]>([])
+  const [checkEventsLoading, setCheckEventsLoading] = useState(false)
 
-  // Delete
+  // Action state
+  const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -429,7 +771,7 @@ export function Checks() {
 
   const sslCerts = extractSSLCerts(checkList)
 
-  // ── Integration change (reload certs) ──
+  // ── Integration change ──
 
   function handleIntegrationChange(integrationId: string) {
     if (!integrationId) return
@@ -443,7 +785,6 @@ export function Checks() {
   function handleAddChange(field: keyof FormFields, value: string) {
     setAddForm(prev => {
       const next = { ...prev, [field]: value }
-      // When switching to traefik ssl, auto-set first integration
       if (field === 'ssl_source' && value === 'traefik' && traefikIntegrations.length > 0 && !next.integration_id) {
         next.integration_id = traefikIntegrations[0].id
       }
@@ -469,21 +810,30 @@ export function Checks() {
     }
   }
 
-  // ── Expand / edit ──
+  // ── Expand ──
 
   function handleToggleExpand(check: MonitorCheck) {
     if (expandedId === check.id) {
       setExpandedId(null)
-    } else {
-      setExpandedId(check.id)
-      setEditForm(checkToForm(check))
-      setEditError(null)
-      // Load certs for the check's integration if it's traefik
-      if (check.ssl_source === 'traefik' && check.integration_id) {
-        handleIntegrationChange(check.integration_id)
-      }
+      setCheckEvents([])
+      return
     }
+    setExpandedId(check.id)
+    setEditForm(checkToForm(check))
+    setEditError(null)
+    if (check.ssl_source === 'traefik' && check.integration_id) {
+      handleIntegrationChange(check.integration_id)
+    }
+    // Load events for history tab
+    setCheckEventsLoading(true)
+    setCheckEvents([])
+    checksApi.listEvents(check.id)
+      .then(res => setCheckEvents(res.data))
+      .catch(() => {})
+      .finally(() => setCheckEventsLoading(false))
   }
+
+  // ── Edit ──
 
   function handleEditChange(field: keyof FormFields, value: string) {
     setEditForm(prev => ({ ...prev, [field]: value }))
@@ -506,6 +856,23 @@ export function Checks() {
     }
   }
 
+  // ── Toggle enabled ──
+
+  async function handleToggleEnabled(check: MonitorCheck) {
+    const newEnabled = !check.enabled
+    // Optimistic update
+    setCheckList(prev => prev.map(c => c.id === check.id ? { ...c, enabled: newEnabled } : c))
+    try {
+      const updated = await checksApi.update(check.id, { enabled: newEnabled })
+      setCheckList(prev => prev.map(c => c.id === check.id ? updated : c))
+    } catch {
+      // Revert on failure
+      setCheckList(prev => prev.map(c => c.id === check.id ? check : c))
+    }
+  }
+
+  // ── Delete ──
+
   async function handleDelete(id: string) {
     setDeletingIds(prev => new Set(prev).add(id))
     try {
@@ -515,11 +882,7 @@ export function Checks() {
     } catch {
       // keep in list if delete fails
     } finally {
-      setDeletingIds(prev => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
+      setDeletingIds(prev => { const next = new Set(prev); next.delete(id); return next })
     }
   }
 
@@ -531,14 +894,16 @@ export function Checks() {
       await checksApi.run(id)
       const updated = await checksApi.get(id)
       setCheckList(prev => prev.map(c => c.id === id ? updated : c))
+      // Refresh events for expanded check
+      if (expandedId === id) {
+        checksApi.listEvents(id)
+          .then(res => setCheckEvents(res.data))
+          .catch(() => {})
+      }
     } catch {
-      // noop — status update visible on next poll
+      // noop
     } finally {
-      setRunningIds(prev => {
-        const next = new Set(prev)
-        next.delete(id)
-        return next
-      })
+      setRunningIds(prev => { const next = new Set(prev); next.delete(id); return next })
     }
   }
 
@@ -575,68 +940,29 @@ export function Checks() {
         ) : checkList.length === 0 ? (
           <div className="checks-empty"><span>No monitor checks configured yet.</span></div>
         ) : (
-          <div className="checks-list">
+          <div className="checks-grid">
             {checkList.map(check => (
-              <div
+              <CheckCard
                 key={check.id}
-                className={`check-row-wrapper${expandedId === check.id ? ' expanded' : ''}`}
-              >
-                <div className="check-row" onClick={() => handleToggleExpand(check)}>
-                  <div className={statusClass(check.last_status, check.type)}>
-                    {statusLabel(check)}
-                  </div>
-                  <div className="monitor-info">
-                    <div className="monitor-name">{check.name}</div>
-                    <div className="monitor-target">
-                      {check.target} · {check.type}
-                      {check.ssl_source === 'traefik' && ' (Traefik)'}
-                      {' '}· every {check.interval_secs}s
-                    </div>
-                  </div>
-                  <div className="monitor-meta">
-                    <div className="monitor-last">{formatTimeAgo(check.last_checked_at)}</div>
-                  </div>
-                  <button
-                    className={`check-run-btn${runningIds.has(check.id) ? ' running' : ''}`}
-                    title="Run now"
-                    onClick={e => { e.stopPropagation(); void handleRun(check.id) }}
-                    disabled={runningIds.has(check.id)}
-                  >
-                    {runningIds.has(check.id) ? <span className="check-spinner" /> : '▶'}
-                  </button>
-                </div>
-
-                {expandedId === check.id && (
-                  <div className="check-expand">
-                    <div className="check-expand-details">
-                      {formatResult(check.last_result)}
-                    </div>
-                    <CheckForm
-                      form={editForm}
-                      onChange={handleEditChange}
-                      onSubmit={() => void handleEditSubmit(check.id)}
-                      onCancel={() => setExpandedId(null)}
-                      error={editError}
-                      submitting={editSubmitting}
-                      title="Edit Check"
-                      submitLabel="Save"
-                      traefikIntegrations={traefikIntegrations}
-                      traefikCerts={traefikCerts}
-                      onIntegrationChange={handleIntegrationChange}
-                      extraAction={
-                        <button
-                          className="form-btn danger"
-                          onClick={() => void handleDelete(check.id)}
-                          disabled={deletingIds.has(check.id)}
-                          style={{ marginLeft: 'auto' }}
-                        >
-                          {deletingIds.has(check.id) ? 'Deleting…' : 'Delete'}
-                        </button>
-                      }
-                    />
-                  </div>
-                )}
-              </div>
+                check={check}
+                expanded={expandedId === check.id}
+                editForm={editForm}
+                editError={editError}
+                editSubmitting={editSubmitting}
+                deletingIds={deletingIds}
+                runningIds={runningIds}
+                checkEvents={checkEvents}
+                checkEventsLoading={checkEventsLoading}
+                traefikIntegrations={traefikIntegrations}
+                traefikCerts={traefikCerts}
+                onToggleExpand={() => handleToggleExpand(check)}
+                onToggleEnabled={() => void handleToggleEnabled(check)}
+                onEditChange={handleEditChange}
+                onEditSubmit={() => void handleEditSubmit(check.id)}
+                onDelete={() => void handleDelete(check.id)}
+                onRun={() => void handleRun(check.id)}
+                onIntegrationChange={handleIntegrationChange}
+              />
             ))}
           </div>
         )}

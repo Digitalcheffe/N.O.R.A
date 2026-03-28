@@ -13,6 +13,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// clientForCheck returns an http.Client appropriate for check.
+// When SkipTLSVerify is set a fresh client with InsecureSkipVerify is returned;
+// otherwise the shared URLChecker client is reused.
+func (u *URLChecker) clientForCheck(check *models.MonitorCheck) *http.Client {
+	if !check.SkipTLSVerify {
+		return u.client
+	}
+	return &http.Client{
+		Timeout:   u.client.Timeout,
+		Transport: tlsTransport(true),
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
 // URLChecker executes HTTP GET health checks and persists results via the store.
 type URLChecker struct {
 	store  *repo.Store
@@ -72,7 +88,7 @@ func (u *URLChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 	}
 
 	start := time.Now()
-	resp, err := u.client.Do(req)
+	resp, err := u.clientForCheck(check).Do(req)
 	latencyMs := time.Since(start).Milliseconds()
 
 	now := time.Now().UTC()
@@ -98,7 +114,7 @@ func (u *URLChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 	// Emit a status-change event when there is a known previous state and the
 	// check is linked to an app.
 	prevStatus := check.LastStatus
-	if prevStatus != "" && prevStatus != newStatus && check.AppID != "" {
+	if prevStatus != "" && prevStatus != newStatus {
 		if evErr := u.createStatusEvent(ctx, check, newStatus, resp.StatusCode, expected, now); evErr != nil {
 			log.Printf("url checker: create event for check %s: %v", check.ID, evErr)
 		}
@@ -126,7 +142,7 @@ func (u *URLChecker) recordError(ctx context.Context, check *models.MonitorCheck
 	}
 
 	prevStatus := check.LastStatus
-	if prevStatus != "" && prevStatus != newStatus && check.AppID != "" {
+	if prevStatus != "" && prevStatus != newStatus {
 		if evErr := u.createStatusEvent(ctx, check, newStatus, 0, expected, now); evErr != nil {
 			log.Printf("url checker: create event for check %s: %v", check.ID, evErr)
 		}

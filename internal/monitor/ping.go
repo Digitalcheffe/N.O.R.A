@@ -34,9 +34,8 @@ func NewPingChecker(store *repo.Store) *PingChecker {
 //
 // It sends up to 3 pings with a 5-second timeout each. The check is considered
 // down only if all 3 pings fail, reducing false positives from transient packet
-// loss. On a status transition (up→down or down→up), an event is created —
-// but only when the check is associated with an app, because the events table
-// requires a valid app_id foreign key.
+// loss. On a status transition (up→down or down→up), an event is created.
+// app_id is optional — standalone checks still generate events queryable by check_id.
 func (p *PingChecker) Run(ctx context.Context, check *models.MonitorCheck) error {
 	const attempts = 3
 
@@ -68,11 +67,10 @@ func (p *PingChecker) Run(ctx context.Context, check *models.MonitorCheck) error
 		detailsBytes, _ = json.Marshal(pingDetails{LatencyMs: latencyMs})
 	}
 
-	// Emit a status-change event when there is a known previous state and the
-	// check is linked to an app. Checks without an app_id are tracked in
-	// last_status only — the events table requires a valid app_id reference.
+	// Emit a status-change event on any transition. app_id is optional —
+	// checks not linked to an app still generate events queryable by check_id.
 	prevStatus := check.LastStatus
-	if prevStatus != "" && prevStatus != newStatus && check.AppID != "" {
+	if prevStatus != "" && prevStatus != newStatus {
 		if err := p.createStatusEvent(ctx, check, newStatus, now); err != nil {
 			log.Printf("ping checker: create event for check %s: %v", check.ID, err)
 		}

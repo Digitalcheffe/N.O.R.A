@@ -178,6 +178,9 @@ export const checks = {
 
   run: (id: string) =>
     request<MonitorCheck>('POST', `/checks/${id}/run`),
+
+  listEvents: (id: string) =>
+    request<ListResponse<Event>>('GET', `/checks/${id}/events`),
 }
 
 // ── Topology ──────────────────────────────────────────────────────────────────
