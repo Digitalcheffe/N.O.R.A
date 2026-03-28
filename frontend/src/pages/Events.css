@@ -123,6 +123,21 @@
 .event-sev-label.error    { color: var(--red); }
 .event-sev-label.critical { color: var(--red); }
 
+/* Column header row */
+.events-col-header {
+  cursor: default;
+  border-bottom: 1px solid var(--border);
+}
+.events-col-header:hover { background: transparent; }
+.events-col-header span {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+}
+
 /* Clickable app name in event row */
 .event-app-link {
   cursor: pointer;

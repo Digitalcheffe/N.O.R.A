@@ -70,6 +70,16 @@ export function Events() {
             )}
           </div>
 
+          {!loading && !error && eventList.length > 0 && (
+            <div className="event-row events-col-header">
+              <span>Time</span>
+              <span />
+              <span>App</span>
+              <span>Event</span>
+              <span>Severity</span>
+            </div>
+          )}
+
           {loading && (
             <div className="events-empty"><span>Loading…</span></div>
           )}
