@@ -28,6 +28,8 @@ import type {
   SMTPSettings,
   SendNowResult,
   SyncResult,
+  TimeseriesBucket,
+  TimeseriesFilter,
   TraefikCert,
   User,
   ValidationResult,
@@ -114,8 +116,8 @@ export const apps = {
   events: (id: string, filter?: EventFilter) => {
     const params = new URLSearchParams()
     if (filter?.severity) params.set('severity', filter.severity)
-    if (filter?.from) params.set('from', filter.from)
-    if (filter?.to) params.set('to', filter.to)
+    if (filter?.from) params.set('since', filter.from)
+    if (filter?.to) params.set('until', filter.to)
     if (filter?.limit) params.set('limit', String(filter.limit))
     if (filter?.offset) params.set('offset', String(filter.offset))
     const qs = params.toString()
@@ -133,16 +135,27 @@ export const events = {
     const params = new URLSearchParams()
     if (filter?.app_id) params.set('app_id', filter.app_id)
     if (filter?.severity) params.set('severity', filter.severity)
-    if (filter?.from) params.set('from', filter.from)
-    if (filter?.to) params.set('to', filter.to)
+    if (filter?.from) params.set('since', filter.from)
+    if (filter?.to) params.set('until', filter.to)
     if (filter?.limit) params.set('limit', String(filter.limit))
     if (filter?.offset) params.set('offset', String(filter.offset))
+    if (filter?.sort) params.set('sort', filter.sort)
     const qs = params.toString()
     return request<ListResponse<Event>>('GET', `/events${qs ? '?' + qs : ''}`)
   },
 
   get: (id: string) =>
     request<Event>('GET', `/events/${id}`),
+
+  timeseries: (filter: TimeseriesFilter) => {
+    const params = new URLSearchParams()
+    params.set('since', filter.since)
+    params.set('until', filter.until)
+    params.set('granularity', filter.granularity)
+    if (filter.app_id) params.set('app_id', filter.app_id)
+    if (filter.severity) params.set('severity', filter.severity)
+    return request<{ data: TimeseriesBucket[] }>('GET', `/events/timeseries?${params.toString()}`)
+  },
 }
 
 // ── Monitor Checks ────────────────────────────────────────────────────────────

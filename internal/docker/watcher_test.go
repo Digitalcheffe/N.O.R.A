@@ -86,6 +86,9 @@ func (r *mockEventRepo) MetricsForApp(_ context.Context, _ string, _, _ time.Tim
 func (r *mockEventRepo) CountPerApp(_ context.Context, _ time.Time) ([]repo.AppEventCount, error) {
 	return nil, nil
 }
+func (r *mockEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, _, _ string) ([]repo.TimeseriesBucket, error) {
+	return nil, nil
+}
 
 // --- helpers -------------------------------------------------------------
 

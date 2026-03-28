@@ -23,16 +23,18 @@ webhook:
     season_number: "$.episodes[0].seasonNumber"
     episode_number: "$.episodes[0].episodeNumber"
     quality: "$.episodes[0].quality.quality.name"
-    health_type: "$.healthCheck.type"
     health_message: "$.healthCheck.message"
+    new_version: "$.applicationUpdate.newVersion"
   severity_field: event_type
   display_template: "{event_type} — {series_title} S{season_number}E{episode_number}"
   severity_mapping:
     Download: info
     Upgrade: info
+    Grab: info
     HealthIssue: warn
     HealthRestored: info
     ApplicationUpdate: info
+    Test: info
 
 monitor:
   check_type: url

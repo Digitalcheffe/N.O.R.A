@@ -65,12 +65,15 @@ export type Severity = 'debug' | 'info' | 'warn' | 'error' | 'critical'
 export interface Event {
   id: string
   app_id: string
+  app_name: string
   received_at: string
   severity: Severity
   display_text: string
   raw_payload: Record<string, unknown>
   fields: Record<string, unknown>
 }
+
+export type EventSort = 'newest' | 'oldest' | 'severity_desc' | 'severity_asc'
 
 export interface EventFilter {
   app_id?: string
@@ -79,6 +82,20 @@ export interface EventFilter {
   to?: string
   limit?: number
   offset?: number
+  sort?: EventSort
+}
+
+export interface TimeseriesBucket {
+  time: string
+  count: number
+}
+
+export interface TimeseriesFilter {
+  since: string
+  until: string
+  granularity: 'hour' | 'day'
+  app_id?: string
+  severity?: string
 }
 
 // ── Monitor Checks ──────────────────────────────────────────────────────────
