@@ -38,7 +38,7 @@ func insertApp(t *testing.T, db *sqlx.DB, name, profileID string) models.App {
 		Name:      name,
 		Token:     uuid.New().String(),
 		ProfileID: profileID,
-		Config:    "{}",
+		Config:    json.RawMessage("{}"),
 		RateLimit: 100,
 	}
 	_, err := db.ExecContext(context.Background(),
