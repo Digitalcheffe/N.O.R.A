@@ -22,6 +22,8 @@ type AppRepo interface {
 	Update(ctx context.Context, app *models.App) error
 	Delete(ctx context.Context, id string) error
 	UpdateToken(ctx context.Context, id, token string) error
+	// SetDockerEngineID sets the docker_engine_id on the app unconditionally.
+	SetDockerEngineID(ctx context.Context, appID, engineID string) error
 }
 
 type sqliteAppRepo struct {
@@ -120,6 +122,18 @@ func (r *sqliteAppRepo) UpdateToken(ctx context.Context, id, token string) error
 	res, err := r.db.ExecContext(ctx, `UPDATE apps SET token=? WHERE id=?`, token, id)
 	if err != nil {
 		return fmt.Errorf("update token: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteAppRepo) SetDockerEngineID(ctx context.Context, appID, engineID string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE apps SET docker_engine_id=? WHERE id=?`, engineID, appID)
+	if err != nil {
+		return fmt.Errorf("set docker_engine_id on app %s: %w", appID, err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {

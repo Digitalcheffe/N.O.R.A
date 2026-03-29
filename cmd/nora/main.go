@@ -184,7 +184,7 @@ func main() {
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, traefikComponentRepo).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
-		api.NewDockerDiscoveryHandler(store).Routes(r)
+		api.NewDockerDiscoveryHandler(store, registry).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)

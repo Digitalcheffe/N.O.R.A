@@ -21,6 +21,7 @@ type DiscoveredContainerRepo interface {
 	ListAllDiscoveredContainers(ctx context.Context) ([]*models.DiscoveredContainer, error)
 	GetDiscoveredContainer(ctx context.Context, id string) (*models.DiscoveredContainer, error)
 	SetDiscoveredContainerApp(ctx context.Context, id string, appID string) error
+	ClearDiscoveredContainerApp(ctx context.Context, id string) error
 	UpdateDiscoveredContainerStatus(ctx context.Context, id string, status string, lastSeenAt time.Time) error
 }
 
@@ -31,6 +32,7 @@ type DiscoveredRouteRepo interface {
 	ListAllDiscoveredRoutes(ctx context.Context) ([]*models.DiscoveredRoute, error)
 	GetDiscoveredRoute(ctx context.Context, id string) (*models.DiscoveredRoute, error)
 	SetDiscoveredRouteApp(ctx context.Context, id string, appID string) error
+	ClearDiscoveredRouteApp(ctx context.Context, id string) error
 }
 
 // ── DiscoveredContainerRepo implementation ────────────────────────────────────
@@ -120,6 +122,19 @@ func (r *sqliteDiscoveredContainerRepo) SetDiscoveredContainerApp(ctx context.Co
 		`UPDATE discovered_containers SET app_id = ? WHERE id = ?`, appID, id)
 	if err != nil {
 		return fmt.Errorf("set app on discovered container %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) ClearDiscoveredContainerApp(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE discovered_containers SET app_id = NULL WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("clear app on discovered container %s: %w", id, err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
@@ -230,6 +245,19 @@ func (r *sqliteDiscoveredRouteRepo) SetDiscoveredRouteApp(ctx context.Context, i
 		`UPDATE discovered_routes SET app_id = ? WHERE id = ?`, appID, id)
 	if err != nil {
 		return fmt.Errorf("set app on discovered route %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("discovered route %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+func (r *sqliteDiscoveredRouteRepo) ClearDiscoveredRouteApp(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE discovered_routes SET app_id = NULL WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("clear app on discovered route %s: %w", id, err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
