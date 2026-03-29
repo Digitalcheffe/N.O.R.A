@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
-import { TopologyTree } from './Topology'
+import { DockerEngineDetail } from '../components/DockerEngineDetail'
 import { infrastructure as infraApi } from '../api/client'
 import type {
   ComponentType,
@@ -18,7 +18,7 @@ import '../components/CheckForm.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-type ActiveTab = 'components' | 'hosts' | 'map'
+type ActiveTab = 'components' | 'map'
 
 const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   proxmox_node:  'proxmox_api',
@@ -284,6 +284,22 @@ export function Infrastructure() {
   const [activeTab,       setActiveTab]       = useState<ActiveTab>('components')
   const [tick,            setTick]            = useState(0)
 
+  // Docker engine expand state
+  const [expandedDocker,   setExpandedDocker]   = useState<Set<string>>(new Set())
+  const [containerCounts,  setContainerCounts]  = useState<Record<string, { total: number; unlinked: number }>>({})
+
+  const handleCountsLoaded = useCallback((engineId: string, total: number, unlinked: number) => {
+    setContainerCounts(prev => ({ ...prev, [engineId]: { total, unlinked } }))
+  }, [])
+
+  function toggleDocker(id: string) {
+    setExpandedDocker(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
   // Modal state
   const [modalOpen,  setModalOpen]  = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
@@ -513,8 +529,68 @@ export function Infrastructure() {
     )
   }
 
+  function renderDockerCard(c: InfrastructureComponent) {
+    const isDeleting  = deletingId === c.id
+    const isExpanded  = expandedDocker.has(c.id)
+    const counts      = containerCounts[c.id]
+
+    return (
+      <div key={c.id} className="infra-card">
+        <div
+          className="infra-card-header"
+          style={{ cursor: 'pointer' }}
+          onClick={() => toggleDocker(c.id)}
+        >
+          <div className="infra-card-title-group">
+            <div className="infra-card-name">
+              <span style={{ marginRight: 6, fontSize: 10 }}>{isExpanded ? '▼' : '▶'}</span>
+              {c.name}
+            </div>
+            <div className="infra-card-meta">
+              Docker Engine · {c.ip || 'local socket'}
+              {counts && (
+                <span style={{ marginLeft: 8 }}>
+                  · {counts.total} container{counts.total !== 1 ? 's' : ''}
+                  {counts.unlinked > 0 && ` · ${counts.unlinked} unlinked`}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
+            <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
+            <span className="infra-status-label">{statusLabel(c.last_status)}</span>
+            <div className="infra-card-actions" style={{ marginLeft: 8 }}>
+              <button
+                className="infra-card-btn"
+                onClick={e => { e.stopPropagation(); openEdit(c) }}
+                disabled={isDeleting}
+              >
+                Edit
+              </button>
+              <button
+                className="infra-card-btn danger"
+                onClick={e => { e.stopPropagation(); void handleDelete(c.id) }}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <DockerEngineDetail
+            engineId={c.id}
+            onCountsLoaded={(total, unlinked) => handleCountsLoaded(c.id, total, unlinked)}
+          />
+        )}
+      </div>
+    )
+  }
+
   function renderCard(c: InfrastructureComponent) {
-    if (c.type === 'traefik') return renderTraefikCard(c)
+    if (c.type === 'traefik')       return renderTraefikCard(c)
+    if (c.type === 'docker_engine') return renderDockerCard(c)
 
     const res = resourcesMap[c.id]
     const isDeleting = deletingId === c.id
@@ -839,12 +915,6 @@ export function Infrastructure() {
               Components
             </button>
             <button
-              className={`infra-tab${activeTab === 'hosts' ? ' active' : ''}`}
-              onClick={() => setActiveTab('hosts')}
-            >
-              Hosts
-            </button>
-            <button
               className={`infra-tab${activeTab === 'map' ? ' active' : ''}`}
               onClick={() => setActiveTab('map')}
             >
@@ -872,9 +942,6 @@ export function Infrastructure() {
             )}
           </>
         )}
-
-        {/* ── Hosts tab ── */}
-        {activeTab === 'hosts' && <TopologyTree />}
 
         {/* ── Network Map tab ── */}
         {activeTab === 'map' && (

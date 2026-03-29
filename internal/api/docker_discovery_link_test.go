@@ -46,14 +46,15 @@ func newDiscoveryLinkRouter(t *testing.T, profiles apptemplate.Loader) (http.Han
 	return r, db
 }
 
-// seedDockerEngineForLink inserts a docker_engines row and returns its ID.
+// seedDockerEngineForLink inserts a docker_engine infrastructure_components row
+// and returns its ID.
 func seedDockerEngineForLink(t *testing.T, db *sqlx.DB) string {
 	t.Helper()
 	id := uuid.NewString()
 	_, err := db.Exec(
-		`INSERT INTO docker_engines (id, name, socket_type, socket_path) VALUES (?, 'eng', 'local', '/var/run/docker.sock')`, id)
+		`INSERT INTO infrastructure_components (id, name, type, collection_method) VALUES (?, 'eng', 'docker_engine', 'docker_socket')`, id)
 	if err != nil {
-		t.Fatalf("seed docker engine: %v", err)
+		t.Fatalf("seed docker engine component: %v", err)
 	}
 	return id
 }
@@ -76,8 +77,8 @@ func seedDiscoveredContainer(t *testing.T, db *sqlx.DB, engineID string) string 
 	containerRepo := repo.NewDiscoveredContainerRepo(db)
 	now := time.Now().UTC()
 	c := &models.DiscoveredContainer{
-		DockerEngineID: engineID,
-		ContainerID:    uuid.NewString(),
+		InfraComponentID: engineID,
+		ContainerID:      uuid.NewString(),
 		ContainerName:  "sonarr",
 		Image:          "linuxserver/sonarr:latest",
 		Status:         "running",
@@ -202,9 +203,6 @@ func TestLinkContainerApp_CreateMode_OK(t *testing.T) {
 	}
 	if app.ProfileID != "sonarr" {
 		t.Errorf("profile_id: want sonarr, got %s", app.ProfileID)
-	}
-	if app.DockerEngineID != engineID {
-		t.Errorf("docker_engine_id: want %s, got %s", engineID, app.DockerEngineID)
 	}
 	// Verify the container is linked.
 	checkDB := repo.NewDiscoveredContainerRepo(db)
