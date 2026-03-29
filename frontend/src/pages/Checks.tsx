@@ -11,6 +11,7 @@ import {
   validateForm,
   formToInput,
 } from '../components/CheckForm'
+import '../styles/Modal.css'
 import './Checks.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -162,6 +163,12 @@ export function Checks() {
   // Action state
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
 
+  function closeAddForm() {
+    setShowAddForm(false)
+    setAddForm(defaultForm)
+    setAddError(null)
+  }
+
   useEffect(() => {
     checksApi.list()
       .then(res => setCheckList(res.data))
@@ -180,6 +187,13 @@ export function Checks() {
       })
       .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!showAddForm) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') closeAddForm() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showAddForm])
 
   const sslCerts = extractSSLCerts(checkList)
 
@@ -254,19 +268,23 @@ export function Checks() {
       <div className="content">
 
         {showAddForm && (
-          <CheckForm
-            form={addForm}
-            onChange={handleAddChange}
-            onSubmit={handleAddSubmit}
-            onCancel={() => { setShowAddForm(false); setAddForm(defaultForm); setAddError(null) }}
-            error={addError}
-            submitting={addSubmitting}
-            title="New Check"
-            submitLabel="Add Check"
-            traefikIntegrations={traefikIntegrations}
-            traefikCerts={traefikCerts}
-            onIntegrationChange={handleIntegrationChange}
-          />
+          <div className="modal-backdrop" onClick={closeAddForm}>
+            <div className="modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
+              <CheckForm
+                form={addForm}
+                onChange={handleAddChange}
+                onSubmit={handleAddSubmit}
+                onCancel={closeAddForm}
+                error={addError}
+                submitting={addSubmitting}
+                title="New Check"
+                submitLabel="Add Check"
+                traefikIntegrations={traefikIntegrations}
+                traefikCerts={traefikCerts}
+                onIntegrationChange={handleIntegrationChange}
+              />
+            </div>
+          </div>
         )}
 
         <div className="section-header">
