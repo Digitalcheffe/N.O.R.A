@@ -371,6 +371,7 @@ export interface InfrastructureComponent {
   last_status: string
   created_at: string
   has_credentials?: boolean
+  credential_meta?: Record<string, unknown>
 }
 
 export interface InfrastructureComponentInput {

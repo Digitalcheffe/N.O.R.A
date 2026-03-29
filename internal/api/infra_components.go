@@ -55,24 +55,87 @@ type infraComponentRequest struct {
 }
 
 // infraComponentResponse is InfrastructureComponent with Credentials stripped.
+// CredentialMeta returns the non-secret fields of the stored credentials so
+// the edit form can pre-populate them without exposing secrets.
 type infraComponentResponse struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name"`
-	IP               string  `json:"ip"`
-	Type             string  `json:"type"`
-	CollectionMethod string  `json:"collection_method"`
-	ParentID         *string `json:"parent_id,omitempty"`
-	SNMPConfig       *string `json:"snmp_config,omitempty"`
-	Notes            string  `json:"notes"`
-	Enabled          bool    `json:"enabled"`
-	LastPolledAt     *string `json:"last_polled_at,omitempty"`
-	LastStatus       string  `json:"last_status"`
-	CreatedAt        string  `json:"created_at"`
-	HasCredentials   bool    `json:"has_credentials"`
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name"`
+	IP               string                 `json:"ip"`
+	Type             string                 `json:"type"`
+	CollectionMethod string                 `json:"collection_method"`
+	ParentID         *string                `json:"parent_id,omitempty"`
+	SNMPConfig       *string                `json:"snmp_config,omitempty"`
+	Notes            string                 `json:"notes"`
+	Enabled          bool                   `json:"enabled"`
+	LastPolledAt     *string                `json:"last_polled_at,omitempty"`
+	LastStatus       string                 `json:"last_status"`
+	CreatedAt        string                 `json:"created_at"`
+	HasCredentials   bool                   `json:"has_credentials"`
+	CredentialMeta   map[string]interface{} `json:"credential_meta,omitempty"`
+}
+
+// credentialSecretFields maps component type to the secret key(s) that must
+// never be returned to the client.
+var credentialSecretFields = map[string][]string{
+	"proxmox_node": {"token_secret"},
+	"synology":     {"password"},
+	"traefik":      {"api_key"},
+}
+
+// extractCredentialMeta parses stored credentials and returns a copy with
+// secret fields removed.
+func extractCredentialMeta(compType, credJSON string) map[string]interface{} {
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(credJSON), &raw); err != nil {
+		return nil
+	}
+	secrets := credentialSecretFields[compType]
+	for _, k := range secrets {
+		delete(raw, k)
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	return raw
+}
+
+// mergeCredentials ensures that if the incoming credential JSON omits or leaves
+// blank a secret field, the existing stored secret is preserved.
+func mergeCredentials(existing *string, incoming *string, compType string) *string {
+	secrets := credentialSecretFields[compType]
+	if len(secrets) == 0 || existing == nil || *existing == "" || incoming == nil {
+		return incoming
+	}
+	var existingMap, incomingMap map[string]interface{}
+	if err := json.Unmarshal([]byte(*existing), &existingMap); err != nil {
+		return incoming
+	}
+	if err := json.Unmarshal([]byte(*incoming), &incomingMap); err != nil {
+		return incoming
+	}
+	changed := false
+	for _, k := range secrets {
+		v, ok := incomingMap[k]
+		if !ok || v == nil || v == "" {
+			if existingVal, has := existingMap[k]; has {
+				incomingMap[k] = existingVal
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return incoming
+	}
+	merged, err := json.Marshal(incomingMap)
+	if err != nil {
+		return incoming
+	}
+	s := string(merged)
+	return &s
 }
 
 func toResponse(c *models.InfrastructureComponent) infraComponentResponse {
-	return infraComponentResponse{
+	resp := infraComponentResponse{
 		ID:               c.ID,
 		Name:             c.Name,
 		IP:               c.IP,
@@ -87,6 +150,10 @@ func toResponse(c *models.InfrastructureComponent) infraComponentResponse {
 		CreatedAt:        c.CreatedAt,
 		HasCredentials:   c.Credentials != nil && *c.Credentials != "",
 	}
+	if resp.HasCredentials {
+		resp.CredentialMeta = extractCredentialMeta(c.Type, *c.Credentials)
+	}
+	return resp
 }
 
 // ── validation ────────────────────────────────────────────────────────────────
@@ -263,7 +330,7 @@ func (h *InfraComponentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		existing.SNMPConfig = req.SNMPConfig
 	}
 	if req.Credentials != nil {
-		existing.Credentials = req.Credentials
+		existing.Credentials = mergeCredentials(existing.Credentials, req.Credentials, existing.Type)
 	}
 	existing.Notes = req.Notes
 	if req.Enabled != nil {
