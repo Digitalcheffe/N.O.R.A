@@ -102,6 +102,11 @@ func main() {
 	defer proxmoxCancel()
 	go jobs.StartProxmoxPollers(proxmoxCtx, store)
 
+	// Synology pollers — polls all enabled synology components every 5 minutes.
+	synologyCtx, synologyCancel := context.WithCancel(context.Background())
+	defer synologyCancel()
+	go jobs.StartSynologyPollers(synologyCtx, store)
+
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
