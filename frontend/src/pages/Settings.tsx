@@ -209,7 +209,7 @@ function ordinal(n: number): string {
 
 function NotificationsTab() {
   // SMTP state
-  const [smtp, setSMTP] = useState<SMTPSettings>({ host: '', port: 587, user: '', pass: '', from: '' })
+  const [smtp, setSMTP] = useState<SMTPSettings>({ host: '', port: 587, user: '', pass: '', from: '', to: '' })
   const [smtpSaving, setSmtpSaving] = useState(false)
   const [smtpMsg, setSmtpMsg] = useState('')
   const [smtpTesting, setSmtpTesting] = useState(false)
@@ -339,6 +339,15 @@ function NotificationsTab() {
             onChange={e => setSMTP(s => ({ ...s, from: e.target.value }))}
           />
         </div>
+        <div className="settings-field-row">
+          <label className="settings-label">To</label>
+          <input
+            className="settings-input"
+            placeholder="admin@example.com"
+            value={smtp.to}
+            onChange={e => setSMTP(s => ({ ...s, to: e.target.value }))}
+          />
+        </div>
         <div className="settings-actions">
           <button className="settings-btn primary" onClick={saveSMTP} disabled={smtpSaving}>
             {smtpSaving ? 'Saving…' : 'Save'}
@@ -347,7 +356,7 @@ function NotificationsTab() {
             className="settings-btn secondary"
             onClick={testSMTP}
             disabled={smtpTesting || !smtpConfigured}
-            title={!smtpConfigured ? 'Configure and save SMTP first' : 'Send a test email to the configured from address'}
+            title={!smtpConfigured ? 'Configure and save SMTP first' : 'Send a test email to the configured to address'}
           >
             {smtpTesting ? 'Sending…' : 'Send test email'}
           </button>

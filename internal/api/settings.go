@@ -88,9 +88,12 @@ func (h *SettingsHandler) TestSMTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	to := s.From
+	to := s.To
 	if to == "" {
-		writeError(w, http.StatusBadRequest, "SMTP 'from' address is not configured")
+		to = s.From
+	}
+	if to == "" {
+		writeError(w, http.StatusBadRequest, "SMTP 'to' address is not configured")
 		return
 	}
 

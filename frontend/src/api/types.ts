@@ -316,6 +316,7 @@ export interface SMTPSettings {
   user: string
   pass: string
   from: string
+  to: string
 }
 
 export interface SendNowResult {
