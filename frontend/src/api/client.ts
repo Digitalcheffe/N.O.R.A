@@ -30,6 +30,7 @@ import type {
   LoginInput,
   MonitorCheck,
   PhysicalHost,
+  ResourceHistory,
   ResourceSummary,
   SMTPSettings,
   SendNowResult,
@@ -351,6 +352,9 @@ export const infrastructure = {
 
   traefikDetail: (id: string) =>
     request<TraefikComponentDetail>('GET', `/infrastructure/${id}/traefik`),
+
+  resourceHistory: (id: string, period: 'hour' | 'day' = 'hour', limit = 24) =>
+    request<ResourceHistory>('GET', `/infrastructure/${id}/resources/history?period=${period}&limit=${limit}`),
 }
 
 // ── Docker Discovery ──────────────────────────────────────────────────────────

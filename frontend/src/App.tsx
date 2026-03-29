@@ -7,7 +7,7 @@ import { CheckDetail } from './pages/CheckDetail'
 import { Apps } from './pages/Apps'
 import { AppDetail } from './pages/AppDetail'
 import { Infrastructure } from './pages/Infrastructure'
-import { TraefikComponentDetail } from './pages/TraefikComponentDetail'
+import { InfraComponentDetail } from './pages/InfraComponentDetail'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
 import { Profile } from './pages/Profile'
@@ -24,7 +24,7 @@ export default function App() {
           <Route path="apps" element={<Apps />} />
           <Route path="apps/:id" element={<AppDetail />} />
           <Route path="topology" element={<Infrastructure />} />
-          <Route path="topology/:id" element={<TraefikComponentDetail />} />
+          <Route path="topology/:id" element={<InfraComponentDetail />} />
           <Route path="settings" element={<Settings />} />
           <Route path="profile" element={<Profile />} />
           <Route path="app-templates/new" element={<AppTemplateEditor />} />

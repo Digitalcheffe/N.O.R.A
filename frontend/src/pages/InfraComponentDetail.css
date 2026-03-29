@@ -1,0 +1,303 @@
+/* ── Infra Component Detail ─────────────────────────────────────────────────── */
+
+.icd-loading,
+.icd-error,
+.icd-empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  padding: 16px 0;
+}
+
+.icd-error { color: var(--red); }
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+
+.icd-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.icd-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.icd-back-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.icd-back-btn:hover { color: var(--text); }
+
+.icd-title {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.icd-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icd-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.icd-status-dot.online   { background: var(--green); }
+.icd-status-dot.degraded { background: var(--yellow, #eab308); }
+.icd-status-dot.offline  { background: var(--red); }
+.icd-status-dot.unknown  { background: var(--text3); }
+
+.icd-status-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: capitalize;
+}
+
+.icd-type-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.icd-ip {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────────── */
+
+.icd-section {
+  margin-bottom: 28px;
+}
+
+.icd-section-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Resource grid ────────────────────────────────────────────────────────────── */
+
+.icd-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.icd-resource-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.icd-resource-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.icd-resource-card-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.icd-resource-card-value {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── Resource bar ────────────────────────────────────────────────────────────── */
+
+.icd-res-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.icd-res-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.icd-res-track {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.icd-res-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.icd-res-value {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ── Sparkline ───────────────────────────────────────────────────────────────── */
+
+.icd-resource-spark {
+  margin-top: 8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.icd-spark-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+/* ── Volumes ─────────────────────────────────────────────────────────────────── */
+
+.icd-volumes {
+  margin-top: 12px;
+}
+
+.icd-volumes-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────────── */
+
+.icd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.icd-table th {
+  text-align: left;
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 8px 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.icd-table td {
+  padding: 8px 8px 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.icd-table tr:last-child td { border-bottom: none; }
+
+.icd-mono  { font-family: var(--mono); }
+.icd-muted { color: var(--text2); }
+
+.icd-route-rule {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Row states ──────────────────────────────────────────────────────────────── */
+
+.icd-row-crit td { color: var(--red); }
+.icd-row-warn td { color: var(--yellow, #eab308); }
+
+/* ── Badges ──────────────────────────────────────────────────────────────────── */
+
+.icd-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text2);
+}
+
+.icd-badge.icd-row-crit { background: rgba(239,68,68,0.1);  border-color: var(--red);  color: var(--red); }
+.icd-badge.icd-row-warn { background: rgba(234,179,8,0.1);  border-color: var(--yellow, #eab308); color: var(--yellow, #eab308); }
+
+.icd-check-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text3);
+}
+
+.icd-check-up       { background: rgba(34,197,94,0.12);  border-color: var(--green); color: var(--green); }
+.icd-check-warn     { background: rgba(234,179,8,0.12);  border-color: var(--yellow, #eab308); color: var(--yellow, #eab308); }
+.icd-check-down,
+.icd-check-critical { background: rgba(239,68,68,0.12);  border-color: var(--red); color: var(--red); }
+.icd-check-unknown  { background: transparent; }
+
+/* ── Route status ────────────────────────────────────────────────────────────── */
+
+.icd-route-status {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text3);
+}
+
+.icd-route-status.enabled  { background: rgba(34,197,94,0.12); border-color: var(--green); color: var(--green); }
+.icd-route-status.disabled { background: rgba(239,68,68,0.12); border-color: var(--red); color: var(--red); }

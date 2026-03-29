@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
-import { DockerEngineDetail } from '../components/DockerEngineDetail'
 import { infrastructure as infraApi } from '../api/client'
 import type {
   ComponentType,
@@ -284,22 +283,6 @@ export function Infrastructure() {
   const [activeTab,       setActiveTab]       = useState<ActiveTab>('components')
   const [tick,            setTick]            = useState(0)
 
-  // Docker engine expand state
-  const [expandedDocker,   setExpandedDocker]   = useState<Set<string>>(new Set())
-  const [containerCounts,  setContainerCounts]  = useState<Record<string, { total: number; unlinked: number }>>({})
-
-  const handleCountsLoaded = useCallback((engineId: string, total: number, unlinked: number) => {
-    setContainerCounts(prev => ({ ...prev, [engineId]: { total, unlinked } }))
-  }, [])
-
-  function toggleDocker(id: string) {
-    setExpandedDocker(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
   // Modal state
   const [modalOpen,  setModalOpen]  = useState(false)
   const [editingId,  setEditingId]  = useState<string | null>(null)
@@ -469,12 +452,12 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header">
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">{c.name}</div>
             <div className="infra-card-meta">Traefik · {c.ip || '—'}</div>
           </div>
-          <div className="infra-card-status-group">
+          <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
             <span className="infra-status-label">{statusLabel(c.last_status)}</span>
           </div>
@@ -530,31 +513,18 @@ export function Infrastructure() {
   }
 
   function renderDockerCard(c: InfrastructureComponent) {
-    const isDeleting  = deletingId === c.id
-    const isExpanded  = expandedDocker.has(c.id)
-    const counts      = containerCounts[c.id]
+    const isDeleting = deletingId === c.id
 
     return (
       <div key={c.id} className="infra-card">
         <div
           className="infra-card-header"
           style={{ cursor: 'pointer' }}
-          onClick={() => toggleDocker(c.id)}
+          onClick={() => navigate(`/topology/${c.id}`)}
         >
           <div className="infra-card-title-group">
-            <div className="infra-card-name">
-              <span style={{ marginRight: 6, fontSize: 10 }}>{isExpanded ? '▼' : '▶'}</span>
-              {c.name}
-            </div>
-            <div className="infra-card-meta">
-              Docker Engine · {c.ip || 'local socket'}
-              {counts && (
-                <span style={{ marginLeft: 8 }}>
-                  · {counts.total} container{counts.total !== 1 ? 's' : ''}
-                  {counts.unlinked > 0 && ` · ${counts.unlinked} unlinked`}
-                </span>
-              )}
-            </div>
+            <div className="infra-card-name">{c.name}</div>
+            <div className="infra-card-meta">Docker Engine · {c.ip || 'local socket'}</div>
           </div>
           <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
@@ -577,13 +547,6 @@ export function Infrastructure() {
             </div>
           </div>
         </div>
-
-        {isExpanded && (
-          <DockerEngineDetail
-            engineId={c.id}
-            onCountsLoaded={(total, unlinked) => handleCountsLoaded(c.id, total, unlinked)}
-          />
-        )}
       </div>
     )
   }
@@ -597,14 +560,14 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header">
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">{c.name}</div>
             <div className="infra-card-meta">
               {TYPE_LABEL[c.type]} · {c.ip}
             </div>
           </div>
-          <div className="infra-card-status-group">
+          <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
             <span className="infra-status-label">{statusLabel(c.last_status)}</span>
           </div>

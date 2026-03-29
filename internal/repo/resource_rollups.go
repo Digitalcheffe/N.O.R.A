@@ -33,6 +33,9 @@ type ResourceRollupRepo interface {
 	PurgeHourlyRollups(ctx context.Context, cutoff time.Time) (int64, error)
 	// LatestForSource returns the most recent rollup row per metric for the given source and period type.
 	LatestForSource(ctx context.Context, sourceID, sourceType, periodType string) ([]models.ResourceRollup, error)
+	// HistoryForSource returns up to limit rollup rows for the given source and period type,
+	// ordered by period_start ascending (oldest first).
+	HistoryForSource(ctx context.Context, sourceID, sourceType, periodType string, limit int) ([]models.ResourceRollup, error)
 }
 
 type sqliteResourceRollupRepo struct {
@@ -132,6 +135,21 @@ func (r *sqliteResourceRollupRepo) LatestForSource(ctx context.Context, sourceID
 		sourceID, sourceType, periodType)
 	if err != nil {
 		return nil, fmt.Errorf("latest for source: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *sqliteResourceRollupRepo) HistoryForSource(ctx context.Context, sourceID, sourceType, periodType string, limit int) ([]models.ResourceRollup, error) {
+	var rows []models.ResourceRollup
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT source_id, source_type, metric, period_type, period_start, avg, min, max
+		FROM resource_rollups
+		WHERE source_id = ? AND source_type = ? AND period_type = ?
+		ORDER BY period_start ASC
+		LIMIT ?`,
+		sourceID, sourceType, periodType, limit)
+	if err != nil {
+		return nil, fmt.Errorf("history for source: %w", err)
 	}
 	return rows, nil
 }
