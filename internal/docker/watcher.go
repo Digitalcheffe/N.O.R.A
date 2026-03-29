@@ -24,6 +24,10 @@ type dockerAPI interface {
 	Close() error
 }
 
+// DiscoveryFunc is the callback signature for container discovery hooks.
+// containerID is the full Docker container ID; status is one of: running | stopped | exited.
+type DiscoveryFunc func(ctx context.Context, containerID, name, image, status string)
+
 // Watcher streams container lifecycle events from the Docker daemon and writes
 // them to the NORA events table.
 type Watcher struct {
@@ -32,6 +36,9 @@ type Watcher struct {
 	// onContainerStart is called after a "start" event is processed.
 	// It is used to trigger an immediate health check via the HealthPoller.
 	onContainerStart func(ctx context.Context, containerID string)
+	// discoveryHook, if set, is called (in a goroutine) on every container
+	// lifecycle event so the Discoverer can upsert into discovered_containers.
+	discoveryHook DiscoveryFunc
 }
 
 // SetContainerStartHook registers a callback that is called (in a goroutine)
@@ -39,6 +46,13 @@ type Watcher struct {
 // health check without coupling Watcher and HealthPoller.
 func (w *Watcher) SetContainerStartHook(fn func(ctx context.Context, containerID string)) {
 	w.onContainerStart = fn
+}
+
+// SetDiscoveryHook registers a callback that is called (in a goroutine) on
+// every container lifecycle event (start, stop, die, kill, restart). Used to
+// upsert into discovered_containers without coupling Watcher and Discoverer.
+func (w *Watcher) SetDiscoveryHook(fn DiscoveryFunc) {
+	w.discoveryHook = fn
 }
 
 // NewWatcher creates a Watcher connected to the Docker daemon. It returns an
@@ -117,6 +131,14 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message) error {
 		go w.onContainerStart(ctx, containerID)
 	}
 
+	// Notify the discovery worker so it can upsert into discovered_containers.
+	if w.discoveryHook != nil {
+		image := msg.Actor.Attributes["image"]
+		status := containerStatusFromAction(action)
+		cid := msg.Actor.ID
+		go w.discoveryHook(ctx, cid, containerName, image, status)
+	}
+
 	// Try to find a matching app by container name (case-insensitive).
 	appID := ""
 	apps, err := w.store.Apps.List(ctx)
@@ -189,6 +211,19 @@ func parseExitCode(s string) int {
 		return 0
 	}
 	return n
+}
+
+// containerStatusFromAction maps a Docker event action to a discovered_containers
+// status value (running | stopped | exited).
+func containerStatusFromAction(action string) string {
+	switch action {
+	case "start", "restart":
+		return "running"
+	case "die":
+		return "exited"
+	default: // stop, kill
+		return "stopped"
+	}
 }
 
 // jsonStr returns s as a JSON-encoded string (with quotes and escaping).

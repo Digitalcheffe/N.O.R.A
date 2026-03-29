@@ -46,6 +46,10 @@ func (r *mockResourceReadingRepo) Create(_ context.Context, reading *models.Reso
 	return nil
 }
 
+func (r *mockResourceReadingRepo) LatestMetrics(_ context.Context, _ string, _ []string) (map[string]map[string]float64, error) {
+	return map[string]map[string]float64{}, nil
+}
+
 // --- helpers --------------------------------------------------------------
 
 func newTestResourcePoller(appRepo repo.AppRepo, eventRepo repo.EventRepo, resRepo repo.ResourceReadingRepo, cli resourcePollerAPI) *ResourcePoller {
