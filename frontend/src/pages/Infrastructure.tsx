@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
-import { TopologyTree } from './Topology'
 import { infrastructure as infraApi } from '../api/client'
 import type {
   ComponentType,
@@ -18,7 +17,7 @@ import '../components/CheckForm.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-type ActiveTab = 'components' | 'hosts' | 'map'
+type ActiveTab = 'components' | 'map'
 
 const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   proxmox_node:  'proxmox_api',
@@ -453,12 +452,12 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header">
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">{c.name}</div>
             <div className="infra-card-meta">Traefik · {c.ip || '—'}</div>
           </div>
-          <div className="infra-card-status-group">
+          <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
             <span className="infra-status-label">{statusLabel(c.last_status)}</span>
           </div>
@@ -513,22 +512,62 @@ export function Infrastructure() {
     )
   }
 
+  function renderDockerCard(c: InfrastructureComponent) {
+    const isDeleting = deletingId === c.id
+
+    return (
+      <div key={c.id} className="infra-card">
+        <div
+          className="infra-card-header"
+          style={{ cursor: 'pointer' }}
+          onClick={() => navigate(`/topology/${c.id}`)}
+        >
+          <div className="infra-card-title-group">
+            <div className="infra-card-name">{c.name}</div>
+            <div className="infra-card-meta">Docker Engine · {c.ip || 'local socket'}</div>
+          </div>
+          <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
+            <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
+            <span className="infra-status-label">{statusLabel(c.last_status)}</span>
+            <div className="infra-card-actions" style={{ marginLeft: 8 }}>
+              <button
+                className="infra-card-btn"
+                onClick={e => { e.stopPropagation(); openEdit(c) }}
+                disabled={isDeleting}
+              >
+                Edit
+              </button>
+              <button
+                className="infra-card-btn danger"
+                onClick={e => { e.stopPropagation(); void handleDelete(c.id) }}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderCard(c: InfrastructureComponent) {
-    if (c.type === 'traefik') return renderTraefikCard(c)
+    if (c.type === 'traefik')       return renderTraefikCard(c)
+    if (c.type === 'docker_engine') return renderDockerCard(c)
 
     const res = resourcesMap[c.id]
     const isDeleting = deletingId === c.id
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header">
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">{c.name}</div>
             <div className="infra-card-meta">
               {TYPE_LABEL[c.type]} · {c.ip}
             </div>
           </div>
-          <div className="infra-card-status-group">
+          <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
             <span className="infra-status-label">{statusLabel(c.last_status)}</span>
           </div>
@@ -839,12 +878,6 @@ export function Infrastructure() {
               Components
             </button>
             <button
-              className={`infra-tab${activeTab === 'hosts' ? ' active' : ''}`}
-              onClick={() => setActiveTab('hosts')}
-            >
-              Hosts
-            </button>
-            <button
               className={`infra-tab${activeTab === 'map' ? ' active' : ''}`}
               onClick={() => setActiveTab('map')}
             >
@@ -872,9 +905,6 @@ export function Infrastructure() {
             )}
           </>
         )}
-
-        {/* ── Hosts tab ── */}
-        {activeTab === 'hosts' && <TopologyTree />}
 
         {/* ── Network Map tab ── */}
         {activeTab === 'map' && (

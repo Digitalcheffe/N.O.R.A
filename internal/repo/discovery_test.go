@@ -13,8 +13,7 @@ import (
 )
 
 // openDiscoveryTestDB opens an in-memory SQLite DB with all migrations applied.
-// This ensures docker_engines, apps, and infrastructure_components tables exist
-// for FK constraints.
+// This ensures apps and infrastructure_components tables exist for FK constraints.
 func openDiscoveryTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	cfg := &config.Config{DBPath: ":memory:", DevMode: true}
@@ -26,13 +25,14 @@ func openDiscoveryTestDB(t *testing.T) *sqlx.DB {
 	return db
 }
 
-// seedDockerEngine inserts a minimal docker_engines row and returns its ID.
+// seedDockerEngine inserts a minimal infrastructure_components row of type
+// docker_engine and returns its ID.
 func seedDockerEngine(t *testing.T, db *sqlx.DB) string {
 	t.Helper()
 	id := uuid.NewString()
-	_, err := db.Exec(`INSERT INTO docker_engines (id, name, socket_type, socket_path) VALUES (?, 'test-engine', 'local', '/var/run/docker.sock')`, id)
+	_, err := db.Exec(`INSERT INTO infrastructure_components (id, name, type, collection_method) VALUES (?, 'test-docker-engine', 'docker_engine', 'docker_socket')`, id)
 	if err != nil {
-		t.Fatalf("seed docker engine: %v", err)
+		t.Fatalf("seed docker engine component: %v", err)
 	}
 	return id
 }
@@ -58,7 +58,7 @@ func TestDiscoveredContainerRepo_UpsertAndGet(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	c := &models.DiscoveredContainer{
-		DockerEngineID: engineID,
+		InfraComponentID: engineID,
 		ContainerID:    "abc123",
 		ContainerName:  "sonarr",
 		Image:          "linuxserver/sonarr:latest",
@@ -94,7 +94,7 @@ func TestDiscoveredContainerRepo_UpsertUpdatesExisting(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	c := &models.DiscoveredContainer{
-		DockerEngineID: engineID,
+		InfraComponentID: engineID,
 		ContainerID:    "abc123",
 		ContainerName:  "sonarr",
 		Image:          "linuxserver/sonarr:3.0",
@@ -107,9 +107,9 @@ func TestDiscoveredContainerRepo_UpsertUpdatesExisting(t *testing.T) {
 	}
 	firstID := c.ID
 
-	// Upsert same docker_engine_id + container_id with updated fields.
+	// Upsert same infra_component_id + container_id with updated fields.
 	c2 := &models.DiscoveredContainer{
-		DockerEngineID: engineID,
+		InfraComponentID: engineID,
 		ContainerID:    "abc123",
 		ContainerName:  "sonarr-renamed",
 		Image:          "linuxserver/sonarr:4.0",
@@ -143,7 +143,7 @@ func TestDiscoveredContainerRepo_ListDiscoveredContainers(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for _, name := range []string{"alpha", "beta"} {
 		c := &models.DiscoveredContainer{
-			DockerEngineID: engineID,
+			InfraComponentID: engineID,
 			ContainerID:    name + "-id",
 			ContainerName:  name,
 			Image:          "img:latest",
@@ -157,7 +157,7 @@ func TestDiscoveredContainerRepo_ListDiscoveredContainers(t *testing.T) {
 	}
 	// Container belonging to a different engine — must not appear in filtered list.
 	other := &models.DiscoveredContainer{
-		DockerEngineID: engineID2,
+		InfraComponentID: engineID2,
 		ContainerID:    "other-id",
 		ContainerName:  "other",
 		Image:          "img:latest",
@@ -188,7 +188,7 @@ func TestDiscoveredContainerRepo_ListAllDiscoveredContainers(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	for i, eng := range []string{engineID, engineID2} {
 		c := &models.DiscoveredContainer{
-			DockerEngineID: eng,
+			InfraComponentID: eng,
 			ContainerID:    "cid-" + string(rune('a'+i)),
 			ContainerName:  "container-" + string(rune('a'+i)),
 			Image:          "img:latest",
@@ -218,7 +218,7 @@ func TestDiscoveredContainerRepo_SetDiscoveredContainerApp(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	c := &models.DiscoveredContainer{
-		DockerEngineID: engineID,
+		InfraComponentID: engineID,
 		ContainerID:    "cid1",
 		ContainerName:  "radarr",
 		Image:          "img:latest",
@@ -269,7 +269,7 @@ func TestDiscoveredContainerRepo_UpdateDiscoveredContainerStatus(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	c := &models.DiscoveredContainer{
-		DockerEngineID: engineID,
+		InfraComponentID: engineID,
 		ContainerID:    "cid2",
 		ContainerName:  "lidarr",
 		Image:          "img:latest",

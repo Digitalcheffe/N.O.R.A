@@ -126,10 +126,10 @@ func main() {
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
 
-	// Ensure a local docker engine record exists so discovered containers can
-	// be associated with it. This is idempotent — it reuses the existing record
-	// if one with socket_type="local" is already present.
-	localEngineID, err := docker.EnsureLocalEngine(context.Background(), store)
+	// Ensure a local docker engine infrastructure component exists so discovered
+	// containers can be associated with it. This is idempotent — it reuses the
+	// existing record if one with type="docker_engine" is already present.
+	localEngineID, err := docker.EnsureLocalInfraComponent(context.Background(), store)
 	if err != nil {
 		log.Printf("docker discovery: could not ensure local engine record: %v", err)
 	}

@@ -17,7 +17,7 @@ import (
 // DiscoveredContainerRepo manages the discovered_containers table.
 type DiscoveredContainerRepo interface {
 	UpsertDiscoveredContainer(ctx context.Context, c *models.DiscoveredContainer) error
-	ListDiscoveredContainers(ctx context.Context, dockerEngineID string) ([]*models.DiscoveredContainer, error)
+	ListDiscoveredContainers(ctx context.Context, infraComponentID string) ([]*models.DiscoveredContainer, error)
 	ListAllDiscoveredContainers(ctx context.Context) ([]*models.DiscoveredContainer, error)
 	GetDiscoveredContainer(ctx context.Context, id string) (*models.DiscoveredContainer, error)
 	SetDiscoveredContainerApp(ctx context.Context, id string, appID string) error
@@ -50,17 +50,17 @@ func (r *sqliteDiscoveredContainerRepo) UpsertDiscoveredContainer(ctx context.Co
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO discovered_containers
-		  (id, docker_engine_id, container_id, container_name, image, status,
+		  (id, infra_component_id, container_id, container_name, image, status,
 		   app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(docker_engine_id, container_id) DO UPDATE SET
+		ON CONFLICT(infra_component_id, container_id) DO UPDATE SET
 		  container_name        = excluded.container_name,
 		  image                 = excluded.image,
 		  status                = excluded.status,
 		  profile_suggestion    = excluded.profile_suggestion,
 		  suggestion_confidence = excluded.suggestion_confidence,
 		  last_seen_at          = excluded.last_seen_at`,
-		c.ID, c.DockerEngineID, c.ContainerID, c.ContainerName, c.Image, c.Status,
+		c.ID, c.InfraComponentID, c.ContainerID, c.ContainerName, c.Image, c.Status,
 		c.AppID, c.ProfileSuggestion, c.SuggestionConfidence, c.LastSeenAt, c.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("upsert discovered container %s: %w", c.ContainerID, err)
@@ -68,16 +68,16 @@ func (r *sqliteDiscoveredContainerRepo) UpsertDiscoveredContainer(ctx context.Co
 	return nil
 }
 
-func (r *sqliteDiscoveredContainerRepo) ListDiscoveredContainers(ctx context.Context, dockerEngineID string) ([]*models.DiscoveredContainer, error) {
+func (r *sqliteDiscoveredContainerRepo) ListDiscoveredContainers(ctx context.Context, infraComponentID string) ([]*models.DiscoveredContainer, error) {
 	var rows []*models.DiscoveredContainer
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, docker_engine_id, container_id, container_name, image, status,
+		SELECT id, infra_component_id, container_id, container_name, image, status,
 		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
 		FROM discovered_containers
-		WHERE docker_engine_id = ?
-		ORDER BY container_name ASC`, dockerEngineID)
+		WHERE infra_component_id = ?
+		ORDER BY container_name ASC`, infraComponentID)
 	if err != nil {
-		return nil, fmt.Errorf("list discovered containers for engine %s: %w", dockerEngineID, err)
+		return nil, fmt.Errorf("list discovered containers for component %s: %w", infraComponentID, err)
 	}
 	if rows == nil {
 		rows = []*models.DiscoveredContainer{}
@@ -88,10 +88,10 @@ func (r *sqliteDiscoveredContainerRepo) ListDiscoveredContainers(ctx context.Con
 func (r *sqliteDiscoveredContainerRepo) ListAllDiscoveredContainers(ctx context.Context) ([]*models.DiscoveredContainer, error) {
 	var rows []*models.DiscoveredContainer
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, docker_engine_id, container_id, container_name, image, status,
+		SELECT id, infra_component_id, container_id, container_name, image, status,
 		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
 		FROM discovered_containers
-		ORDER BY docker_engine_id ASC, container_name ASC`)
+		ORDER BY infra_component_id ASC, container_name ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list all discovered containers: %w", err)
 	}
@@ -104,7 +104,7 @@ func (r *sqliteDiscoveredContainerRepo) ListAllDiscoveredContainers(ctx context.
 func (r *sqliteDiscoveredContainerRepo) GetDiscoveredContainer(ctx context.Context, id string) (*models.DiscoveredContainer, error) {
 	var c models.DiscoveredContainer
 	err := r.db.GetContext(ctx, &c, `
-		SELECT id, docker_engine_id, container_id, container_name, image, status,
+		SELECT id, infra_component_id, container_id, container_name, image, status,
 		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
 		FROM discovered_containers
 		WHERE id = ?`, id)

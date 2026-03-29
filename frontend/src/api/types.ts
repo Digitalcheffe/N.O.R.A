@@ -430,6 +430,21 @@ export interface ResourceSummary {
   no_data?: boolean
 }
 
+export interface ResourceRollupPoint {
+  period_start: string
+  metric: string
+  avg: number
+  min: number
+  max: number
+}
+
+export interface ResourceHistory {
+  component_id: string
+  period: string
+  data: ResourceRollupPoint[]
+  total: number
+}
+
 // ── Docker Discovery ─────────────────────────────────────────────────────────
 
 export interface DiscoveredContainer {

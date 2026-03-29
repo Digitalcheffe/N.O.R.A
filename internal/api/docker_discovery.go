@@ -27,7 +27,7 @@ func NewDockerDiscoveryHandler(store *repo.Store, profiles apptemplate.Loader) *
 
 // Routes registers the docker discovery endpoints on r.
 func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
-	r.Get("/docker-engines/{id}/containers", h.ListContainers)
+	r.Get("/infrastructure/{id}/containers", h.ListContainers)
 	r.Get("/infrastructure/{id}/routes", h.ListRoutes)
 	r.Get("/discovery/all", h.ListAll)
 	r.Post("/discovered-containers/{id}/link-app", h.LinkContainerApp)
@@ -55,21 +55,21 @@ type listDiscoveredContainersResponse struct {
 	Total int                           `json:"total"`
 }
 
-// ListContainers returns all discovered containers for a docker engine.
-// GET /api/v1/docker-engines/{id}/containers
+// ListContainers returns all discovered containers for a docker_engine infrastructure component.
+// GET /api/v1/infrastructure/{id}/containers
 func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.Request) {
-	engineID := chi.URLParam(r, "id")
+	componentID := chi.URLParam(r, "id")
 
-	// Verify the engine exists.
-	if _, err := h.store.DockerEngines.Get(r.Context(), engineID); errors.Is(err, repo.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "docker engine not found")
+	// Verify the infrastructure component exists.
+	if _, err := h.store.InfraComponents.Get(r.Context(), componentID); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "infrastructure component not found")
 		return
 	} else if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	containers, err := h.store.DiscoveredContainers.ListDiscoveredContainers(r.Context(), engineID)
+	containers, err := h.store.DiscoveredContainers.ListDiscoveredContainers(r.Context(), componentID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -299,22 +299,16 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			writeError(w, http.StatusUnprocessableEntity, "app_id is required for mode=existing")
 			return
 		}
-		app, err := h.store.Apps.Get(r.Context(), req.AppID)
-		if errors.Is(err, repo.ErrNotFound) {
+		if _, err := h.store.Apps.Get(r.Context(), req.AppID); errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusUnprocessableEntity, "app_id does not exist")
 			return
-		}
-		if err != nil {
+		} else if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		if err := h.store.DiscoveredContainers.SetDiscoveredContainerApp(r.Context(), id, req.AppID); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
-		}
-		// Set docker_engine_id on the app if not already set.
-		if app.DockerEngineID == "" {
-			_ = h.store.Apps.SetDockerEngineID(r.Context(), req.AppID, container.DockerEngineID)
 		}
 		container.AppID = &req.AppID
 		writeJSON(w, http.StatusOK, container)
@@ -342,14 +336,13 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			cfg = models.ConfigJSON(req.Config)
 		}
 		app := &models.App{
-			ID:             uuid.New().String(),
-			Name:           req.Name,
-			Token:          token,
-			ProfileID:      req.ProfileID,
-			DockerEngineID: container.DockerEngineID,
-			Config:         cfg,
-			RateLimit:      100,
-			CreatedAt:      time.Now().UTC(),
+			ID:        uuid.New().String(),
+			Name:      req.Name,
+			Token:     token,
+			ProfileID: req.ProfileID,
+			Config:    cfg,
+			RateLimit: 100,
+			CreatedAt: time.Now().UTC(),
 		}
 		if err := h.store.Apps.Create(r.Context(), app); err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())

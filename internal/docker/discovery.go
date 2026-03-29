@@ -85,7 +85,7 @@ func (d *Discoverer) upsert(ctx context.Context, containerID, name, image, statu
 	now := time.Now().UTC()
 
 	dc := &models.DiscoveredContainer{
-		DockerEngineID: d.engineID,
+		InfraComponentID: d.engineID,
 		ContainerID:    containerID,
 		ContainerName:  name,
 		Image:          image,
@@ -112,32 +112,39 @@ func containerNameFrom(names []string) string {
 	return strings.TrimPrefix(names[0], "/")
 }
 
-// EnsureLocalEngine looks up the first docker_engine record with
-// socket_type="local". If none exists, it creates one and returns its ID.
+// EnsureLocalInfraComponent looks up the first infrastructure_components record
+// with type="docker_engine" and collection_method="docker_socket". If none
+// exists, it creates one and returns its ID.
 // This is used at startup to ensure the local Docker socket watcher has an
-// engine record to associate discovered containers with.
-func EnsureLocalEngine(ctx context.Context, store *repo.Store) (string, error) {
-	engines, err := store.DockerEngines.List(ctx)
+// infrastructure component record to associate discovered containers with.
+func EnsureLocalInfraComponent(ctx context.Context, store *repo.Store) (string, error) {
+	components, err := store.InfraComponents.List(ctx)
 	if err != nil {
-		return "", fmt.Errorf("list docker engines: %w", err)
+		return "", fmt.Errorf("list infrastructure components: %w", err)
 	}
 
-	for _, e := range engines {
-		if e.SocketType == "local" {
-			return e.ID, nil
+	for _, c := range components {
+		if c.Type == "docker_engine" && c.CollectionMethod == "docker_socket" {
+			return c.ID, nil
 		}
 	}
 
-	// No local engine found — create one.
-	engine := &models.DockerEngine{
-		ID:         uuid.New().String(),
-		Name:       "Local Docker",
-		SocketType: "local",
-		SocketPath: "/var/run/docker.sock",
+	// No local docker engine component found — create one.
+	now := time.Now().UTC().Format(time.RFC3339)
+	comp := &models.InfrastructureComponent{
+		ID:               uuid.New().String(),
+		Name:             "Local Docker",
+		IP:               "",
+		Type:             "docker_engine",
+		CollectionMethod: "docker_socket",
+		Notes:            "",
+		Enabled:          true,
+		LastStatus:       "unknown",
+		CreatedAt:        now,
 	}
-	if err := store.DockerEngines.Create(ctx, engine); err != nil {
-		return "", fmt.Errorf("create local docker engine: %w", err)
+	if err := store.InfraComponents.Create(ctx, comp); err != nil {
+		return "", fmt.Errorf("create local docker infra component: %w", err)
 	}
-	log.Printf("docker discovery: created local engine record %s", engine.ID)
-	return engine.ID, nil
+	log.Printf("docker discovery: created local docker engine component %s", comp.ID)
+	return comp.ID, nil
 }

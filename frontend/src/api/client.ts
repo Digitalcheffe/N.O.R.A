@@ -30,6 +30,7 @@ import type {
   LoginInput,
   MonitorCheck,
   PhysicalHost,
+  ResourceHistory,
   ResourceSummary,
   SMTPSettings,
   SendNowResult,
@@ -351,13 +352,16 @@ export const infrastructure = {
 
   traefikDetail: (id: string) =>
     request<TraefikComponentDetail>('GET', `/infrastructure/${id}/traefik`),
+
+  resourceHistory: (id: string, period: 'hour' | 'day' = 'hour', limit = 24) =>
+    request<ResourceHistory>('GET', `/infrastructure/${id}/resources/history?period=${period}&limit=${limit}`),
 }
 
 // ── Docker Discovery ──────────────────────────────────────────────────────────
 
 export const discovery = {
   containers: (engineId: string) =>
-    request<ListResponse<DiscoveredContainer>>('GET', `/docker-engines/${engineId}/containers`),
+    request<ListResponse<DiscoveredContainer>>('GET', `/infrastructure/${engineId}/containers`),
 
   linkContainerApp: (containerId: string, body: LinkAppInput) =>
     request<unknown>('POST', `/discovered-containers/${containerId}/link-app`, body),

@@ -7,7 +7,7 @@ import "time"
 // profile_suggestion is the profile_id NORA matched via image/name heuristics.
 type DiscoveredContainer struct {
 	ID                   string    `db:"id"                    json:"id"`
-	DockerEngineID       string    `db:"docker_engine_id"      json:"docker_engine_id"`
+	InfraComponentID     string    `db:"infra_component_id"    json:"infra_component_id"`
 	ContainerID          string    `db:"container_id"          json:"container_id"`
 	ContainerName        string    `db:"container_name"        json:"container_name"`
 	Image                string    `db:"image"                 json:"image"`

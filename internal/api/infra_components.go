@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Put("/infrastructure/{id}", h.Update)
 	r.Delete("/infrastructure/{id}", h.Delete)
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
+	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
 	r.Get("/infrastructure/{id}/traefik", h.GetTraefikDetail)
 }
 
@@ -375,6 +377,79 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── Resource history ──────────────────────────────────────────────────────────
+
+// resourceHistoryPoint is one period bucket in the history response.
+type resourceHistoryPoint struct {
+	PeriodStart string  `json:"period_start"`
+	Metric      string  `json:"metric"`
+	Avg         float64 `json:"avg"`
+	Min         float64 `json:"min"`
+	Max         float64 `json:"max"`
+}
+
+type resourceHistoryResponse struct {
+	ComponentID string                 `json:"component_id"`
+	Period      string                 `json:"period"`
+	Data        []resourceHistoryPoint `json:"data"`
+	Total       int                    `json:"total"`
+}
+
+// GetResourceHistory returns historical rollup data for an infrastructure component.
+// GET /api/v1/infrastructure/{id}/resources/history?period=hour|day&limit=24
+func (h *InfraComponentHandler) GetResourceHistory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "hour"
+	}
+	if period != "hour" && period != "day" {
+		writeError(w, http.StatusBadRequest, "period must be hour or day")
+		return
+	}
+
+	limit := 24
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		var parsed int
+		if _, err := fmt.Sscanf(lStr, "%d", &parsed); err == nil && parsed > 0 && parsed <= 168 {
+			limit = parsed
+		}
+	}
+
+	rollups, err := h.rollups.HistoryForSource(r.Context(), id, comp.Type, period, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	points := make([]resourceHistoryPoint, len(rollups))
+	for i, rr := range rollups {
+		points[i] = resourceHistoryPoint{
+			PeriodStart: rr.PeriodStart.UTC().Format(time.RFC3339),
+			Metric:      rr.Metric,
+			Avg:         rr.Avg,
+			Min:         rr.Min,
+			Max:         rr.Max,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resourceHistoryResponse{
+		ComponentID: id,
+		Period:      period,
+		Data:        points,
+		Total:       len(points),
+	})
 }
 
 // ── Traefik detail ────────────────────────────────────────────────────────────
