@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
 import type { MonitorCheck, Event, InfraIntegration, TraefikCert } from '../api/types'
@@ -167,6 +168,7 @@ function EditModal({
 export function CheckDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { tick } = useAutoRefresh()
 
   const [check, setCheck] = useState<MonitorCheck | null>(null)
   const [loading, setLoading] = useState(true)
@@ -201,7 +203,7 @@ export function CheckDetail() {
         }
       })
       .catch(() => {})
-  }, [id, navigate])
+  }, [id, navigate, tick])
 
   async function handleRun() {
     if (!id || !check) return

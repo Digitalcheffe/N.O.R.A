@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { EventRow } from '../components/EventRow'
 import { events as eventsApi } from '../api/client'
@@ -201,6 +202,7 @@ function EventsLineChart({
 
 export function Events() {
   const navigate = useNavigate()
+  const { tick } = useAutoRefresh()
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [severity, setSeverity] = useState<Severity | ''>('')
   const [sort, setSort] = useState<EventSort>('newest')
@@ -237,7 +239,7 @@ export function Events() {
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [timeFilter, severity, sort, pageSize, page])
+  }, [timeFilter, severity, sort, pageSize, page, tick])
 
   // Fetch chart data
   useEffect(() => {

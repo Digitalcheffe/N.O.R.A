@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi } from '../api/client'
 import type { App, AppSummary, AppTemplate, Event, Severity } from '../api/types'
@@ -463,6 +464,7 @@ const PAGE_SIZE = 50
 export function AppDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { tick } = useAutoRefresh()
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [severityFilter, setSeverityFilter] = useState<Severity | 'all'>('all')
@@ -482,7 +484,7 @@ export function AppDetail() {
   useEffect(() => {
     if (!appId) return
     appsApi.get(appId).then(setApp).catch(console.error)
-  }, [appId])
+  }, [appId, tick])
 
   useEffect(() => {
     if (!appId) return
@@ -491,7 +493,7 @@ export function AppDetail() {
         setAppSummary(res.apps.find(a => a.id === appId) ?? null)
       })
       .catch(console.error)
-  }, [appId, timeFilter])
+  }, [appId, timeFilter, tick])
 
   useEffect(() => {
     if (!appId) return
@@ -501,7 +503,7 @@ export function AppDetail() {
       .then(res => { setEvents(res.data); setTotal(res.total) })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [appId, severityFilter])
+  }, [appId, severityFilter, tick])
 
   useEffect(() => {
     if (!id) navigate('/apps')

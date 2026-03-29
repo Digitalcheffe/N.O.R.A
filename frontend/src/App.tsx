@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AutoRefreshProvider } from './context/AutoRefreshContext'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Events } from './pages/Events'
@@ -14,6 +15,7 @@ import { Profile } from './pages/Profile'
 
 export default function App() {
   return (
+    <AutoRefreshProvider>
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
@@ -33,5 +35,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </AutoRefreshProvider>
   )
 }

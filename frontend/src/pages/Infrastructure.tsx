@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { infrastructure as infraApi } from '../api/client'
@@ -155,7 +156,7 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
   }
 
   if (form.type === 'proxmox_node') {
-    const hasNewCreds = form.proxmox_token_id || form.proxmox_token_secret || form.proxmox_base_url
+    const hasNewCreds = form.proxmox_base_url && form.proxmox_token_id && form.proxmox_token_secret
     if (!isEdit || hasNewCreds) {
       payload.credentials = JSON.stringify({
         base_url:     form.proxmox_base_url,
@@ -165,7 +166,7 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
       })
     }
   } else if (form.type === 'synology') {
-    const hasNewCreds = form.synology_username || form.synology_password || form.synology_base_url
+    const hasNewCreds = form.synology_base_url && form.synology_username && form.synology_password
     if (!isEdit || hasNewCreds) {
       payload.credentials = JSON.stringify({
         base_url:   form.synology_base_url,
@@ -175,12 +176,16 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
       })
     }
   } else if (form.type === 'docker_engine') {
-    payload.credentials = JSON.stringify({
-      socket_type: form.docker_socket_type,
-      socket_path: form.docker_socket_path,
-    })
+    const hasNewCreds = form.docker_socket_type !== DEFAULT_FORM.docker_socket_type
+      || form.docker_socket_path !== DEFAULT_FORM.docker_socket_path
+    if (!isEdit || hasNewCreds) {
+      payload.credentials = JSON.stringify({
+        socket_type: form.docker_socket_type,
+        socket_path: form.docker_socket_path,
+      })
+    }
   } else if (form.type === 'traefik') {
-    const hasNewCreds = form.traefik_api_url
+    const hasNewCreds = !!form.traefik_api_url
     if (!isEdit || hasNewCreds) {
       payload.credentials = JSON.stringify({
         api_url: form.traefik_api_url,
@@ -279,6 +284,7 @@ function Toggle({
 
 export function Infrastructure() {
   const navigate = useNavigate()
+  const { tick: refreshTick } = useAutoRefresh()
   const [components,      setComponents]      = useState<InfrastructureComponent[]>([])
   const [resourcesMap,    setResourcesMap]    = useState<Record<string, ResourceSummary>>({})
   const [traefikDetailMap, setTraefikDetailMap] = useState<Record<string, TraefikComponentDetail>>({})
@@ -330,7 +336,7 @@ export function Infrastructure() {
     setLastPolledAt(new Date())
   }, [])
 
-  // Initial load
+  // Initial load + auto-refresh
   useEffect(() => {
     infraApi.list()
       .then(res => {
@@ -339,7 +345,7 @@ export function Infrastructure() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [pollAll])
+  }, [pollAll, refreshTick])
 
   // 30-second polling interval
   useEffect(() => {

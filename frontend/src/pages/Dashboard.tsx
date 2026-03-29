@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SummaryCard } from '../components/SummaryCard'
 import { AppWidget } from '../components/AppWidget'
@@ -16,6 +17,7 @@ type TimeFilter = 'day' | 'week' | 'month'
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const { tick } = useAutoRefresh()
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [data, setData] = useState<DashboardSummaryResponse | null>(null)
   const [recentEvents, setRecentEvents] = useState<Event[]>([])
@@ -36,7 +38,7 @@ export function Dashboard() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [timeFilter])
+  }, [timeFilter, tick])
 
   const topbarStatus =
     data == null

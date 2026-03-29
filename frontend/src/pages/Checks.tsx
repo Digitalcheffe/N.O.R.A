@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SSLRow } from '../components/SSLRow'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
@@ -149,6 +150,7 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
 
 export function Checks() {
   const navigate = useNavigate()
+  const { tick } = useAutoRefresh()
   const [checkList, setCheckList] = useState<MonitorCheck[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -187,7 +189,7 @@ export function Checks() {
         }
       })
       .catch(() => {})
-  }, [])
+  }, [tick])
 
   useEffect(() => {
     if (!showAddForm) return
