@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/models"
@@ -279,15 +280,22 @@ func (h *InfraComponentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// VolumeResource holds per-volume disk utilisation for Synology and similar components.
+type VolumeResource struct {
+	Name    string  `json:"name"`
+	Percent float64 `json:"percent"`
+}
+
 // infraResourcesResponse is the response shape for GET /infrastructure/{id}/resources.
 type infraResourcesResponse struct {
-	ComponentID string  `json:"component_id"`
-	Period      string  `json:"period"`
-	CPUPercent  float64 `json:"cpu_percent"`
-	MemPercent  float64 `json:"mem_percent"`
-	DiskPercent float64 `json:"disk_percent"`
-	RecordedAt  string  `json:"recorded_at,omitempty"`
-	NoData      bool    `json:"no_data,omitempty"`
+	ComponentID string           `json:"component_id"`
+	Period      string           `json:"period"`
+	CPUPercent  float64          `json:"cpu_percent"`
+	MemPercent  float64          `json:"mem_percent"`
+	DiskPercent float64          `json:"disk_percent"`
+	Volumes     []VolumeResource `json:"volumes,omitempty"`
+	RecordedAt  string           `json:"recorded_at,omitempty"`
+	NoData      bool             `json:"no_data,omitempty"`
 }
 
 // GetResources returns the latest resource rollup values for an infrastructure component.
@@ -329,16 +337,19 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 	}
 
 	for _, rr := range rollups {
-		switch rr.Metric {
-		case "cpu_percent":
+		switch {
+		case rr.Metric == "cpu_percent":
 			resp.CPUPercent = rr.Avg
 			if resp.RecordedAt == "" {
 				resp.RecordedAt = rr.PeriodStart.UTC().Format(time.RFC3339)
 			}
-		case "mem_percent":
+		case rr.Metric == "mem_percent":
 			resp.MemPercent = rr.Avg
-		case "disk_percent":
+		case rr.Metric == "disk_percent":
 			resp.DiskPercent = rr.Avg
+		case strings.HasPrefix(rr.Metric, "disk_percent_"):
+			volName := strings.TrimPrefix(rr.Metric, "disk_percent_")
+			resp.Volumes = append(resp.Volumes, VolumeResource{Name: volName, Percent: rr.Avg})
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
