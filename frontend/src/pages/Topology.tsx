@@ -210,9 +210,9 @@ function DockerFormFields({ form, onChange }: { form: DockerForm; onChange: (f: 
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Tree component (embeddable, no Topbar) ────────────────────────────────────
 
-export function Topology() {
+export function TopologyTree() {
   const [physicalHosts, setPhysicalHosts] = useState<PhysicalHost[]>([])
   const [virtualHosts,  setVirtualHosts]  = useState<VirtualHost[]>([])
   const [dockerEngines, setDockerEngines] = useState<DockerEngine[]>([])
@@ -524,10 +524,7 @@ export function Topology() {
 
   return (
     <>
-      <Topbar title="Infrastructure" onAdd={startAddPhysical} />
-      <div className="content">
-
-        {addTarget?.kind === 'physical' && (
+      {addTarget?.kind === 'physical' && (
           <FormWrap
             title="Add Physical Host"
             error={formError}
@@ -811,6 +808,18 @@ export function Topology() {
           </div>
         )}
 
+    </>
+  )
+}
+
+// ── Standalone page ───────────────────────────────────────────────────────────
+
+export function Topology() {
+  return (
+    <>
+      <Topbar title="Infrastructure" />
+      <div className="content">
+        <TopologyTree />
       </div>
     </>
   )
