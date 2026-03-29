@@ -17,6 +17,7 @@ type enrichMockAppRepo struct {
 }
 
 func (m *enrichMockAppRepo) List(_ context.Context) ([]models.App, error)         { return nil, nil }
+func (m *enrichMockAppRepo) ListByHost(_ context.Context, _ string) ([]models.App, error) { return nil, nil }
 func (m *enrichMockAppRepo) Create(_ context.Context, a *models.App) error         { m.apps[a.ID] = a; return nil }
 func (m *enrichMockAppRepo) Get(_ context.Context, id string) (*models.App, error) {
 	a, ok := m.apps[id]
@@ -28,10 +29,11 @@ func (m *enrichMockAppRepo) Get(_ context.Context, id string) (*models.App, erro
 func (m *enrichMockAppRepo) GetByToken(_ context.Context, _ string) (*models.App, error) {
 	return nil, repo.ErrNotFound
 }
-func (m *enrichMockAppRepo) Update(_ context.Context, _ *models.App) error           { return nil }
-func (m *enrichMockAppRepo) Delete(_ context.Context, _ string) error                { return nil }
-func (m *enrichMockAppRepo) UpdateToken(_ context.Context, _, _ string) error        { return nil }
-func (m *enrichMockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error  { return nil }
+func (m *enrichMockAppRepo) Update(_ context.Context, _ *models.App) error                    { return nil }
+func (m *enrichMockAppRepo) Delete(_ context.Context, _ string) error                         { return nil }
+func (m *enrichMockAppRepo) UpdateToken(_ context.Context, _, _ string) error                 { return nil }
+func (m *enrichMockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error           { return nil }
+func (m *enrichMockAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error  { return nil }
 
 type enrichMockCheckRepo struct {
 	created []*models.MonitorCheck
@@ -90,6 +92,9 @@ func (m *enrichMockContainerRepo) ClearDiscoveredContainerApp(_ context.Context,
 	return nil
 }
 func (m *enrichMockContainerRepo) UpdateDiscoveredContainerStatus(_ context.Context, _ string, _ string, _ time.Time) error {
+	return nil
+}
+func (m *enrichMockContainerRepo) MarkStoppedIfNotRunning(_ context.Context, _ string, _ []string) error {
 	return nil
 }
 

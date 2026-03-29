@@ -183,7 +183,7 @@ func main() {
 		go watcher.Start(dockerCtx)
 	}
 
-	if poller, err := docker.NewResourcePoller(store); err != nil {
+	if poller, err := docker.NewResourcePoller(store, localEngineID); err != nil {
 		log.Printf("resource poller: socket not available, skipping (%v)", err)
 	} else {
 		go poller.Start(dockerCtx)

@@ -50,7 +50,9 @@ func newDiscovererWithClient(store *repo.Store, registry *apptemplate.Registry, 
 }
 
 // ScanAll lists all running containers from the Docker daemon and upserts each
-// one into discovered_containers. Called once at NORA startup.
+// one into discovered_containers. Called once at NORA startup and whenever a
+// manual scan is triggered. After upserting running containers it reconciles
+// any previously-discovered containers that are no longer running.
 func (d *Discoverer) ScanAll(ctx context.Context) {
 	log.Printf("docker discovery: scanning all running containers for engine %s", d.engineID)
 
@@ -60,12 +62,20 @@ func (d *Discoverer) ScanAll(ctx context.Context) {
 		return
 	}
 
+	runningIDs := make([]string, 0, len(containers))
 	for _, c := range containers {
 		name := containerNameFrom(c.Names)
 		image := c.Image
 		if err := d.upsert(ctx, c.ID, name, image, "running"); err != nil {
 			log.Printf("docker discovery: upsert %s: %v", name, err)
 		}
+		runningIDs = append(runningIDs, c.ID)
+	}
+
+	// Mark any previously-discovered containers that are no longer running as
+	// stopped so they don't show as running in the UI after a restart or removal.
+	if err := d.store.DiscoveredContainers.MarkStoppedIfNotRunning(ctx, d.engineID, runningIDs); err != nil {
+		log.Printf("docker discovery: mark stopped: %v", err)
 	}
 
 	log.Printf("docker discovery: initial scan complete — %d containers", len(containers))

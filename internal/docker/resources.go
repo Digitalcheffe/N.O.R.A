@@ -17,6 +17,20 @@ import (
 	"github.com/digitalcheffe/nora/internal/repo"
 )
 
+// dockerContainerNS is the fixed UUID v5 namespace used to derive stable
+// source IDs for Docker containers from a (engineID, containerName) pair.
+// Using a name-based key means metrics survive container ID changes caused
+// by stop/remove/recreate cycles.
+var dockerContainerNS = uuid.MustParse("c2d3e4f5-a6b7-8901-bcde-f12345678901")
+
+// StableContainerSourceID returns a deterministic UUID for a container that
+// belongs to a specific Docker engine, keyed on the container name rather than
+// the ephemeral Docker container ID.  The same (engineID, containerName) pair
+// always produces the same UUID.
+func StableContainerSourceID(engineID, containerName string) string {
+	return uuid.NewSHA1(dockerContainerNS, []byte(engineID+"/"+containerName)).String()
+}
+
 // resourcePollerAPI is the minimal Docker API subset needed for resource polling,
 // enabling mock injection in tests.
 type resourcePollerAPI interface {
@@ -55,13 +69,16 @@ type containerThresholdState struct {
 // every 60 seconds and writes readings to the resource_readings table.
 // Threshold crossings generate events.
 type ResourcePoller struct {
-	store  *repo.Store
-	client resourcePollerAPI
-	state  sync.Map // containerID -> containerThresholdState
+	store    *repo.Store
+	client   resourcePollerAPI
+	engineID string
+	state    sync.Map // containerID -> containerThresholdState
 }
 
 // NewResourcePoller creates a ResourcePoller connected to the Docker daemon.
-func NewResourcePoller(store *repo.Store) (*ResourcePoller, error) {
+// engineID is the infrastructure_components.id for the local Docker engine;
+// it is used to derive stable, name-keyed source IDs for resource readings.
+func NewResourcePoller(store *repo.Store, engineID string) (*ResourcePoller, error) {
 	cli, err := dockerclient.NewClientWithOpts(
 		dockerclient.FromEnv,
 		dockerclient.WithAPIVersionNegotiation(),
@@ -69,12 +86,12 @@ func NewResourcePoller(store *repo.Store) (*ResourcePoller, error) {
 	if err != nil {
 		return nil, fmt.Errorf("docker client: %w", err)
 	}
-	return &ResourcePoller{store: store, client: cli}, nil
+	return &ResourcePoller{store: store, client: cli, engineID: engineID}, nil
 }
 
 // newResourcePollerWithClient creates a ResourcePoller with an injected client (for tests).
-func newResourcePollerWithClient(store *repo.Store, cli resourcePollerAPI) *ResourcePoller {
-	return &ResourcePoller{store: store, client: cli}
+func newResourcePollerWithClient(store *repo.Store, engineID string, cli resourcePollerAPI) *ResourcePoller {
+	return &ResourcePoller{store: store, client: cli, engineID: engineID}
 }
 
 // Start polls all running containers every 60 seconds until ctx is cancelled.
@@ -190,7 +207,11 @@ func (p *ResourcePoller) PollContainer(ctx context.Context, containerID string, 
 	memBytes := float64(stats.MemoryStats.Usage)
 
 	now := time.Now().UTC()
-	sourceID := containerID
+
+	// Prefer the stable, name-keyed UUID so metrics survive container recreations.
+	// Fall back to appID when the container is linked to an app (app ID is already stable).
+	containerName := strings.TrimPrefix(stats.Name, "/")
+	sourceID := StableContainerSourceID(p.engineID, containerName)
 	if appID != "" {
 		sourceID = appID
 	}
@@ -216,14 +237,12 @@ func (p *ResourcePoller) PollContainer(ctx context.Context, containerID string, 
 		}
 	}
 
-	// Resolve display name for event messages (strip leading "/").
-	shortID := containerID
-	if len(shortID) > 12 {
-		shortID = shortID[:12]
-	}
-	containerName := shortID
-	if len(stats.Name) > 0 {
-		containerName = strings.TrimPrefix(stats.Name, "/")
+	// If stats.Name was empty, fall back to the short container ID for display.
+	if containerName == "" {
+		containerName = containerID
+		if len(containerName) > 12 {
+			containerName = containerName[:12]
+		}
 	}
 
 	p.checkThresholds(ctx, containerID, appID, containerName, cpuPct, memPct, now)

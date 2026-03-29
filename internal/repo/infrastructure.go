@@ -18,6 +18,10 @@ import (
 // InfraComponentRepo defines CRUD for infrastructure_components.
 type InfraComponentRepo interface {
 	List(ctx context.Context) ([]models.InfrastructureComponent, error)
+	// ListByParent returns all components whose parent_id matches parentID,
+	// ordered by type then name.  Used to render VM/LXC children on a Proxmox
+	// host detail page.
+	ListByParent(ctx context.Context, parentID string) ([]models.InfrastructureComponent, error)
 	Get(ctx context.Context, id string) (*models.InfrastructureComponent, error)
 	Create(ctx context.Context, c *models.InfrastructureComponent) error
 	Update(ctx context.Context, c *models.InfrastructureComponent) error
@@ -45,6 +49,26 @@ func (r *sqliteInfraComponentRepo) List(ctx context.Context) ([]models.Infrastru
 		ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list infrastructure_components: %w", err)
+	}
+	if rows == nil {
+		rows = []models.InfrastructureComponent{}
+	}
+	return rows, nil
+}
+
+func (r *sqliteInfraComponentRepo) ListByParent(ctx context.Context, parentID string) ([]models.InfrastructureComponent, error) {
+	var rows []models.InfrastructureComponent
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
+		       parent_id, credentials, snmp_config,
+		       COALESCE(notes,'') AS notes, enabled,
+		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
+		       created_at
+		FROM infrastructure_components
+		WHERE parent_id = ?
+		ORDER BY type ASC, name ASC`, parentID)
+	if err != nil {
+		return nil, fmt.Errorf("list children for %s: %w", parentID, err)
 	}
 	if rows == nil {
 		rows = []models.InfrastructureComponent{}

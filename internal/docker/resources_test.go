@@ -58,7 +58,7 @@ func (r *mockResourceReadingRepo) BackfillAppID(_ context.Context, _, _ string) 
 
 func newTestResourcePoller(appRepo repo.AppRepo, eventRepo repo.EventRepo, resRepo repo.ResourceReadingRepo, cli resourcePollerAPI) *ResourcePoller {
 	store := repo.NewStore(appRepo, eventRepo, nil, nil, resRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	return newResourcePollerWithClient(store, cli)
+	return newResourcePollerWithClient(store, "", cli)
 }
 
 func makeStats(totalCPU, prevTotalCPU, systemCPU, prevSystemCPU uint64, percpu []uint64, memUsage, memLimit uint64) container.StatsResponse {
@@ -213,10 +213,11 @@ func TestPollContainer_WritesThreeReadings(t *testing.T) {
 	}
 }
 
-func TestPollContainer_SourceIDIsContainerIDWhenNoApp(t *testing.T) {
+func TestPollContainer_SourceIDIsStableUUIDWhenNoApp(t *testing.T) {
 	resRepo := &mockResourceReadingRepo{}
 	cli := &mockResourceClient{
 		statsMap: map[string]container.StatsResponse{
+			// stats.Name is "/test-container" (set in makeStats helper).
 			"ctr1": makeStats(0, 0, 1000, 0, []uint64{0}, 0, 1024),
 		},
 	}
@@ -226,9 +227,11 @@ func TestPollContainer_SourceIDIsContainerIDWhenNoApp(t *testing.T) {
 		t.Fatalf("PollContainer: %v", err)
 	}
 
+	// engineID="" and containerName="test-container" (leading "/" stripped from "/test-container").
+	wantID := StableContainerSourceID("", "test-container")
 	for _, r := range resRepo.readings {
-		if r.SourceID != "ctr1" {
-			t.Errorf("expected SourceID %q (container ID), got %q", "ctr1", r.SourceID)
+		if r.SourceID != wantID {
+			t.Errorf("expected stable SourceID %q, got %q", wantID, r.SourceID)
 		}
 	}
 }

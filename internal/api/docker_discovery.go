@@ -75,13 +75,21 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Collect container IDs for a batched resource reading lookup.
-	containerIDs := make([]string, len(containers))
-	for i, c := range containers {
-		containerIDs[i] = c.ContainerID
+	// Collect all IDs needed for the resource lookup.
+	// Priority order for metric lookup per container:
+	//   1. StableContainerSourceID(componentID, name) — used by ResourcePoller since stable-ID change
+	//   2. appID — used when container is linked to an app (ResourcePoller uses appID in that case)
+	//   3. raw containerID — backward compat for readings recorded before the stable-ID change
+	lookupIDs := make([]string, 0, len(containers)*3)
+	for _, c := range containers {
+		lookupIDs = append(lookupIDs, docker.StableContainerSourceID(componentID, c.ContainerName))
+		if c.AppID != nil && *c.AppID != "" {
+			lookupIDs = append(lookupIDs, *c.AppID)
+		}
+		lookupIDs = append(lookupIDs, c.ContainerID)
 	}
 
-	metrics, err := h.store.Resources.LatestMetrics(r.Context(), "docker_container", containerIDs)
+	metrics, err := h.store.Resources.LatestMetrics(r.Context(), "docker_container", lookupIDs)
 	if err != nil {
 		// Non-fatal — return containers without metrics rather than erroring.
 		metrics = map[string]map[string]float64{}
@@ -100,12 +108,22 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 			LastSeenAt:           c.LastSeenAt,
 		}
 
-		if m, ok := metrics[c.ContainerID]; ok {
-			if v, ok := m["cpu_percent"]; ok {
-				item.CPUPercent = &v
-			}
-			if v, ok := m["mem_percent"]; ok {
-				item.MemPercent = &v
+		// Walk lookup priority until we find a source ID that has metrics.
+		candidates := []string{docker.StableContainerSourceID(componentID, c.ContainerName)}
+		if c.AppID != nil && *c.AppID != "" {
+			candidates = append(candidates, *c.AppID)
+		}
+		candidates = append(candidates, c.ContainerID)
+
+		for _, sourceID := range candidates {
+			if m, ok := metrics[sourceID]; ok {
+				if v, ok := m["cpu_percent"]; ok {
+					item.CPUPercent = &v
+				}
+				if v, ok := m["mem_percent"]; ok {
+					item.MemPercent = &v
+				}
+				break
 			}
 		}
 

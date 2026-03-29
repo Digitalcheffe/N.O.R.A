@@ -85,7 +85,7 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 
 	case "docker_socket":
 		source = "docker"
-		poller, err := docker.NewResourcePoller(store)
+		poller, err := docker.NewResourcePoller(store, c.ID)
 		if err != nil {
 			log.Printf("scan: %s (%s): docker client: %v", c.Name, c.ID, err)
 			return "offline", fmt.Errorf("docker client unavailable: %w", err)
