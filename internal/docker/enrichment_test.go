@@ -94,6 +94,9 @@ func (m *enrichMockContainerRepo) ClearDiscoveredContainerApp(_ context.Context,
 func (m *enrichMockContainerRepo) UpdateDiscoveredContainerStatus(_ context.Context, _ string, _ string, _ time.Time) error {
 	return nil
 }
+func (m *enrichMockContainerRepo) MarkStoppedIfNotRunning(_ context.Context, _ string, _ []string) error {
+	return nil
+}
 
 type enrichMockRouteRepo struct {
 	routes map[string]*models.DiscoveredRoute

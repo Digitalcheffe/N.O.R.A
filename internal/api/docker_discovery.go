@@ -75,13 +75,18 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Collect container IDs for a batched resource reading lookup.
-	containerIDs := make([]string, len(containers))
-	for i, c := range containers {
-		containerIDs[i] = c.ContainerID
+	// Collect all IDs needed for the resource lookup.  When a container is
+	// linked to an app its resource readings are stored under the app ID, so we
+	// query both the Docker container ID and the app ID for each container.
+	lookupIDs := make([]string, 0, len(containers)*2)
+	for _, c := range containers {
+		lookupIDs = append(lookupIDs, c.ContainerID)
+		if c.AppID != nil && *c.AppID != "" {
+			lookupIDs = append(lookupIDs, *c.AppID)
+		}
 	}
 
-	metrics, err := h.store.Resources.LatestMetrics(r.Context(), "docker_container", containerIDs)
+	metrics, err := h.store.Resources.LatestMetrics(r.Context(), "docker_container", lookupIDs)
 	if err != nil {
 		// Non-fatal — return containers without metrics rather than erroring.
 		metrics = map[string]map[string]float64{}
@@ -100,7 +105,15 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 			LastSeenAt:           c.LastSeenAt,
 		}
 
-		if m, ok := metrics[c.ContainerID]; ok {
+		// Try container ID first; fall back to app ID (used when the container
+		// is linked to an app — ResourcePoller stores readings under the app ID).
+		sourceID := c.ContainerID
+		if _, found := metrics[sourceID]; !found {
+			if c.AppID != nil && *c.AppID != "" {
+				sourceID = *c.AppID
+			}
+		}
+		if m, ok := metrics[sourceID]; ok {
 			if v, ok := m["cpu_percent"]; ok {
 				item.CPUPercent = &v
 			}

@@ -23,6 +23,10 @@ type DiscoveredContainerRepo interface {
 	SetDiscoveredContainerApp(ctx context.Context, id string, appID string) error
 	ClearDiscoveredContainerApp(ctx context.Context, id string) error
 	UpdateDiscoveredContainerStatus(ctx context.Context, id string, status string, lastSeenAt time.Time) error
+	// MarkStoppedIfNotRunning sets status="stopped" for all containers belonging to
+	// infraComponentID whose container_id is NOT in runningIDs.  Called after each
+	// reconcile scan so containers removed from Docker don't stay as "running".
+	MarkStoppedIfNotRunning(ctx context.Context, infraComponentID string, runningIDs []string) error
 }
 
 // DiscoveredRouteRepo manages the discovered_routes table.
@@ -155,6 +159,39 @@ func (r *sqliteDiscoveredContainerRepo) UpdateDiscoveredContainerStatus(ctx cont
 		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
 	}
 	return nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) MarkStoppedIfNotRunning(ctx context.Context, infraComponentID string, runningIDs []string) error {
+	if len(runningIDs) == 0 {
+		// Nothing is running — mark everything for this engine as stopped.
+		_, err := r.db.ExecContext(ctx, `
+			UPDATE discovered_containers
+			SET status = 'stopped', last_seen_at = ?
+			WHERE infra_component_id = ? AND status = 'running'`,
+			time.Now().UTC(), infraComponentID)
+		return err
+	}
+
+	// Build a parameterised NOT IN clause.
+	placeholders := make([]byte, 0, len(runningIDs)*2)
+	args := make([]interface{}, 0, len(runningIDs)+2)
+	args = append(args, time.Now().UTC(), infraComponentID)
+	for i, id := range runningIDs {
+		if i > 0 {
+			placeholders = append(placeholders, ',')
+		}
+		placeholders = append(placeholders, '?')
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(`
+		UPDATE discovered_containers
+		SET status = 'stopped', last_seen_at = ?
+		WHERE infra_component_id = ? AND status = 'running'
+		  AND container_id NOT IN (%s)`, string(placeholders))
+
+	_, err := r.db.ExecContext(ctx, query, args...)
+	return err
 }
 
 // ── DiscoveredRouteRepo implementation ───────────────────────────────────────
