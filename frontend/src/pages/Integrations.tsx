@@ -37,11 +37,10 @@ const DRIVERS = [
 
 // ── Driver card ───────────────────────────────────────────────────────────────
 
-function DriverCard({ label, description, capabilities }: typeof DRIVERS[number]) {
+function DriverCard({ label, capabilities }: typeof DRIVERS[number]) {
   return (
     <div className="int-driver-card">
       <div className="int-driver-name">{label}</div>
-      <div className="int-driver-desc">{description}</div>
       <div className="int-driver-caps">
         {capabilities.map(c => (
           <span key={c} className="int-cap-pill">{c}</span>
