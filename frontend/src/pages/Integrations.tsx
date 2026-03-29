@@ -22,12 +22,6 @@ const DRIVERS = [
     capabilities: ['resource metrics', 'VM/CT status', 'API polling'],
   },
   {
-    name: 'opnsense',
-    label: 'OPNsense',
-    description: 'Network status and availability via OPNsense API.',
-    capabilities: ['network status', 'firmware alerts', 'API polling'],
-  },
-  {
     name: 'synology',
     label: 'Synology',
     description: 'NAS resource metrics and volume health via Synology DSM API.',
