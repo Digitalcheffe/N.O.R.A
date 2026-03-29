@@ -1,5 +1,4 @@
-// Package infrastructure provides Traefik and other infrastructure discovery workers.
-package infrastructure
+package infra
 
 import (
 	"context"
@@ -9,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/google/uuid"
@@ -86,7 +84,7 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 		return nil
 	}
 
-	client := infra.NewTraefikClient(creds.APIURL, creds.APIKey)
+	client := NewTraefikClient(creds.APIURL, creds.APIKey)
 
 	// ── Fetch routers from Traefik ────────────────────────────────────────────
 
