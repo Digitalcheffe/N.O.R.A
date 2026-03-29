@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
-import { apps as appsApi, dashboard as dashboardApi } from '../api/client'
-import type { App, AppSummary, Event, Severity } from '../api/types'
+import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi } from '../api/client'
+import type { App, AppSummary, AppTemplate, Event, Severity } from '../api/types'
 import '../styles/Modal.css'
 import './AppDetail.css'
 
@@ -179,11 +179,22 @@ interface AppSettingsModalProps {
   onDeleted: () => void
 }
 
+const CAPABILITY_LABEL: Record<string, string> = {
+  full:         'Webhook + Monitor',
+  webhook_only: 'Webhook',
+  monitor_only: 'Monitor',
+  docker_only:  'Docker',
+  limited:      'Limited',
+}
+
 function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsModalProps) {
   const [name, setName] = useState(app.name)
+  const [profileId, setProfileId] = useState(app.profile_id ?? '')
   const [baseUrl, setBaseUrl] = useState((app.config?.base_url as string) ?? '')
   const [monitorUrl, setMonitorUrl] = useState((app.config?.monitor_url as string) ?? '')
   const [rateLimit, setRateLimit] = useState(String(app.rate_limit ?? 0))
+
+  const [templates, setTemplates] = useState<AppTemplate[]>([])
 
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -205,6 +216,18 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  useEffect(() => {
+    templatesApi.list()
+      .then(res => setTemplates(res.data))
+      .catch(() => {})
+  }, [])
+
+  const grouped = templates.reduce<Record<string, AppTemplate[]>>((acc, t) => {
+    if (!acc[t.category]) acc[t.category] = []
+    acc[t.category].push(t)
+    return acc
+  }, {})
+
   function webhookUrl(token: string) {
     return `${window.location.origin}/api/v1/ingest/${token}`
   }
@@ -221,6 +244,7 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
 
       const updated = await appsApi.update(app.id, {
         name: name.trim(),
+        profile_id: profileId || null,
         config,
         rate_limit: parseInt(rateLimit, 10) || 0,
       })
@@ -287,6 +311,26 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
           {/* ── Basic settings ── */}
           <label className="modal-label">Name</label>
           <input className="modal-input" value={name} onChange={e => setName(e.target.value)} />
+
+          <label className="modal-label" style={{ marginTop: 16 }}>
+            App Template <span className="modal-hint">(controls field mapping and severity)</span>
+          </label>
+          <select
+            className="modal-input"
+            value={profileId}
+            onChange={e => setProfileId(e.target.value)}
+          >
+            <option value="">Generic Webhook — raw JSON, no mapping</option>
+            {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
+              <optgroup key={cat} label={cat}>
+                {items.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} — {CAPABILITY_LABEL[t.capability] ?? t.capability}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
 
           <label className="modal-label" style={{ marginTop: 16 }}>
             App URL <span className="modal-hint">(optional — enables the Launch button)</span>

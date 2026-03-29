@@ -52,7 +52,7 @@ export interface App {
 
 export interface CreateAppInput {
   name: string
-  profile_id?: string
+  profile_id?: string | null  // null clears the profile, undefined leaves it unchanged
   docker_engine_id?: string
   config?: Record<string, unknown>
   rate_limit?: number
