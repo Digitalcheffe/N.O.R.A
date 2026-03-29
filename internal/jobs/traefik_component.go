@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/infra"
+	"github.com/digitalcheffe/nora/internal/infrastructure"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/google/uuid"
@@ -159,6 +160,14 @@ func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.Infra
 		if err := store.TraefikComponents.UpsertRoutes(ctx, c.ID, routes); err != nil {
 			log.Printf("traefik component scheduler: upsert routes for %s: %v", c.Name, err)
 		}
+	}
+
+	// ── Populate discovered_routes ────────────────────────────────────────────
+
+	discovery := infrastructure.NewTraefikDiscovery(store)
+	if err := discovery.Run(ctx, &c); err != nil {
+		// Non-critical — log but do not fail the component poll.
+		log.Printf("traefik component scheduler: discovery run for %s: %v", c.Name, err)
 	}
 
 	// ── Update component status ───────────────────────────────────────────────

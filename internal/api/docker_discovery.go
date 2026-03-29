@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
 )
@@ -22,6 +23,8 @@ func NewDockerDiscoveryHandler(store *repo.Store) *DockerDiscoveryHandler {
 // Routes registers the docker discovery endpoints on r.
 func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 	r.Get("/docker-engines/{id}/containers", h.ListContainers)
+	r.Get("/infrastructure/{id}/routes", h.ListRoutes)
+	r.Get("/discovery/all", h.ListAll)
 }
 
 // discoveredContainerResponse is the per-container shape returned by the API.
@@ -101,4 +104,151 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 	}
 
 	writeJSON(w, http.StatusOK, listDiscoveredContainersResponse{Data: out, Total: len(out)})
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+// discoveredRouteResponse is the per-route shape returned by the routes API.
+type discoveredRouteResponse struct {
+	ID             string     `json:"id"`
+	RouterName     string     `json:"router_name"`
+	Domain         *string    `json:"domain"`
+	BackendService *string    `json:"backend_service"`
+	ContainerID    *string    `json:"container_id"`
+	ContainerName  *string    `json:"container_name"`
+	AppID          *string    `json:"app_id"`
+	SSLExpiry      *time.Time `json:"ssl_expiry"`
+	SSLIssuer      *string    `json:"ssl_issuer"`
+	LastSeenAt     time.Time  `json:"last_seen_at"`
+}
+
+type listDiscoveredRoutesResponse struct {
+	Data  []discoveredRouteResponse `json:"data"`
+	Total int                       `json:"total"`
+}
+
+// buildRouteResponses converts a slice of DiscoveredRoute models to API
+// response structs, denormalising container_name from containersByID.
+func buildRouteResponses(routes []*models.DiscoveredRoute, containersByID map[string]string) []discoveredRouteResponse {
+	out := make([]discoveredRouteResponse, len(routes))
+	for i, ro := range routes {
+		item := discoveredRouteResponse{
+			ID:             ro.ID,
+			RouterName:     ro.RouterName,
+			Domain:         ro.Domain,
+			BackendService: ro.BackendService,
+			ContainerID:    ro.ContainerID,
+			AppID:          ro.AppID,
+			SSLExpiry:      ro.SSLExpiry,
+			SSLIssuer:      ro.SSLIssuer,
+			LastSeenAt:     ro.LastSeenAt,
+		}
+		if ro.ContainerID != nil {
+			if name, ok := containersByID[*ro.ContainerID]; ok {
+				item.ContainerName = &name
+			}
+		}
+		out[i] = item
+	}
+	return out
+}
+
+// containerNameIndex builds a map of discovered_container UUID → container_name
+// from a slice of all containers.
+func containerNameIndex(containers []*models.DiscoveredContainer) map[string]string {
+	m := make(map[string]string, len(containers))
+	for _, c := range containers {
+		m[c.ID] = c.ContainerName
+	}
+	return m
+}
+
+// ListRoutes returns all discovered routes for a Traefik infrastructure component.
+// GET /api/v1/infrastructure/{id}/routes
+func (h *DockerDiscoveryHandler) ListRoutes(w http.ResponseWriter, r *http.Request) {
+	componentID := chi.URLParam(r, "id")
+
+	if _, err := h.store.InfraComponents.Get(r.Context(), componentID); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "infrastructure component not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	routes, err := h.store.DiscoveredRoutes.ListDiscoveredRoutes(r.Context(), componentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	allContainers, err := h.store.DiscoveredContainers.ListAllDiscoveredContainers(r.Context())
+	if err != nil {
+		allContainers = nil
+	}
+
+	out := buildRouteResponses(routes, containerNameIndex(allContainers))
+	writeJSON(w, http.StatusOK, listDiscoveredRoutesResponse{Data: out, Total: len(out)})
+}
+
+// ── All ───────────────────────────────────────────────────────────────────────
+
+type discoveryAllResponse struct {
+	Containers []discoveredContainerResponse `json:"containers"`
+	Routes     []discoveredRouteResponse     `json:"routes"`
+}
+
+// ListAll returns all discovered containers and routes across every component.
+// GET /api/v1/discovery/all
+func (h *DockerDiscoveryHandler) ListAll(w http.ResponseWriter, r *http.Request) {
+	allContainers, err := h.store.DiscoveredContainers.ListAllDiscoveredContainers(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Collect container IDs for batched metrics lookup.
+	containerIDs := make([]string, len(allContainers))
+	for i, c := range allContainers {
+		containerIDs[i] = c.ContainerID
+	}
+	metrics, err := h.store.Resources.LatestMetrics(r.Context(), "docker_container", containerIDs)
+	if err != nil {
+		metrics = map[string]map[string]float64{}
+	}
+
+	containerOut := make([]discoveredContainerResponse, len(allContainers))
+	for i, c := range allContainers {
+		item := discoveredContainerResponse{
+			ID:                   c.ID,
+			ContainerName:        c.ContainerName,
+			Image:                c.Image,
+			Status:               c.Status,
+			AppID:                c.AppID,
+			ProfileSuggestion:    c.ProfileSuggestion,
+			SuggestionConfidence: c.SuggestionConfidence,
+			LastSeenAt:           c.LastSeenAt,
+		}
+		if m, ok := metrics[c.ContainerID]; ok {
+			if v, ok := m["cpu_percent"]; ok {
+				item.CPUPercent = &v
+			}
+			if v, ok := m["mem_percent"]; ok {
+				item.MemPercent = &v
+			}
+		}
+		containerOut[i] = item
+	}
+
+	allRoutes, err := h.store.DiscoveredRoutes.ListAllDiscoveredRoutes(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	routeOut := buildRouteResponses(allRoutes, containerNameIndex(allContainers))
+	writeJSON(w, http.StatusOK, discoveryAllResponse{
+		Containers: containerOut,
+		Routes:     routeOut,
+	})
 }
