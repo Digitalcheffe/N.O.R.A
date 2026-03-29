@@ -35,6 +35,7 @@ import type {
   TimeseriesBucket,
   TimeseriesFilter,
   TraefikCert,
+  TraefikComponentDetail,
   User,
   ValidationResult,
   VirtualHost,
@@ -345,6 +346,9 @@ export const infrastructure = {
 
   resources: (id: string, period = 'hour') =>
     request<ResourceSummary>('GET', `/infrastructure/${id}/resources?period=${period}`),
+
+  traefikDetail: (id: string) =>
+    request<TraefikComponentDetail>('GET', `/infrastructure/${id}/traefik`),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────

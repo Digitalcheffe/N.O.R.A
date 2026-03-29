@@ -493,3 +493,42 @@
   transform: translateX(16px);
   background: var(--accent);
 }
+
+
+/* ── Traefik card summary ───────────────────────────────────────────────────── */
+
+.infra-traefik-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  flex-wrap: wrap;
+}
+
+.infra-traefik-cert-count,
+.infra-traefik-route-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.infra-traefik-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.infra-traefik-badge.warn {
+  background: var(--yellow-dim, rgba(234,179,8,0.15));
+  color: var(--yellow, #eab308);
+  border: 1px solid var(--yellow-dim, rgba(234,179,8,0.3));
+}
+
+.infra-traefik-badge.crit {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red-dim);
+}

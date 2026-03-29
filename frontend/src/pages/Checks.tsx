@@ -124,7 +124,8 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
       {/* Target */}
       <div className="check-card-target" title={check.target}>
         {check.target}
-        {check.ssl_source === 'traefik' && <span className="check-card-target-tag">Traefik</span>}
+        {check.source_component_id && <span className="check-card-target-tag traefik">Traefik</span>}
+        {!check.source_component_id && check.ssl_source === 'traefik' && <span className="check-card-target-tag">Traefik</span>}
         {check.skip_tls_verify && <span className="check-card-target-tag warn">self-signed</span>}
       </div>
 

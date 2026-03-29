@@ -116,6 +116,7 @@ export interface MonitorCheck {
   ssl_crit_days: number
   ssl_source: SSLSource | null
   integration_id: string | null
+  source_component_id: string | null
   skip_tls_verify: boolean
   enabled: boolean
   last_checked_at: string | null
@@ -344,12 +345,14 @@ export type ComponentType =
   | 'bare_metal'
   | 'windows_host'
   | 'docker_engine'
+  | 'traefik'
 
 export type CollectionMethod =
   | 'proxmox_api'
   | 'synology_api'
   | 'snmp'
   | 'docker_socket'
+  | 'traefik_api'
   | 'none'
 
 export interface InfrastructureComponent {
@@ -382,6 +385,38 @@ export interface InfrastructureComponentInput {
 export interface VolumeResource {
   name: string
   percent: number
+}
+
+// ── Traefik Component ─────────────────────────────────────────────────────────
+
+export interface TraefikRoute {
+  id: string
+  component_id: string
+  name: string
+  rule: string
+  service: string
+  status: string
+  updated_at: string
+}
+
+export interface TraefikCertWithCheck {
+  id: string
+  domain: string
+  issuer?: string | null
+  expires_at?: string | null
+  sans: string[]
+  last_seen_at: string
+  check_status: string
+  check_id?: string
+}
+
+export interface TraefikComponentDetail {
+  component_id: string
+  cert_count: number
+  warn_count: number
+  crit_count: number
+  certs: TraefikCertWithCheck[]
+  routes: TraefikRoute[]
 }
 
 export interface ResourceSummary {

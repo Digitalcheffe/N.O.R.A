@@ -17,6 +17,9 @@ type MonitorCheck struct {
 	// from standalone checks (direct TLS handshake). Nil means standalone.
 	SSLSource     *string `db:"ssl_source"      json:"ssl_source,omitempty"`
 	IntegrationID *string `db:"integration_id"  json:"integration_id,omitempty"`
+	// SourceComponentID is set for SSL checks auto-created by a Traefik component poller.
+	// When set, the check is owned by the component and cannot be deleted by the user directly.
+	SourceComponentID *string `db:"source_component_id" json:"source_component_id,omitempty"`
 	// SkipTLSVerify disables certificate validation for URL checks.
 	// Use for internal services with self-signed certificates.
 	SkipTLSVerify  bool    `db:"skip_tls_verify" json:"skip_tls_verify"`

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { infrastructure as infraApi } from '../api/client'
@@ -8,6 +9,7 @@ import type {
   InfrastructureComponent,
   InfrastructureComponentInput,
   ResourceSummary,
+  TraefikComponentDetail,
   VolumeResource,
 } from '../api/types'
 import './Infrastructure.css'
@@ -25,6 +27,7 @@ const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   bare_metal:    'snmp',
   windows_host:  'snmp',
   docker_engine: 'docker_socket',
+  traefik:       'traefik_api',
 }
 
 const TYPE_LABEL: Record<ComponentType, string> = {
@@ -35,6 +38,7 @@ const TYPE_LABEL: Record<ComponentType, string> = {
   bare_metal:    'Bare Metal',
   windows_host:  'Windows Host',
   docker_engine: 'Docker Engine',
+  traefik:       'Traefik',
 }
 
 const CAN_HAVE_CHILDREN = new Set<ComponentType>(['proxmox_node', 'bare_metal', 'vm'])
@@ -72,6 +76,9 @@ interface InfraForm {
   // Docker config
   docker_socket_type: 'local' | 'remote_proxy'
   docker_socket_path: string
+  // Traefik config
+  traefik_api_url: string
+  traefik_api_key: string
 }
 
 const DEFAULT_FORM: InfraForm = {
@@ -98,6 +105,8 @@ const DEFAULT_FORM: InfraForm = {
   snmp_priv_passphrase: '',
   docker_socket_type: 'local',
   docker_socket_path: '/var/run/docker.sock',
+  traefik_api_url: '',
+  traefik_api_key: '',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -166,6 +175,14 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
       socket_type: form.docker_socket_type,
       socket_path: form.docker_socket_path,
     })
+  } else if (form.type === 'traefik') {
+    const hasNewCreds = form.traefik_api_url
+    if (!isEdit || hasNewCreds) {
+      payload.credentials = JSON.stringify({
+        api_url: form.traefik_api_url,
+        api_key: form.traefik_api_key,
+      })
+    }
   }
 
   if (SNMP_TYPES.has(form.type)) {
@@ -257,12 +274,14 @@ function Toggle({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function Infrastructure() {
-  const [components,   setComponents]   = useState<InfrastructureComponent[]>([])
-  const [resourcesMap, setResourcesMap] = useState<Record<string, ResourceSummary>>({})
-  const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null)
-  const [loading,      setLoading]      = useState(true)
-  const [activeTab,    setActiveTab]    = useState<ActiveTab>('components')
-  const [tick,         setTick]         = useState(0)
+  const navigate = useNavigate()
+  const [components,      setComponents]      = useState<InfrastructureComponent[]>([])
+  const [resourcesMap,    setResourcesMap]    = useState<Record<string, ResourceSummary>>({})
+  const [traefikDetailMap, setTraefikDetailMap] = useState<Record<string, TraefikComponentDetail>>({})
+  const [lastPolledAt,    setLastPolledAt]    = useState<Date | null>(null)
+  const [loading,         setLoading]         = useState(true)
+  const [activeTab,       setActiveTab]       = useState<ActiveTab>('components')
+  const [tick,            setTick]            = useState(0)
 
   // Modal state
   const [modalOpen,  setModalOpen]  = useState(false)
@@ -276,18 +295,34 @@ export function Infrastructure() {
 
   const pollAll = useCallback(async (compList: InfrastructureComponent[]) => {
     if (compList.length === 0) return
-    const results = await Promise.allSettled(
-      compList.map(c =>
-        infraApi.resources(c.id, 'hour').then(r => ({ id: c.id, data: r }))
-      )
-    )
-    const map: Record<string, ResourceSummary> = {}
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        map[r.value.id] = r.value.data
-      }
+
+    const nonTraefikComps = compList.filter(c => c.type !== 'traefik')
+    const traefikComps    = compList.filter(c => c.type === 'traefik')
+
+    const [resourceResults, traefikResults] = await Promise.all([
+      Promise.allSettled(
+        nonTraefikComps.map(c =>
+          infraApi.resources(c.id, 'hour').then(r => ({ id: c.id, data: r }))
+        )
+      ),
+      Promise.allSettled(
+        traefikComps.map(c =>
+          infraApi.traefikDetail(c.id).then(r => ({ id: c.id, data: r }))
+        )
+      ),
+    ])
+
+    const resMap: Record<string, ResourceSummary> = {}
+    for (const r of resourceResults) {
+      if (r.status === 'fulfilled') resMap[r.value.id] = r.value.data
     }
-    setResourcesMap(prev => ({ ...prev, ...map }))
+    const traefikMap: Record<string, TraefikComponentDetail> = {}
+    for (const r of traefikResults) {
+      if (r.status === 'fulfilled') traefikMap[r.value.id] = r.value.data
+    }
+
+    setResourcesMap(prev => ({ ...prev, ...resMap }))
+    setTraefikDetailMap(prev => ({ ...prev, ...traefikMap }))
     setLastPolledAt(new Date())
   }, [])
 
@@ -411,7 +446,75 @@ export function Infrastructure() {
     )
   }
 
+  function renderTraefikCard(c: InfrastructureComponent) {
+    const detail = traefikDetailMap[c.id]
+    const isDeleting = deletingId === c.id
+
+    return (
+      <div key={c.id} className="infra-card">
+        <div className="infra-card-header">
+          <div className="infra-card-title-group">
+            <div className="infra-card-name">{c.name}</div>
+            <div className="infra-card-meta">Traefik · {c.ip || '—'}</div>
+          </div>
+          <div className="infra-card-status-group">
+            <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
+            <span className="infra-status-label">{statusLabel(c.last_status)}</span>
+          </div>
+        </div>
+
+        <div className="infra-traefik-summary">
+          {detail ? (
+            <>
+              <span className="infra-traefik-cert-count">{detail.cert_count} cert{detail.cert_count !== 1 ? 's' : ''}</span>
+              {detail.crit_count > 0 && (
+                <span className="infra-traefik-badge crit">{detail.crit_count} critical</span>
+              )}
+              {detail.warn_count > 0 && detail.crit_count === 0 && (
+                <span className="infra-traefik-badge warn">{detail.warn_count} expiring</span>
+              )}
+              <span className="infra-traefik-route-count">{detail.routes.length} route{detail.routes.length !== 1 ? 's' : ''}</span>
+            </>
+          ) : (
+            <span className="infra-traefik-cert-count">—</span>
+          )}
+        </div>
+
+        <div className="infra-card-footer">
+          {lastPolledAt && (
+            <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
+          )}
+          <div className="infra-card-actions">
+            <button
+              className="infra-card-btn accent"
+              onClick={() => navigate(`/topology/${c.id}`)}
+              disabled={isDeleting}
+            >
+              View Detail
+            </button>
+            <button
+              className="infra-card-btn"
+              onClick={() => openEdit(c)}
+              disabled={isDeleting}
+            >
+              Edit
+            </button>
+            <button
+              className="infra-card-btn danger"
+              onClick={() => void handleDelete(c.id)}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderCard(c: InfrastructureComponent) {
+    if (c.type === 'traefik') return renderTraefikCard(c)
+
     const res = resourcesMap[c.id]
     const isDeleting = deletingId === c.id
 
@@ -496,10 +599,10 @@ export function Infrastructure() {
               <option value="proxmox_node">Proxmox Node</option>
               <option value="synology">Synology NAS</option>
               <option value="vm">VM</option>
-              <option value="lxc">LXC</option>
               <option value="bare_metal">Bare Metal</option>
               <option value="windows_host">Windows Host</option>
               <option value="docker_engine">Docker Engine</option>
+              <option value="traefik">Traefik</option>
             </select>
           </div>
 
@@ -686,6 +789,31 @@ export function Infrastructure() {
                   onChange={e => setField('docker_socket_path', e.target.value)}
                   placeholder="/var/run/docker.sock" />
               </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Traefik credentials ── */}
+        {form.type === 'traefik' && (
+          <>
+            <SectionHeading>Traefik API {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
+            <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="form-field form-field-full">
+                <div className="form-label">API URL</div>
+                <input className="form-input" value={form.traefik_api_url}
+                  onChange={e => setField('traefik_api_url', e.target.value)}
+                  placeholder="http://traefik.local:8080" />
+              </div>
+              <div className="form-field form-field-full">
+                <div className="form-label">API Key <span className="infra-optional">(optional)</span></div>
+                <input className="form-input" type="password" value={form.traefik_api_key}
+                  onChange={e => setField('traefik_api_key', e.target.value)}
+                  placeholder="Bearer ••••••••" />
+              </div>
+            </div>
+            <div className="infra-hint">
+              NORA will poll the Traefik API every 5 minutes to discover SSL certs and HTTP routes.
+              SSL checks are auto-created per cert and shown on the Checks page.
             </div>
           </>
         )}

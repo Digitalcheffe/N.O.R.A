@@ -45,3 +45,27 @@ type TraefikCert struct {
 	SANsJSON      string     `db:"sans"           json:"-"` // raw JSON column
 	LastSeenAt    time.Time  `db:"last_seen_at"   json:"last_seen_at"`
 }
+
+// TraefikComponentCert is a TLS certificate discovered from a traefik-type
+// infrastructure component and linked to it for cascade-delete.
+type TraefikComponentCert struct {
+	ID          string     `db:"id"           json:"id"`
+	ComponentID string     `db:"component_id" json:"component_id"`
+	Domain      string     `db:"domain"       json:"domain"`
+	Issuer      *string    `db:"issuer"       json:"issuer,omitempty"`
+	ExpiresAt   *time.Time `db:"expires_at"   json:"expires_at,omitempty"`
+	SANs        []string   `db:"-"            json:"sans"`
+	SANsJSON    string     `db:"sans"         json:"-"`
+	LastSeenAt  time.Time  `db:"last_seen_at" json:"last_seen_at"`
+}
+
+// TraefikRoute is an HTTP router entry discovered from a traefik-type component.
+type TraefikRoute struct {
+	ID          string `db:"id"           json:"id"`
+	ComponentID string `db:"component_id" json:"component_id"`
+	Name        string `db:"name"         json:"name"`
+	Rule        string `db:"rule"         json:"rule"`
+	Service     string `db:"service"      json:"service"`
+	Status      string `db:"status"       json:"status"`
+	UpdatedAt   string `db:"updated_at"   json:"updated_at"`
+}
