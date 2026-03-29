@@ -192,6 +192,7 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
   const [profileId, setProfileId] = useState(app.profile_id ?? '')
   const [baseUrl, setBaseUrl] = useState((app.config?.base_url as string) ?? '')
   const [monitorUrl, setMonitorUrl] = useState((app.config?.monitor_url as string) ?? '')
+  const [apiKey, setApiKey] = useState((app.config?.api_key as string) ?? '')
   const [rateLimit, setRateLimit] = useState(String(app.rate_limit ?? 0))
 
   const [templates, setTemplates] = useState<AppTemplate[]>([])
@@ -241,10 +242,12 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
       else delete config.base_url
       if (monitorUrl.trim()) config.monitor_url = monitorUrl.trim()
       else delete config.monitor_url
+      if (apiKey.trim()) config.api_key = apiKey.trim()
+      else delete config.api_key
 
       const updated = await appsApi.update(app.id, {
         name: name.trim(),
-        profile_id: profileId || null,
+        profile_id: profileId,
         config,
         rate_limit: parseInt(rateLimit, 10) || 0,
       })
@@ -343,6 +346,13 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
           </label>
           <input className="modal-input" placeholder="https://app.yourdomain.com/ping"
             value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
+
+          <label className="modal-label" style={{ marginTop: 16 }}>
+            API Key <span className="modal-hint">(optional — used for active monitor auth)</span>
+          </label>
+          <input className="modal-input modal-input-mono" placeholder="your-api-key"
+            type="password" autoComplete="new-password"
+            value={apiKey} onChange={e => setApiKey(e.target.value)} />
 
           <label className="modal-label" style={{ marginTop: 16 }}>
             Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>
