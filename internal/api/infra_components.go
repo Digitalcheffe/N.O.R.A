@@ -474,8 +474,42 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		ComponentID: id,
 		Period:      period,
 	}
+
 	if len(rollups) == 0 {
-		resp.NoData = true
+		// No rollup exists yet (hourly job hasn't run since first scan).
+		// Fall back to raw resource_readings from the last hour so Scan Now
+		// shows data immediately without waiting for the rollup cycle.
+		now := time.Now().UTC()
+		aggs, aggErr := h.rollups.AggregateReadings(r.Context(), now.Add(-time.Hour), now)
+		if aggErr != nil || len(aggs) == 0 {
+			resp.NoData = true
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+		hasData := false
+		for _, a := range aggs {
+			if a.SourceID != id {
+				continue
+			}
+			hasData = true
+			switch {
+			case a.Metric == "cpu_percent":
+				resp.CPUPercent = a.Avg
+			case a.Metric == "mem_percent":
+				resp.MemPercent = a.Avg
+			case a.Metric == "disk_percent":
+				resp.DiskPercent = a.Avg
+			case strings.HasPrefix(a.Metric, "disk_percent_"):
+				volName := strings.TrimPrefix(a.Metric, "disk_percent_")
+				resp.Volumes = append(resp.Volumes, VolumeResource{Name: volName, Percent: a.Avg})
+			}
+		}
+		if !hasData {
+			resp.NoData = true
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+		resp.RecordedAt = now.Format(time.RFC3339)
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
