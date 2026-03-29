@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { apps as appsApi, appTemplates as templatesApi } from '../api/client'
 import type { App, AppTemplate } from '../api/types'
@@ -309,6 +310,7 @@ export function Apps() {
   const [showAdd, setShowAdd] = useState(false)
 
   // card kebab state
+  const { tick } = useAutoRefresh()
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -319,7 +321,7 @@ export function Apps() {
       .then(res => setAppList(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }, [tick])
 
   // Close dropdown on outside click
   useEffect(() => {

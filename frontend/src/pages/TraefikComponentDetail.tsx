@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { infrastructure as infraApi } from '../api/client'
 import type {
@@ -128,6 +129,7 @@ function RoutesTable({ routes }: { routes: TraefikRoute[] }) {
 export function TraefikComponentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { tick } = useAutoRefresh()
 
   const [component, setComponent]   = useState<InfrastructureComponent | null>(null)
   const [detail,    setDetail]      = useState<TraefikComponentDetail | null>(null)
@@ -146,7 +148,7 @@ export function TraefikComponentDetail() {
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, tick])
 
   function statusClass(s: string) {
     if (s === 'online') return 'online'

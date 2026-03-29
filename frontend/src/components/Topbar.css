@@ -108,3 +108,45 @@
 
 .icon-btn:hover { border-color: var(--border2); color: var(--text); }
 .icon-btn svg { width: 14px; height: 14px; }
+
+.auto-refresh {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 8px;
+  height: 28px;
+  transition: border-color 0.15s;
+}
+
+.auto-refresh:focus-within {
+  border-color: var(--border2);
+}
+
+.auto-refresh-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.auto-refresh-select {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  min-width: 28px;
+}
+
+.auto-refresh-select option {
+  background: var(--bg3);
+  color: var(--text);
+}

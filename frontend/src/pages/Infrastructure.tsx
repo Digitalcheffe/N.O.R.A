@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { infrastructure as infraApi } from '../api/client'
@@ -279,6 +280,7 @@ function Toggle({
 
 export function Infrastructure() {
   const navigate = useNavigate()
+  const { tick: refreshTick } = useAutoRefresh()
   const [components,      setComponents]      = useState<InfrastructureComponent[]>([])
   const [resourcesMap,    setResourcesMap]    = useState<Record<string, ResourceSummary>>({})
   const [traefikDetailMap, setTraefikDetailMap] = useState<Record<string, TraefikComponentDetail>>({})
@@ -330,7 +332,7 @@ export function Infrastructure() {
     setLastPolledAt(new Date())
   }, [])
 
-  // Initial load
+  // Initial load + auto-refresh
   useEffect(() => {
     infraApi.list()
       .then(res => {
@@ -339,7 +341,7 @@ export function Infrastructure() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [pollAll])
+  }, [pollAll, refreshTick])
 
   // 30-second polling interval
   useEffect(() => {
