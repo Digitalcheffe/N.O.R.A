@@ -75,15 +75,18 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Collect all IDs needed for the resource lookup.  When a container is
-	// linked to an app its resource readings are stored under the app ID, so we
-	// query both the Docker container ID and the app ID for each container.
-	lookupIDs := make([]string, 0, len(containers)*2)
+	// Collect all IDs needed for the resource lookup.
+	// Priority order for metric lookup per container:
+	//   1. StableContainerSourceID(componentID, name) — used by ResourcePoller since stable-ID change
+	//   2. appID — used when container is linked to an app (ResourcePoller uses appID in that case)
+	//   3. raw containerID — backward compat for readings recorded before the stable-ID change
+	lookupIDs := make([]string, 0, len(containers)*3)
 	for _, c := range containers {
-		lookupIDs = append(lookupIDs, c.ContainerID)
+		lookupIDs = append(lookupIDs, docker.StableContainerSourceID(componentID, c.ContainerName))
 		if c.AppID != nil && *c.AppID != "" {
 			lookupIDs = append(lookupIDs, *c.AppID)
 		}
+		lookupIDs = append(lookupIDs, c.ContainerID)
 	}
 
 	metrics, err := h.store.Resources.LatestMetrics(r.Context(), "docker_container", lookupIDs)
@@ -105,20 +108,22 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 			LastSeenAt:           c.LastSeenAt,
 		}
 
-		// Try container ID first; fall back to app ID (used when the container
-		// is linked to an app — ResourcePoller stores readings under the app ID).
-		sourceID := c.ContainerID
-		if _, found := metrics[sourceID]; !found {
-			if c.AppID != nil && *c.AppID != "" {
-				sourceID = *c.AppID
-			}
+		// Walk lookup priority until we find a source ID that has metrics.
+		candidates := []string{docker.StableContainerSourceID(componentID, c.ContainerName)}
+		if c.AppID != nil && *c.AppID != "" {
+			candidates = append(candidates, *c.AppID)
 		}
-		if m, ok := metrics[sourceID]; ok {
-			if v, ok := m["cpu_percent"]; ok {
-				item.CPUPercent = &v
-			}
-			if v, ok := m["mem_percent"]; ok {
-				item.MemPercent = &v
+		candidates = append(candidates, c.ContainerID)
+
+		for _, sourceID := range candidates {
+			if m, ok := metrics[sourceID]; ok {
+				if v, ok := m["cpu_percent"]; ok {
+					item.CPUPercent = &v
+				}
+				if v, ok := m["mem_percent"]; ok {
+					item.MemPercent = &v
+				}
+				break
 			}
 		}
 
