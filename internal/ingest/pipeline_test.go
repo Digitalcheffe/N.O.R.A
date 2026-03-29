@@ -225,6 +225,73 @@ func TestProcess_UnmatchedEventType(t *testing.T) {
 	}
 }
 
+// TestProcess_CompoundSeverity verifies that Health events resolve severity using
+// the compound key (eventType + level) when severity_compound_field is configured.
+func TestProcess_CompoundSeverity(t *testing.T) {
+	store := newTestStore(t)
+	token := "compound-sev-token"
+	app := &models.App{
+		ID:        uuid.NewString(),
+		Name:      "sonarr",
+		Token:     token,
+		ProfileID: "sonarr",
+		RateLimit: 100,
+		Config:    models.ConfigJSON("{}"),
+	}
+	if err := store.Apps.Create(context.Background(), app); err != nil {
+		t.Fatalf("seed app: %v", err)
+	}
+
+	tmpl := &apptemplate.AppTemplate{
+		Webhook: apptemplate.Webhook{
+			FieldMappings: map[string]string{
+				"event_type": "$.eventType",
+				"level":      "$.level",
+				"message":    "$.message",
+			},
+			SeverityField:        "event_type",
+			SeverityCompoundField: "level",
+			SeverityMapping: map[string]string{
+				"Health":         "warn",
+				"Health:error":   "error",
+				"Health:warning": "warn",
+				"HealthRestored": "info",
+				"Download":       "info",
+			},
+			DisplayTemplate: "{event_type}",
+		},
+	}
+
+	cases := []struct {
+		payload     string
+		wantSev     string
+		description string
+	}{
+		{`{"eventType":"Health","level":"error","message":"Indexer unavailable"}`, "error", "Health:error → error"},
+		{`{"eventType":"Health","level":"warning","message":"Indexer degraded"}`, "warn", "Health:warning → warn"},
+		{`{"eventType":"Health","message":"Indexer issue"}`, "warn", "Health (no level) → warn"},
+		{`{"eventType":"HealthRestored","message":"Indexer back"}`, "info", "HealthRestored → info"},
+		{`{"eventType":"Download"}`, "info", "Download → info"},
+	}
+
+	loader := &stubLoader{template: tmpl}
+	limiter := ingest.NewRateLimiter()
+
+	for _, c := range cases {
+		result, err := ingest.Process(context.Background(), store, loader, limiter, token, []byte(c.payload))
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", c.description, err)
+		}
+		ev, err := store.Events.Get(context.Background(), result.EventID)
+		if err != nil {
+			t.Fatalf("get event: %v", err)
+		}
+		if ev.Severity != c.wantSev {
+			t.Errorf("%s: severity = %q, want %q", c.description, ev.Severity, c.wantSev)
+		}
+	}
+}
+
 // TestProcess_ArrayFieldExtraction verifies that field paths using array indexing
 // (e.g. $.episodes[0].seasonNumber) are resolved correctly during ingest.
 func TestProcess_ArrayFieldExtraction(t *testing.T) {

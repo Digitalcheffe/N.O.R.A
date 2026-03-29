@@ -60,7 +60,7 @@ func Process(ctx context.Context, store *repo.Store, profiler apptemplate.Loader
 		p, err := profiler.Get(app.ProfileID)
 		if err == nil && p != nil {
 			fieldsMap = extractFields(rawBody, p.Webhook.FieldMappings)
-			severity = mapSeverity(fieldsMap, p.Webhook.SeverityField, p.Webhook.SeverityMapping)
+			severity = mapSeverity(fieldsMap, p.Webhook.SeverityField, p.Webhook.SeverityCompoundField, p.Webhook.SeverityMapping)
 			// Pick per-eventType template if available, fall back to global template.
 			tmpl := p.Webhook.DisplayTemplate
 			if len(p.Webhook.DisplayTemplates) > 0 {
@@ -183,14 +183,23 @@ func toString(v interface{}) string {
 }
 
 // mapSeverity looks up the value of severityField in fields against the mapping.
-// Returns "info" if no match is found.
-func mapSeverity(fields map[string]string, severityField string, mapping map[string]string) string {
+// When compoundField is set, tries a compound key "{primary}:{compound}" first,
+// then falls back to the primary key alone. Returns "info" if no match is found.
+func mapSeverity(fields map[string]string, severityField, compoundField string, mapping map[string]string) string {
 	if severityField == "" || len(mapping) == 0 {
 		return "info"
 	}
 	val, ok := fields[severityField]
 	if !ok {
 		return "info"
+	}
+	// Try compound key: "primary:compound" (e.g. "Health:error")
+	if compoundField != "" {
+		if compound := fields[compoundField]; compound != "" {
+			if s, ok := mapping[val+":"+compound]; ok {
+				return s
+			}
+		}
 	}
 	if s, ok := mapping[val]; ok {
 		return s

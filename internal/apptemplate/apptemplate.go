@@ -30,14 +30,15 @@ type AppTemplateMeta struct {
 
 // Webhook holds ingest processing configuration for the template.
 type Webhook struct {
-	SetupInstructions string            `yaml:"setup_instructions"`
-	RecommendedEvents []string          `yaml:"recommended_events"`
-	NotRecommended    []string          `yaml:"not_recommended"`
-	FieldMappings     map[string]string `yaml:"field_mappings"`
-	DisplayTemplate   string            `yaml:"display_template"`
-	DisplayTemplates  map[string]string `yaml:"display_templates"`
-	SeverityField     string            `yaml:"severity_field"`
-	SeverityMapping   map[string]string `yaml:"severity_mapping"`
+	SetupInstructions    string            `yaml:"setup_instructions"`
+	RecommendedEvents    []string          `yaml:"recommended_events"`
+	NotRecommended       []string          `yaml:"not_recommended"`
+	FieldMappings        map[string]string `yaml:"field_mappings"`
+	DisplayTemplate      string            `yaml:"display_template"`
+	DisplayTemplates     map[string]string `yaml:"display_templates"`
+	SeverityField        string            `yaml:"severity_field"`
+	SeverityCompoundField string           `yaml:"severity_compound_field"`
+	SeverityMapping      map[string]string `yaml:"severity_mapping"`
 }
 
 // Monitor holds active check configuration for the template.
@@ -179,7 +180,9 @@ func (r *Registry) RenderDisplayText(templateID string, fields map[string]string
 }
 
 // MapSeverity looks up the value of the template's severity_field in fields against
-// severity_mapping. Returns "info" for unknown values or missing configuration.
+// severity_mapping. When severity_compound_field is set, tries a compound key
+// "{primary}:{compound}" first, then falls back to the primary key alone.
+// Returns "info" for unknown values or missing configuration.
 func (r *Registry) MapSeverity(templateID string, fields map[string]string) string {
 	t, ok := r.templates[templateID]
 	if !ok || t.Webhook.SeverityField == "" || len(t.Webhook.SeverityMapping) == 0 {
@@ -188,6 +191,14 @@ func (r *Registry) MapSeverity(templateID string, fields map[string]string) stri
 	val, ok := fields[t.Webhook.SeverityField]
 	if !ok {
 		return "info"
+	}
+	// Try compound key: "primary:compound" (e.g. "Health:error")
+	if t.Webhook.SeverityCompoundField != "" {
+		if compound := fields[t.Webhook.SeverityCompoundField]; compound != "" {
+			if s, ok := t.Webhook.SeverityMapping[val+":"+compound]; ok {
+				return s
+			}
+		}
 	}
 	if s, ok := t.Webhook.SeverityMapping[val]; ok {
 		return s

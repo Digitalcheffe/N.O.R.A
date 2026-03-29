@@ -26,6 +26,7 @@ webhook:
     level: "$.level"
     message: "$.message"
   severity_field: event_type
+  severity_compound_field: level
   display_template: "{event_type} — {series_title}"
   display_templates:
     Download: "Download — {series_title} S{season}E{episode}"
@@ -37,7 +38,9 @@ webhook:
     Download: info
     Upgrade: info
     Grab: info
-    HealthIssue: warn
+    Health: warn
+    Health:error: error
+    Health:warning: warn
     HealthRestored: info
     ApplicationUpdate: info
     Test: info
@@ -61,5 +64,5 @@ digest:
       match_severity: ""
     - label: Health Issues
       match_field: event_type
-      match_value: HealthIssue
+      match_value: Health
       match_severity: ""

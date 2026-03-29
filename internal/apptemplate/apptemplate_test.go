@@ -23,6 +23,7 @@ webhook:
     episode: "$.episodes[0].episodeNumber"
     message: "$.message"
   severity_field: event_type
+  severity_compound_field: level
   display_template: "{event_type} — {series_title}"
   display_templates:
     Download: "Download — {series_title} S{season}E{episode}"
@@ -31,7 +32,10 @@ webhook:
     HealthRestored: "Health Restored — {message}"
   severity_mapping:
     Download: info
-    HealthIssue: warn
+    Health: warn
+    Health:error: error
+    Health:warning: warn
+    HealthRestored: info
     ApplicationUpdate: info
 monitor:
   check_type: url
@@ -270,7 +274,8 @@ func TestMapSeverity(t *testing.T) {
 		want      string
 	}{
 		{"Download", "info"},
-		{"HealthIssue", "warn"},
+		{"Health", "warn"},
+		{"HealthRestored", "info"},
 		{"ApplicationUpdate", "info"},
 		{"UnknownEvent", "info"},
 		{"", "info"},
@@ -281,6 +286,32 @@ func TestMapSeverity(t *testing.T) {
 		got := reg.MapSeverity("sonarr", fields)
 		if got != c.want {
 			t.Errorf("MapSeverity(event_type=%q) = %q, want %q", c.eventType, got, c.want)
+		}
+	}
+}
+
+// TestMapSeverity_Compound verifies compound key lookup for Health events with level field.
+func TestMapSeverity_Compound(t *testing.T) {
+	reg := newTestRegistry(t)
+
+	cases := []struct {
+		eventType string
+		level     string
+		want      string
+	}{
+		{"Health", "error", "error"},
+		{"Health", "warning", "warn"},
+		{"Health", "", "warn"},    // no level — falls back to plain Health key
+		{"Health", "unknown", "warn"}, // unknown level — falls back to plain Health key
+		{"HealthRestored", "error", "info"}, // no compound key defined, falls back to HealthRestored
+		{"Download", "error", "info"},       // Download has no compound key
+	}
+
+	for _, c := range cases {
+		fields := map[string]string{"event_type": c.eventType, "level": c.level}
+		got := reg.MapSeverity("sonarr", fields)
+		if got != c.want {
+			t.Errorf("MapSeverity(event_type=%q, level=%q) = %q, want %q", c.eventType, c.level, got, c.want)
 		}
 	}
 }
