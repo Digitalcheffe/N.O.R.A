@@ -699,19 +699,24 @@ export function Infrastructure() {
       <Topbar title="Infrastructure" onAdd={() => openAdd()} />
       <div className="content">
 
-        {/* ── Tab toggle ── */}
-        <div className="infra-tabs">
-          <button
-            className={`infra-tab${activeTab === 'components' ? ' active' : ''}`}
-            onClick={() => setActiveTab('components')}
-          >
-            Components
-          </button>
-          <button
-            className={`infra-tab${activeTab === 'map' ? ' active' : ''}`}
-            onClick={() => setActiveTab('map')}
-          >
-            Network Map
+        {/* ── Tab toggle + Add button ── */}
+        <div className="infra-tab-row">
+          <div className="infra-tabs">
+            <button
+              className={`infra-tab${activeTab === 'components' ? ' active' : ''}`}
+              onClick={() => setActiveTab('components')}
+            >
+              Components
+            </button>
+            <button
+              className={`infra-tab${activeTab === 'map' ? ' active' : ''}`}
+              onClick={() => setActiveTab('map')}
+            >
+              Network Map
+            </button>
+          </div>
+          <button className="infra-add-btn" onClick={() => openAdd()}>
+            + Add Component
           </button>
         </div>
 

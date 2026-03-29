@@ -32,6 +32,35 @@
   border: 1px solid var(--border2);
 }
 
+/* ── TAB ROW (tabs + add button) ───────────────────────────────────────────── */
+
+.infra-tab-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.infra-tab-row .infra-tabs {
+  margin-bottom: 0;
+}
+
+.infra-add-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 5px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.infra-add-btn:hover { opacity: 0.85; }
+
 /* ── EMPTY / PLACEHOLDER STATES ────────────────────────────────────────────── */
 
 .infra-empty {
