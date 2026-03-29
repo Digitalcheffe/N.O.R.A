@@ -52,12 +52,15 @@ func main() {
 	metricsRepo := repo.NewMetricsRepo(db)
 	userRepo := repo.NewUserRepo(db)
 	traefikComponentRepo := repo.NewTraefikComponentRepo(db)
+	discoveredContainerRepo := repo.NewDiscoveredContainerRepo(db)
+	discoveredRouteRepo := repo.NewDiscoveredRouteRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
 		infraComponentRepo, dockerEngineRepo,
 		infraRepo, settingsRepo, metricsRepo, userRepo,
 		traefikComponentRepo,
+		discoveredContainerRepo, discoveredRouteRepo,
 	)
 
 	// App template registry — load all bundled YAML app templates
