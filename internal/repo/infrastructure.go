@@ -22,6 +22,8 @@ type InfraComponentRepo interface {
 	Create(ctx context.Context, c *models.InfrastructureComponent) error
 	Update(ctx context.Context, c *models.InfrastructureComponent) error
 	Delete(ctx context.Context, id string) error
+	// UpdateStatus sets last_polled_at and last_status without touching other fields.
+	UpdateStatus(ctx context.Context, id, status, lastPolledAt string) error
 }
 
 type sqliteInfraComponentRepo struct{ db *sqlx.DB }
@@ -105,6 +107,21 @@ func (r *sqliteInfraComponentRepo) Delete(ctx context.Context, id string) error 
 	res, err := r.db.ExecContext(ctx, `DELETE FROM infrastructure_components WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete infrastructure_component: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteInfraComponentRepo) UpdateStatus(ctx context.Context, id, status, lastPolledAt string) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE infrastructure_components
+		SET last_status = ?, last_polled_at = ?
+		WHERE id = ?`,
+		status, lastPolledAt, id)
+	if err != nil {
+		return fmt.Errorf("update component status: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound

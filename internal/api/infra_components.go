@@ -279,11 +279,23 @@ func (h *InfraComponentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// infraResourcesResponse is the response shape for GET /infrastructure/{id}/resources.
+type infraResourcesResponse struct {
+	ComponentID string  `json:"component_id"`
+	Period      string  `json:"period"`
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemPercent  float64 `json:"mem_percent"`
+	DiskPercent float64 `json:"disk_percent"`
+	RecordedAt  string  `json:"recorded_at,omitempty"`
+	NoData      bool    `json:"no_data,omitempty"`
+}
+
 // GetResources returns the latest resource rollup values for an infrastructure component.
 // GET /api/v1/infrastructure/{id}/resources?period=hour|day
 func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, err := h.components.Get(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "component not found")
 		return
 	} else if err != nil {
@@ -300,21 +312,33 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	rollups, err := h.rollups.LatestForSource(r.Context(), id, "host", period)
+	rollups, err := h.rollups.LatestForSource(r.Context(), id, comp.Type, period)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	resp := hostResourcesResponse{}
+	resp := infraResourcesResponse{
+		ComponentID: id,
+		Period:      period,
+	}
+	if len(rollups) == 0 {
+		resp.NoData = true
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
 	for _, rr := range rollups {
 		switch rr.Metric {
 		case "cpu_percent":
-			resp.CPU = rr.Avg
+			resp.CPUPercent = rr.Avg
+			if resp.RecordedAt == "" {
+				resp.RecordedAt = rr.PeriodStart.UTC().Format(time.RFC3339)
+			}
 		case "mem_percent":
-			resp.Mem = rr.Avg
+			resp.MemPercent = rr.Avg
 		case "disk_percent":
-			resp.Disk = rr.Avg
+			resp.DiskPercent = rr.Avg
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
