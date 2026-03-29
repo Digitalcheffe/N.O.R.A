@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -83,7 +84,13 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 		pollErr = pollTraefikComponent(ctx, store, *c, creds)
 
 	case "docker_socket":
-		return c.LastStatus, fmt.Errorf("docker components are monitored automatically via the Docker socket")
+		source = "docker"
+		poller, err := docker.NewResourcePoller(store)
+		if err != nil {
+			log.Printf("scan: %s (%s): docker client: %v", c.Name, c.ID, err)
+			return "offline", fmt.Errorf("docker client unavailable: %w", err)
+		}
+		poller.PollAll(ctx)
 
 	default:
 		return c.LastStatus, fmt.Errorf("collection method %q does not support on-demand scanning", c.CollectionMethod)
