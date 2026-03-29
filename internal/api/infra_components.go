@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -402,9 +403,11 @@ func (h *InfraComponentHandler) Scan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Run with a generous timeout so the caller gets a real result.
-	ctx := r.Context()
-	status, scanErr := jobs.ScanOneComponent(ctx, h.store, c)
+	// Use a detached context with a hard timeout so the poll isn't killed
+	// if the browser closes the connection before the scan finishes.
+	scanCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	status, scanErr := jobs.ScanOneComponent(scanCtx, h.store, c)
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	resp := scanResult{
