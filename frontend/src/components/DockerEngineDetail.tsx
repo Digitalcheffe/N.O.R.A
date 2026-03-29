@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { discovery, apps as appsApi, appTemplates as templatesApi } from '../api/client'
 import type { DiscoveredContainer, App, AppTemplate } from '../api/types'
@@ -74,6 +74,10 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
   const [loading,    setLoading]    = useState(true)
   const [linkForm,   setLinkForm]   = useState<LinkFormState | null>(null)
 
+  // Keep a stable ref to onCountsLoaded so it never triggers a re-fetch
+  const onCountsLoadedRef = useRef(onCountsLoaded)
+  onCountsLoadedRef.current = onCountsLoaded
+
   const load = useCallback(() => {
     setLoading(true)
     Promise.all([
@@ -86,11 +90,11 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
         setApps(appList.data)
         setTemplates(tmplList.data)
         const unlinked = ctrs.data.filter(c => !c.app_id).length
-        onCountsLoaded(ctrs.data.length, unlinked)
+        onCountsLoadedRef.current(ctrs.data.length, unlinked)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [engineId, onCountsLoaded])
+  }, [engineId]) // engineId only — onCountsLoaded via ref to avoid re-fetch loop
 
   useEffect(() => { load() }, [load])
 
