@@ -3,6 +3,7 @@ import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Events } from './pages/Events'
 import { Checks } from './pages/Checks'
+import { CheckDetail } from './pages/CheckDetail'
 import { Apps } from './pages/Apps'
 import { AppDetail } from './pages/AppDetail'
 import { Topology } from './pages/Topology'
@@ -18,6 +19,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="events" element={<Events />} />
           <Route path="checks" element={<Checks />} />
+          <Route path="checks/:id" element={<CheckDetail />} />
           <Route path="apps" element={<Apps />} />
           <Route path="apps/:id" element={<AppDetail />} />
           <Route path="topology" element={<Topology />} />

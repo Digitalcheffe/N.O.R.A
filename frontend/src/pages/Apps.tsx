@@ -69,7 +69,7 @@ function ConfirmDeleteModal({ appName, onCancel, onConfirm, deleting, error }: C
 
 // ── AddApp Modal ──────────────────────────────────────────────────────────────
 
-type AddStep = 'name' | 'template' | 'config' | 'done'
+type AddStep = 'setup' | 'config' | 'done'
 
 interface AddAppModalProps {
   onClose: () => void
@@ -78,14 +78,14 @@ interface AddAppModalProps {
 
 function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
   const navigate = useNavigate()
-  const [step, setStep] = useState<AddStep>('name')
+  const [step, setStep] = useState<AddStep>('setup')
 
   const [appName, setAppName] = useState('')
   const nameRef = useRef<HTMLInputElement>(null)
 
   const [templates, setTemplates] = useState<AppTemplate[]>([])
-  const [templatesLoading, setTemplatesLoading] = useState(false)
-  const [selectedTemplate, setSelectedTemplate] = useState<AppTemplate | null>(null)
+  const [templatesLoading, setTemplatesLoading] = useState(true)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
 
   const [baseUrl, setBaseUrl] = useState('')
   const [monitorUrl, setMonitorUrl] = useState('')
@@ -99,19 +99,29 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
   useEffect(() => { nameRef.current?.focus() }, [])
 
   useEffect(() => {
-    if (step !== 'template') return
-    setTemplatesLoading(true)
     templatesApi.list()
       .then(res => setTemplates(res.data))
       .catch(console.error)
       .finally(() => setTemplatesLoading(false))
-  }, [step])
+  }, [])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null
+
+  const grouped = templates.reduce<Record<string, AppTemplate[]>>((acc, t) => {
+    if (!acc[t.category]) acc[t.category] = []
+    acc[t.category].push(t)
+    return acc
+  }, {})
+
+  const needsMonitor =
+    selectedTemplate?.capability === 'full' ||
+    selectedTemplate?.capability === 'monitor_only'
 
   async function handleCreate() {
     setSubmitError('')
@@ -149,30 +159,20 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
   }
 
   function handleAddAnother() {
-    setStep('name'); setAppName(''); setSelectedTemplate(null)
+    setStep('setup'); setAppName(''); setSelectedTemplateId('')
     setBaseUrl(''); setMonitorUrl(''); setRateLimit('0')
     setCreatedApp(null); setCopied(false); setSubmitError('')
   }
-
-  const grouped = templates.reduce<Record<string, AppTemplate[]>>((acc, t) => {
-    if (!acc[t.category]) acc[t.category] = []
-    acc[t.category].push(t)
-    return acc
-  }, {})
-
-  const needsMonitor =
-    selectedTemplate?.capability === 'full' ||
-    selectedTemplate?.capability === 'monitor_only'
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
 
-        {step === 'name' && (
+        {step === 'setup' && (
           <>
             <div className="modal-header">
               <div className="modal-title">New App</div>
-              <div className="modal-subtitle">Give this connection a name you'll recognise</div>
+              <div className="modal-subtitle">Name your connection and pick an app template</div>
               <button className="modal-close" onClick={onClose}>✕</button>
             </div>
             <div className="modal-body">
@@ -183,56 +183,39 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
                 placeholder="e.g. Sonarr, Home Assistant…"
                 value={appName}
                 onChange={e => setAppName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && appName.trim() && setStep('template')}
+                onKeyDown={e => e.key === 'Enter' && appName.trim() && setStep('config')}
               />
+
+              <label className="modal-label" style={{ marginTop: 16 }}>
+                App Template <span className="modal-hint">(optional — enables field mapping)</span>
+              </label>
+              <select
+                className="modal-input"
+                value={selectedTemplateId}
+                onChange={e => setSelectedTemplateId(e.target.value)}
+                disabled={templatesLoading}
+              >
+                <option value="">Generic Webhook — raw JSON, no mapping</option>
+                {templatesLoading ? (
+                  <option disabled>Loading templates…</option>
+                ) : (
+                  Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
+                    <optgroup key={cat} label={cat}>
+                      {items.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} — {CAPABILITY_LABEL[t.capability] ?? t.capability}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))
+                )}
+              </select>
             </div>
             <div className="modal-footer">
               <button className="modal-btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="modal-btn-primary" onClick={() => setStep('template')} disabled={!appName.trim()}>
+              <button className="modal-btn-primary" onClick={() => setStep('config')} disabled={!appName.trim()}>
                 Next →
               </button>
-            </div>
-          </>
-        )}
-
-        {step === 'template' && (
-          <>
-            <div className="modal-header">
-              <div className="modal-title">Choose a Template</div>
-              <div className="modal-subtitle">Select the app you're connecting — or skip for a generic webhook</div>
-              <button className="modal-close" onClick={onClose}>✕</button>
-            </div>
-            <div className="modal-body modal-body-templates">
-              <div className="tmpl-group-label">Generic</div>
-              <div className="tmpl-grid">
-                <button className="tmpl-card" onClick={() => { setSelectedTemplate(null); setStep('config') }}>
-                  <div className="tmpl-icon">⚡</div>
-                  <div className="tmpl-name">Generic Webhook</div>
-                  <div className="tmpl-desc">Raw JSON ingest, no field mapping</div>
-                </button>
-              </div>
-              {templatesLoading ? (
-                <div className="tmpl-loading">Loading templates…</div>
-              ) : (
-                Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
-                  <div key={cat}>
-                    <div className="tmpl-group-label">{cat}</div>
-                    <div className="tmpl-grid">
-                      {items.map(t => (
-                        <button key={t.id} className="tmpl-card" onClick={() => { setSelectedTemplate(t); setStep('config') }}>
-                          <div className="tmpl-icon">{monogram(t.name)}</div>
-                          <div className="tmpl-name">{t.name}</div>
-                          <div className="tmpl-cap">{CAPABILITY_LABEL[t.capability] ?? t.capability}</div>
-                          <div className="tmpl-desc">{t.description}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="modal-footer">
-              <button className="modal-btn-ghost" onClick={() => setStep('name')}>← Back</button>
             </div>
           </>
         )}
@@ -272,7 +255,7 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
               {submitError && <div className="modal-error">{submitError}</div>}
             </div>
             <div className="modal-footer">
-              <button className="modal-btn-ghost" onClick={() => setStep('template')}>← Back</button>
+              <button className="modal-btn-ghost" onClick={() => setStep('setup')}>← Back</button>
               <button className="modal-btn-primary" onClick={handleCreate} disabled={submitting}>
                 {submitting ? 'Creating…' : 'Create App'}
               </button>

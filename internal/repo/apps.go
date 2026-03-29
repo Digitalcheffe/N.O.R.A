@@ -36,7 +36,8 @@ func NewAppRepo(db *sqlx.DB) AppRepo {
 func (r *sqliteAppRepo) List(ctx context.Context) ([]models.App, error) {
 	var apps []models.App
 	err := r.db.SelectContext(ctx, &apps, `
-		SELECT id, name, token, profile_id, COALESCE(docker_engine_id,'') AS docker_engine_id,
+		SELECT id, name, token, COALESCE(profile_id,'') AS profile_id,
+		       COALESCE(docker_engine_id,'') AS docker_engine_id,
 		       config, rate_limit, created_at
 		FROM apps ORDER BY created_at ASC`)
 	if err != nil {
@@ -59,7 +60,8 @@ func (r *sqliteAppRepo) Create(ctx context.Context, app *models.App) error {
 func (r *sqliteAppRepo) Get(ctx context.Context, id string) (*models.App, error) {
 	var app models.App
 	err := r.db.GetContext(ctx, &app, `
-		SELECT id, name, token, profile_id, COALESCE(docker_engine_id,'') AS docker_engine_id,
+		SELECT id, name, token, COALESCE(profile_id,'') AS profile_id,
+		       COALESCE(docker_engine_id,'') AS docker_engine_id,
 		       config, rate_limit, created_at
 		FROM apps WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -74,7 +76,8 @@ func (r *sqliteAppRepo) Get(ctx context.Context, id string) (*models.App, error)
 func (r *sqliteAppRepo) GetByToken(ctx context.Context, token string) (*models.App, error) {
 	var app models.App
 	err := r.db.GetContext(ctx, &app, `
-		SELECT id, name, token, profile_id, COALESCE(docker_engine_id,'') AS docker_engine_id,
+		SELECT id, name, token, COALESCE(profile_id,'') AS profile_id,
+		       COALESCE(docker_engine_id,'') AS docker_engine_id,
 		       config, rate_limit, created_at
 		FROM apps WHERE token = ?`, token)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -88,9 +91,9 @@ func (r *sqliteAppRepo) GetByToken(ctx context.Context, token string) (*models.A
 
 func (r *sqliteAppRepo) Update(ctx context.Context, app *models.App) error {
 	res, err := r.db.ExecContext(ctx, `
-		UPDATE apps SET name=?, profile_id=?, docker_engine_id=NULLIF(?,?), config=?, rate_limit=?
+		UPDATE apps SET name=?, profile_id=NULLIF(?,?), docker_engine_id=NULLIF(?,?), config=?, rate_limit=?
 		WHERE id=?`,
-		app.Name, app.ProfileID, app.DockerEngineID, app.DockerEngineID, app.Config, app.RateLimit, app.ID)
+		app.Name, app.ProfileID, "", app.DockerEngineID, "", app.Config, app.RateLimit, app.ID)
 	if err != nil {
 		return fmt.Errorf("update app: %w", err)
 	}

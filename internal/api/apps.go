@@ -38,7 +38,7 @@ func (h *AppsHandler) Routes(r chi.Router) {
 
 type createAppRequest struct {
 	Name      string          `json:"name"`
-	ProfileID string          `json:"profile_id"`
+	ProfileID *string         `json:"profile_id"` // pointer: null = don't change, "" = clear, "id" = set
 	Config    json.RawMessage `json:"config"`
 	RateLimit int             `json:"rate_limit"`
 }
@@ -94,11 +94,15 @@ func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		rateLimit = 100
 	}
 
+	profileID := ""
+	if req.ProfileID != nil {
+		profileID = *req.ProfileID
+	}
 	app := &models.App{
 		ID:        uuid.New().String(),
 		Name:      req.Name,
 		Token:     token,
-		ProfileID: req.ProfileID,
+		ProfileID: profileID,
 		Config:    cfg,
 		RateLimit: rateLimit,
 		CreatedAt: time.Now().UTC(),
@@ -150,8 +154,8 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Name != "" {
 		existing.Name = req.Name
 	}
-	if req.ProfileID != "" {
-		existing.ProfileID = req.ProfileID
+	if req.ProfileID != nil {
+		existing.ProfileID = *req.ProfileID
 	}
 	if len(req.Config) > 0 {
 		existing.Config = models.ConfigJSON(req.Config)
