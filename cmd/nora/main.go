@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	noraappprofiles "github.com/digitalcheffe/nora/appprofiles"
@@ -29,6 +31,19 @@ import (
 func main() {
 	cfg := config.Load()
 	startTime := time.Now()
+
+	// File logging — write to NORA_LOG_PATH alongside stdout so logs persist.
+	if logPath := os.Getenv("NORA_LOG_PATH"); logPath != "" {
+		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Printf("warning: could not open log file %s: %v", logPath, err)
+		} else {
+			defer logFile.Close()
+			log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+			log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+			log.Printf("nora: logging to %s", logPath)
+		}
+	}
 
 	if err := push.EnsureVAPIDKeys(cfg); err != nil {
 		log.Fatalf("VAPID key init failed: %v", err)
@@ -193,7 +208,7 @@ func main() {
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
-		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, traefikComponentRepo).Routes(r)
+		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, traefikComponentRepo, store).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDockerDiscoveryHandler(store, registry).Routes(r)

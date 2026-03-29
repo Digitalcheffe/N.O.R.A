@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -20,11 +21,12 @@ type InfraComponentHandler struct {
 	rollups    repo.ResourceRollupRepo
 	checks     repo.CheckRepo
 	traefik    repo.TraefikComponentRepo
+	store      *repo.Store
 }
 
 // NewInfraComponentHandler returns a handler wired to the given repos.
-func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo, checks repo.CheckRepo, traefik repo.TraefikComponentRepo) *InfraComponentHandler {
-	return &InfraComponentHandler{components: components, rollups: rollups, checks: checks, traefik: traefik}
+func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo, checks repo.CheckRepo, traefik repo.TraefikComponentRepo, store *repo.Store) *InfraComponentHandler {
+	return &InfraComponentHandler{components: components, rollups: rollups, checks: checks, traefik: traefik, store: store}
 }
 
 // Routes registers all infrastructure component endpoints on r.
@@ -34,6 +36,7 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}", h.Get)
 	r.Put("/infrastructure/{id}", h.Update)
 	r.Delete("/infrastructure/{id}", h.Delete)
+	r.Post("/infrastructure/{id}/scan", h.Scan)
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
 	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
 	r.Get("/infrastructure/{id}/traefik", h.GetTraefikDetail)
@@ -373,6 +376,49 @@ func (h *InfraComponentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// scanResult is the response shape for POST /infrastructure/{id}/scan.
+type scanResult struct {
+	ComponentID string `json:"component_id"`
+	Status      string `json:"status"`
+	LastPolledAt string `json:"last_polled_at"`
+	Message     string `json:"message,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+// Scan immediately runs the appropriate poller for a single infrastructure
+// component and returns the resulting status.
+// POST /api/v1/infrastructure/{id}/scan
+func (h *InfraComponentHandler) Scan(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Run with a generous timeout so the caller gets a real result.
+	ctx := r.Context()
+	status, scanErr := jobs.ScanOneComponent(ctx, h.store, c)
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	resp := scanResult{
+		ComponentID:  id,
+		Status:       status,
+		LastPolledAt: now,
+	}
+	if scanErr != nil {
+		resp.Error = scanErr.Error()
+		resp.Message = "scan failed — check credentials and connectivity"
+	} else {
+		resp.Message = "scan complete"
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // VolumeResource holds per-volume disk utilisation for Synology and similar components.
