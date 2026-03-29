@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { Topbar } from '../components/Topbar'
 import { topology as topoApi } from '../api/client'
+import { DockerEngineDetail } from '../components/DockerEngineDetail'
 import type {
   PhysicalHost,
   PhysicalHostType,
@@ -209,9 +210,9 @@ function DockerFormFields({ form, onChange }: { form: DockerForm; onChange: (f: 
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Tree component (embeddable, no Topbar) ────────────────────────────────────
 
-export function Topology() {
+export function TopologyTree() {
   const [physicalHosts, setPhysicalHosts] = useState<PhysicalHost[]>([])
   const [virtualHosts,  setVirtualHosts]  = useState<VirtualHost[]>([])
   const [dockerEngines, setDockerEngines] = useState<DockerEngine[]>([])
@@ -219,6 +220,14 @@ export function Topology() {
 
   const [expandedPhysical, setExpandedPhysical] = useState<Set<string>>(new Set())
   const [expandedVirtual,  setExpandedVirtual]  = useState<Set<string>>(new Set())
+  const [expandedDocker,   setExpandedDocker]   = useState<Set<string>>(new Set())
+
+  // container count badge: engineId → { total, unlinked }
+  const [containerCounts, setContainerCounts] = useState<Record<string, { total: number; unlinked: number }>>({})
+
+  const handleCountsLoaded = useCallback((engineId: string, total: number, unlinked: number) => {
+    setContainerCounts(prev => ({ ...prev, [engineId]: { total, unlinked } }))
+  }, [])
 
   const [addTarget,  setAddTarget]  = useState<AddTarget | null>(null)
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
@@ -280,6 +289,14 @@ export function Topology() {
     setAddTarget(null)
     setEditTarget(null)
     setFormError(null)
+  }
+
+  function toggleDocker(id: string) {
+    setExpandedDocker(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   // ── Start edit ────────────────────────────────────────────────────────────
@@ -507,10 +524,7 @@ export function Topology() {
 
   return (
     <>
-      <Topbar title="Infrastructure" onAdd={startAddPhysical} />
-      <div className="content">
-
-        {addTarget?.kind === 'physical' && (
+      {addTarget?.kind === 'physical' && (
           <FormWrap
             title="Add Physical Host"
             error={formError}
@@ -669,14 +683,22 @@ export function Topology() {
                                 )}
 
                                 {engines.map(de => {
-                                  const deEditing = editTarget?.kind === 'docker' && editTarget.id === de.id
+                                  const deEditing  = editTarget?.kind === 'docker' && editTarget.id === de.id
+                                  const deExpanded = expandedDocker.has(de.id) && !deEditing
+                                  const counts     = containerCounts[de.id]
+
                                   return (
                                     <div key={de.id} className="topo-node">
                                       <div
-                                        className={`topo-row level-2${deEditing ? ' editing' : ''}`}
-                                        onClick={ev => ev.stopPropagation()}
+                                        className={`topo-row level-2${deEditing ? ' editing' : ''}${deExpanded ? ' expanded' : ''}`}
+                                        onClick={ev => {
+                                          ev.stopPropagation()
+                                          if (!deEditing) toggleDocker(de.id)
+                                        }}
                                       >
-                                        <span className="topo-chevron-leaf" />
+                                        <span className={`topo-chevron${deExpanded ? ' open' : ''}`}>
+                                          {deExpanded ? '▼' : '▶'}
+                                        </span>
                                         <div className="topo-icon">
                                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -687,6 +709,11 @@ export function Topology() {
                                           <div className="topo-name">{de.name}</div>
                                           <div className="topo-meta">{de.socket_type} · {de.socket_path}</div>
                                         </div>
+                                        {counts && (
+                                          <span className="de-count-badge">
+                                            {counts.total} container{counts.total !== 1 ? 's' : ''} · {counts.unlinked} unlinked
+                                          </span>
+                                        )}
                                         <div className="topo-actions">
                                           <button
                                             className="topo-action-btn"
@@ -717,6 +744,15 @@ export function Topology() {
                                             <DockerFormFields form={dockerForm} onChange={setDockerForm} />
                                           </FormWrap>
                                         </div>
+                                      )}
+
+                                      {deExpanded && (
+                                        <DockerEngineDetail
+                                          engineId={de.id}
+                                          onCountsLoaded={(total, unlinked) =>
+                                            handleCountsLoaded(de.id, total, unlinked)
+                                          }
+                                        />
                                       )}
                                     </div>
                                   )
@@ -772,6 +808,18 @@ export function Topology() {
           </div>
         )}
 
+    </>
+  )
+}
+
+// ── Standalone page ───────────────────────────────────────────────────────────
+
+export function Topology() {
+  return (
+    <>
+      <Topbar title="Infrastructure" />
+      <div className="content">
+        <TopologyTree />
       </div>
     </>
   )

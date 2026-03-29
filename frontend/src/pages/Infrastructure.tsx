@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
+import { TopologyTree } from './Topology'
 import { infrastructure as infraApi } from '../api/client'
 import type {
   ComponentType,
@@ -17,7 +18,7 @@ import '../components/CheckForm.css'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-type ActiveTab = 'components' | 'map'
+type ActiveTab = 'components' | 'hosts' | 'map'
 
 const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   proxmox_node:  'proxmox_api',
@@ -838,6 +839,12 @@ export function Infrastructure() {
               Components
             </button>
             <button
+              className={`infra-tab${activeTab === 'hosts' ? ' active' : ''}`}
+              onClick={() => setActiveTab('hosts')}
+            >
+              Hosts
+            </button>
+            <button
               className={`infra-tab${activeTab === 'map' ? ' active' : ''}`}
               onClick={() => setActiveTab('map')}
             >
@@ -865,6 +872,9 @@ export function Infrastructure() {
             )}
           </>
         )}
+
+        {/* ── Hosts tab ── */}
+        {activeTab === 'hosts' && <TopologyTree />}
 
         {/* ── Network Map tab ── */}
         {activeTab === 'map' && (

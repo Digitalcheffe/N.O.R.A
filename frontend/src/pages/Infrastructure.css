@@ -254,9 +254,10 @@
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text2);
-  width: 38px;
+  min-width: 38px;
   text-align: right;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .infra-res-pct.no-data { color: var(--text3); }

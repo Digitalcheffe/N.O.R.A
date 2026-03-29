@@ -430,6 +430,29 @@ export interface ResourceSummary {
   no_data?: boolean
 }
 
+// ── Docker Discovery ─────────────────────────────────────────────────────────
+
+export interface DiscoveredContainer {
+  id: string
+  container_name: string
+  image: string
+  status: string
+  app_id: string | null
+  profile_suggestion: string | null
+  suggestion_confidence: number | null
+  cpu_percent: number | null
+  mem_percent: number | null
+  last_seen_at: string
+}
+
+export interface LinkAppInput {
+  mode: 'existing' | 'create'
+  app_id?: string
+  profile_id?: string
+  name?: string
+  config?: Record<string, unknown>
+}
+
 // ── Metrics ──────────────────────────────────────────────────────────────────
 
 export interface AppMetric {
