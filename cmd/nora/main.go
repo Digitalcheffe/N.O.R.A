@@ -107,6 +107,11 @@ func main() {
 	defer synologyCancel()
 	go jobs.StartSynologyPollers(synologyCtx, store)
 
+	// SNMP pollers — polls all enabled snmp components every 5 minutes.
+	snmpCtx, snmpCancel := context.WithCancel(context.Background())
+	defer snmpCancel()
+	go jobs.StartSNMPPollers(snmpCtx, store)
+
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
