@@ -3,17 +3,16 @@ import { events as eventsApi } from '../api/client'
 import type { Event } from '../api/types'
 
 function formatEventTime(iso: string): string {
+  if (!iso) return '—'
   const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
-  if (d >= startOfToday) {
-    return d
-      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-      .toLowerCase()
-  }
-  if (d >= startOfYesterday) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
+  if (d >= startOfToday) return timePart
+  if (d >= startOfYesterday) return `Yesterday ${timePart}`
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${timePart}`
 }
 
 interface Props {

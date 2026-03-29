@@ -104,10 +104,13 @@ function Sparkline({ data, color = 'var(--accent)' }: { data: number[]; color?: 
 // ── Expanded event detail ─────────────────────────────────────────────────────
 
 function EventDetail({ event, appName }: { event: Event; appName: string }) {
-  const received = new Date(event.received_at).toLocaleString('en-US', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: false,
-  })
+  const receivedDate = event.received_at ? new Date(event.received_at) : null
+  const received = receivedDate && !isNaN(receivedDate.getTime())
+    ? receivedDate.toLocaleString('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: false,
+      })
+    : '—'
   return (
     <div className="detail-event-expand">
       <div className="detail-expand-meta">
@@ -144,14 +147,16 @@ function EventDetail({ event, appName }: { event: Event; appName: string }) {
 // ── Event row ─────────────────────────────────────────────────────────────────
 
 function formatEventTime(iso: string): string {
+  if (!iso) return '—'
   const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
-  if (d >= startOfToday)
-    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
-  if (d >= startOfYesterday) return 'Yesterday'
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
+  if (d >= startOfToday) return timePart
+  if (d >= startOfYesterday) return `Yesterday ${timePart}`
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${timePart}`
 }
 
 function DetailEventRow({ event, appName, expanded, onToggle }: {
