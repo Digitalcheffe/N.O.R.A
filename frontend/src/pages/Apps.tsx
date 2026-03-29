@@ -348,7 +348,7 @@ export function Apps() {
 
   return (
     <>
-      <Topbar title="Apps" onAdd={() => setShowAdd(true)} />
+      <Topbar title="Apps" />
       <div className="content">
         <div className="section-header">
           <span className="section-title">Configured Apps</span>

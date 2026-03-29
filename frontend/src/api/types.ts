@@ -316,11 +316,73 @@ export interface SMTPSettings {
   user: string
   pass: string
   from: string
+  to: string
 }
 
 export interface SendNowResult {
   status: string
   period: string
+}
+
+// ── Infrastructure Components ─────────────────────────────────────────────────
+
+export type ComponentType =
+  | 'proxmox_node'
+  | 'synology'
+  | 'vm'
+  | 'lxc'
+  | 'bare_metal'
+  | 'windows_host'
+  | 'docker_engine'
+
+export type CollectionMethod =
+  | 'proxmox_api'
+  | 'synology_api'
+  | 'snmp'
+  | 'docker_socket'
+  | 'none'
+
+export interface InfrastructureComponent {
+  id: string
+  name: string
+  ip: string
+  type: ComponentType
+  collection_method: CollectionMethod
+  parent_id?: string | null
+  snmp_config?: string | null
+  notes: string
+  enabled: boolean
+  last_polled_at?: string | null
+  last_status: string
+  created_at: string
+}
+
+export interface InfrastructureComponentInput {
+  name: string
+  ip: string
+  type: ComponentType
+  collection_method: CollectionMethod
+  parent_id?: string | null
+  credentials?: string | null
+  snmp_config?: string | null
+  notes?: string
+  enabled?: boolean
+}
+
+export interface VolumeResource {
+  name: string
+  percent: number
+}
+
+export interface ResourceSummary {
+  component_id: string
+  period: string
+  cpu_percent: number
+  mem_percent: number
+  disk_percent: number
+  volumes?: VolumeResource[]
+  recorded_at?: string
+  no_data?: boolean
 }
 
 // ── Metrics ──────────────────────────────────────────────────────────────────

@@ -1,0 +1,453 @@
+/* ── TAB TOGGLE ────────────────────────────────────────────────────────────── */
+
+.infra-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px;
+  width: fit-content;
+}
+
+.infra-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.infra-tab:hover { color: var(--text2); }
+
+.infra-tab.active {
+  background: var(--bg4);
+  color: var(--text);
+  border: 1px solid var(--border2);
+}
+
+/* ── TAB ROW (tabs + add button) ───────────────────────────────────────────── */
+
+.infra-tab-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.infra-tab-row .infra-tabs {
+  margin-bottom: 0;
+}
+
+.infra-add-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 5px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.infra-add-btn:hover { opacity: 0.85; }
+
+/* ── EMPTY / PLACEHOLDER STATES ────────────────────────────────────────────── */
+
+.infra-empty {
+  padding: 40px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.infra-map-placeholder {
+  padding: 60px 40px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  border-style: dashed;
+}
+
+/* ── CARD LIST ─────────────────────────────────────────────────────────────── */
+
+.infra-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── COMPONENT CARD ────────────────────────────────────────────────────────── */
+
+.infra-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.15s;
+}
+
+.infra-card:hover { border-color: var(--border2); }
+
+/* ── CARD HEADER ───────────────────────────────────────────────────────────── */
+
+.infra-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.infra-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.infra-card-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.infra-card-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* ── STATUS DOT + LABEL ────────────────────────────────────────────────────── */
+
+.infra-card-status-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.infra-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.infra-status-dot.online   { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.infra-status-dot.degraded { background: var(--yellow); }
+.infra-status-dot.offline  { background: var(--red); }
+.infra-status-dot.unknown  { background: var(--text3); }
+
+.infra-status-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+
+/* ── RESOURCE BARS ─────────────────────────────────────────────────────────── */
+
+.infra-res-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.infra-res-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.infra-res-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.infra-res-track {
+  flex: 1;
+  height: 4px;
+  background: var(--bg4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.infra-res-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.infra-res-fill.warn    { background: var(--yellow); }
+.infra-res-fill.crit    { background: var(--red); }
+.infra-res-fill.no-data { background: var(--bg4); }
+
+.infra-res-pct {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  width: 38px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.infra-res-pct.no-data { color: var(--text3); }
+
+/* ── CARD FOOTER ───────────────────────────────────────────────────────────── */
+
+.infra-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.infra-last-updated {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+}
+
+.infra-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.infra-card-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.infra-card-btn:hover:not(:disabled) {
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+.infra-card-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.infra-card-btn.danger:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-dim);
+}
+
+.infra-card-btn.accent {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+}
+
+.infra-card-btn.accent:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* ── MODAL OVERLAY ─────────────────────────────────────────────────────────── */
+
+.infra-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.infra-modal {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── MODAL HEADER ──────────────────────────────────────────────────────────── */
+
+.infra-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.infra-modal-title {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.infra-modal-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.infra-modal-close:hover {
+  background: var(--bg4);
+  color: var(--text);
+}
+
+/* ── MODAL BODY ────────────────────────────────────────────────────────────── */
+
+.infra-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── MODAL FOOTER ──────────────────────────────────────────────────────────── */
+
+.infra-modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── FORM EXTRAS ───────────────────────────────────────────────────────────── */
+
+.infra-form-section {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.infra-optional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text3);
+  opacity: 0.7;
+}
+
+.infra-textarea {
+  resize: vertical;
+  min-height: 50px;
+}
+
+.infra-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+
+/* ── TOGGLE SWITCH ─────────────────────────────────────────────────────────── */
+
+.infra-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.infra-toggle-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text2);
+  user-select: none;
+}
+
+.infra-toggle {
+  width: 34px;
+  height: 18px;
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  border-radius: 9px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.infra-toggle.on {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.infra-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text3);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.infra-toggle.on .infra-toggle-thumb {
+  transform: translateX(16px);
+  background: var(--accent);
+}

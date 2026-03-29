@@ -20,11 +20,14 @@ import type {
   EventFilter,
   HostResources,
   InfraIntegration,
+  InfrastructureComponent,
+  InfrastructureComponentInput,
   InstanceMetrics,
   ListResponse,
   LoginInput,
   MonitorCheck,
   PhysicalHost,
+  ResourceSummary,
   SMTPSettings,
   SendNowResult,
   SyncResult,
@@ -306,6 +309,28 @@ export const smtpSettings = {
 export const digestReport = {
   url: (period?: string) =>
     `/api/v1/digest/report${period ? `?period=${encodeURIComponent(period)}` : ''}`,
+}
+
+// ── Infrastructure Components ─────────────────────────────────────────────────
+
+export const infrastructure = {
+  list: () =>
+    request<ListResponse<InfrastructureComponent>>('GET', '/infrastructure'),
+
+  get: (id: string) =>
+    request<InfrastructureComponent>('GET', `/infrastructure/${id}`),
+
+  create: (data: InfrastructureComponentInput) =>
+    request<InfrastructureComponent>('POST', '/infrastructure', data),
+
+  update: (id: string, data: InfrastructureComponentInput) =>
+    request<InfrastructureComponent>('PUT', `/infrastructure/${id}`, data),
+
+  delete: (id: string) =>
+    request<void>('DELETE', `/infrastructure/${id}`),
+
+  resources: (id: string, period = 'hour') =>
+    request<ResourceSummary>('GET', `/infrastructure/${id}/resources?period=${period}`),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────

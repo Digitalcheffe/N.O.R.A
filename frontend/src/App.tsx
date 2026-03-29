@@ -6,7 +6,7 @@ import { Checks } from './pages/Checks'
 import { CheckDetail } from './pages/CheckDetail'
 import { Apps } from './pages/Apps'
 import { AppDetail } from './pages/AppDetail'
-import { Topology } from './pages/Topology'
+import { Infrastructure } from './pages/Infrastructure'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
 import { Profile } from './pages/Profile'
@@ -22,7 +22,7 @@ export default function App() {
           <Route path="checks/:id" element={<CheckDetail />} />
           <Route path="apps" element={<Apps />} />
           <Route path="apps/:id" element={<AppDetail />} />
-          <Route path="topology" element={<Topology />} />
+          <Route path="topology" element={<Infrastructure />} />
           <Route path="settings" element={<Settings />} />
           <Route path="profile" element={<Profile />} />
           <Route path="app-templates/new" element={<AppTemplateEditor />} />

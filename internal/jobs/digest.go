@@ -234,12 +234,14 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 }
 
 // adminEmails returns the digest recipient list.
-// Recipients are taken from the SMTP "from" address as a reasonable default —
-// a dedicated UsersRepo can be wired in later when user management is built out.
+// Uses the dedicated "to" address when set, falling back to "from".
 func (d *DigestJob) adminEmails(ctx context.Context) ([]string, error) {
 	smtp, err := d.smtpSettings(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if smtp.To != "" {
+		return []string{smtp.To}, nil
 	}
 	if smtp.From != "" {
 		return []string{smtp.From}, nil

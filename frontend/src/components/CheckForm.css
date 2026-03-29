@@ -1,9 +1,9 @@
 /* ── MONITOR STATUS BLOCK ── */
 .monitor-status-block {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  display: flex;
+  width: auto;
+  height: auto;
+  border-radius: 4px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
@@ -11,6 +11,7 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
+  padding: 3px 7px;
 }
 
 .monitor-status-block.up      { background: var(--green-dim);  color: var(--green);  border: 1px solid #166534; }
@@ -23,8 +24,8 @@
   font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
-  border-radius: 3px;
-  padding: 2px 5px;
+  border-radius: 4px;
+  padding: 3px 7px;
   flex-shrink: 0;
   letter-spacing: 0.04em;
 }

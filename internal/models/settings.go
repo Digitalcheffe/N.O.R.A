@@ -29,4 +29,5 @@ type SMTPSettings struct {
 	User string `json:"user"`
 	Pass string `json:"pass"`
 	From string `json:"from"`
+	To   string `json:"to"`
 }
