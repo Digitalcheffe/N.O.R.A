@@ -15,6 +15,7 @@ import type {
   CustomProfile,
   DashboardSummaryResponse,
   DigestSchedule,
+  DiscoveredContainer,
   DockerEngine,
   Event,
   EventFilter,
@@ -24,6 +25,7 @@ import type {
   InfrastructureComponentInput,
   InstanceMetrics,
   IntegrationDriver,
+  LinkAppInput,
   ListResponse,
   LoginInput,
   MonitorCheck,
@@ -349,6 +351,16 @@ export const infrastructure = {
 
   traefikDetail: (id: string) =>
     request<TraefikComponentDetail>('GET', `/infrastructure/${id}/traefik`),
+}
+
+// ── Docker Discovery ──────────────────────────────────────────────────────────
+
+export const discovery = {
+  containers: (engineId: string) =>
+    request<ListResponse<DiscoveredContainer>>('GET', `/docker-engines/${engineId}/containers`),
+
+  linkContainerApp: (containerId: string, body: LinkAppInput) =>
+    request<unknown>('POST', `/discovered-containers/${containerId}/link-app`, body),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────
