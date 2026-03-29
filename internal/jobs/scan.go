@@ -23,9 +23,11 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 	log.Printf("scan: starting manual scan of %s (%s) [%s]", c.Name, c.ID, c.CollectionMethod)
 
 	var pollErr error
+	var source string // poller label used in event messages
 
 	switch c.CollectionMethod {
 	case "proxmox_api":
+		source = "proxmox"
 		if c.Credentials == nil || *c.Credentials == "" {
 			log.Printf("scan: %s (%s): no credentials configured", c.Name, c.ID)
 			return "offline", fmt.Errorf("no credentials configured — edit the component and save credentials first")
@@ -38,6 +40,7 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 		pollErr = poller.Poll(ctx, store)
 
 	case "synology_api":
+		source = "synology"
 		if c.Credentials == nil || *c.Credentials == "" {
 			log.Printf("scan: %s (%s): no credentials configured", c.Name, c.ID)
 			return "offline", fmt.Errorf("no credentials configured — edit the component and save credentials first")
@@ -50,6 +53,7 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 		pollErr = poller.Poll(ctx, store)
 
 	case "snmp":
+		source = "snmp"
 		if c.SNMPConfig == nil || *c.SNMPConfig == "" {
 			log.Printf("scan: %s (%s): no SNMP config", c.Name, c.ID)
 			return "offline", fmt.Errorf("no SNMP config — edit the component and save SNMP settings first")
@@ -62,6 +66,7 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 		pollErr = poller.Poll(ctx, store)
 
 	case "traefik_api":
+		source = "traefik"
 		if c.Credentials == nil || *c.Credentials == "" {
 			log.Printf("scan: %s (%s): no credentials configured", c.Name, c.ID)
 			return "offline", fmt.Errorf("no credentials configured — edit the component and save credentials first")
@@ -87,11 +92,13 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 	polledAt := time.Now().UTC().Format(time.RFC3339Nano)
 	if pollErr != nil {
 		log.Printf("scan: %s (%s) failed: %v", c.Name, c.ID, pollErr)
+		emitInfraEvent(ctx, store, c.ID, c.Name, source, "manual", "failed", pollErr.Error())
 		_ = store.InfraComponents.UpdateStatus(ctx, c.ID, "offline", polledAt)
 		return "offline", pollErr
 	}
 
 	log.Printf("scan: %s (%s) complete", c.Name, c.ID)
+	emitInfraEvent(ctx, store, c.ID, c.Name, source, "manual", "ok", "")
 
 	// Re-fetch to return the status the poller wrote (may be "online" or "degraded").
 	updated, err := store.InfraComponents.Get(ctx, c.ID)

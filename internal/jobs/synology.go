@@ -43,6 +43,7 @@ func RunSynologyPollers(ctx context.Context, store *repo.Store, pollers map[stri
 		log.Printf("synology scheduler: polling %s (%s)", c.Name, c.ID)
 		if err := poller.Poll(ctx, store); err != nil {
 			log.Printf("synology scheduler: poll %s (%s): %v", c.Name, c.ID, err)
+			emitInfraEvent(ctx, store, c.ID, c.Name, "synology", "scheduled", "failed", err.Error())
 			// Connection failure → mark offline.
 			polledAt := time.Now().UTC().Format(time.RFC3339Nano)
 			if updateErr := store.InfraComponents.UpdateStatus(ctx, c.ID, "offline", polledAt); updateErr != nil {
@@ -50,6 +51,7 @@ func RunSynologyPollers(ctx context.Context, store *repo.Store, pollers map[stri
 			}
 		} else {
 			log.Printf("synology scheduler: poll %s (%s): complete", c.Name, c.ID)
+			emitInfraEvent(ctx, store, c.ID, c.Name, "synology", "scheduled", "ok", "")
 		}
 	}
 }

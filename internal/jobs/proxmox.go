@@ -37,6 +37,7 @@ func RunProxmoxPollers(ctx context.Context, store *repo.Store) {
 		log.Printf("proxmox scheduler: polling %s (%s)", c.Name, c.ID)
 		if err := poller.Poll(ctx, store); err != nil {
 			log.Printf("proxmox scheduler: poll %s (%s): %v", c.Name, c.ID, err)
+			emitInfraEvent(ctx, store, c.ID, c.Name, "proxmox", "scheduled", "failed", err.Error())
 			// Connection failure → mark offline.
 			polledAt := time.Now().UTC().Format(time.RFC3339Nano)
 			if updateErr := store.InfraComponents.UpdateStatus(ctx, c.ID, "offline", polledAt); updateErr != nil {
@@ -44,6 +45,7 @@ func RunProxmoxPollers(ctx context.Context, store *repo.Store) {
 			}
 		} else {
 			log.Printf("proxmox scheduler: poll %s (%s): complete", c.Name, c.ID)
+			emitInfraEvent(ctx, store, c.ID, c.Name, "proxmox", "scheduled", "ok", "")
 		}
 	}
 }
