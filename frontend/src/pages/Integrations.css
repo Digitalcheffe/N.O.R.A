@@ -86,6 +86,31 @@
   margin-top: 2px;
 }
 
+/* ── Capabilities line ──────────────────────────────────────────────────────── */
+
+.int-capabilities {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 3px;
+}
+
+/* ── Status badge row ───────────────────────────────────────────────────────── */
+
+.int-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.int-badge-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
 /* ── Status dot ─────────────────────────────────────────────────────────────── */
 
 .int-dot {

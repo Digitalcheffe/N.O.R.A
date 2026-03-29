@@ -23,6 +23,7 @@ import type {
   InfrastructureComponent,
   InfrastructureComponentInput,
   InstanceMetrics,
+  IntegrationDriver,
   ListResponse,
   LoginInput,
   MonitorCheck,
@@ -280,6 +281,19 @@ export const integrations = {
 
   certs: (id: string) =>
     request<ListResponse<TraefikCert>>('GET', `/integrations/${id}/certs`),
+}
+
+// ── Integration Drivers ───────────────────────────────────────────────────────
+
+export const integrationDrivers = {
+  list: () =>
+    request<ListResponse<IntegrationDriver>>('GET', '/integration-drivers'),
+
+  configure: (name: string, creds: Record<string, string>) =>
+    request<{ configured: boolean }>('PUT', `/integration-drivers/${name}`, creds),
+
+  disconnect: (name: string) =>
+    request<void>('DELETE', `/integration-drivers/${name}`),
 }
 
 // ── Digest ────────────────────────────────────────────────────────────────────

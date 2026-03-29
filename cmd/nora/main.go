@@ -157,6 +157,7 @@ func main() {
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)
 		api.NewSettingsHandler(store).Routes(r)
+		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
 		api.NewUsersHandler(userRepo).Routes(r)
 	})

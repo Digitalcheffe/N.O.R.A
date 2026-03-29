@@ -299,6 +299,16 @@ export interface CustomProfile {
   created_at: string
 }
 
+// ── Integration Drivers ───────────────────────────────────────────────────────
+
+export interface IntegrationDriver {
+  name: string
+  label: string
+  description: string
+  capabilities: string[]
+  configured: boolean
+}
+
 // ── Settings ─────────────────────────────────────────────────────────────────
 
 export type DigestFrequency = 'daily' | 'weekly' | 'monthly'
