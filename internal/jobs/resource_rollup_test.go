@@ -31,7 +31,7 @@ func newTestStore(t *testing.T) (*repo.Store, *sqlx.DB) {
 		repo.NewRollupRepo(db),
 		repo.NewResourceReadingRepo(db),
 		repo.NewResourceRollupRepo(db),
-		nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	return store, db
 }

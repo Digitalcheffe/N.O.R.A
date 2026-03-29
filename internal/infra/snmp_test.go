@@ -39,6 +39,7 @@ func newSNMPTestStore(t *testing.T) *repo.Store {
 		repo.NewTraefikComponentRepo(db),
 		repo.NewDiscoveredContainerRepo(db),
 		repo.NewDiscoveredRouteRepo(db),
+		nil,
 	)
 }
 
