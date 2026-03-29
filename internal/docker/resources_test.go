@@ -50,6 +50,10 @@ func (r *mockResourceReadingRepo) LatestMetrics(_ context.Context, _ string, _ [
 	return map[string]map[string]float64{}, nil
 }
 
+func (r *mockResourceReadingRepo) BackfillAppID(_ context.Context, _, _ string) (int64, error) {
+	return 0, nil
+}
+
 // --- helpers --------------------------------------------------------------
 
 func newTestResourcePoller(appRepo repo.AppRepo, eventRepo repo.EventRepo, resRepo repo.ResourceReadingRepo, cli resourcePollerAPI) *ResourcePoller {

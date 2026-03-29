@@ -17,6 +17,11 @@ type ResourceReadingRepo interface {
 	// for each sourceID in sourceIDs, filtered by sourceType.
 	// Returns map[sourceID]map[metric]float64. Missing entries mean no data yet.
 	LatestMetrics(ctx context.Context, sourceType string, sourceIDs []string) (map[string]map[string]float64, error)
+
+	// BackfillAppID sets app_id on all resource_readings for the given docker
+	// containerID (source_type='docker_container') where app_id is currently NULL.
+	// Returns the number of rows updated.
+	BackfillAppID(ctx context.Context, containerID, appID string) (int64, error)
 }
 
 type sqliteResourceReadingRepo struct {
@@ -82,6 +87,17 @@ func (r *sqliteResourceReadingRepo) LatestMetrics(ctx context.Context, sourceTyp
 		return nil, fmt.Errorf("latest metrics rows: %w", err)
 	}
 	return result, nil
+}
+
+func (r *sqliteResourceReadingRepo) BackfillAppID(ctx context.Context, containerID, appID string) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE resource_readings SET app_id = ? WHERE source_type = 'docker_container' AND source_id = ? AND app_id IS NULL`,
+		appID, containerID)
+	if err != nil {
+		return 0, fmt.Errorf("backfill resource readings app_id: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // toStringInterfaces converts a []string to []interface{} for use with sqlx.In.

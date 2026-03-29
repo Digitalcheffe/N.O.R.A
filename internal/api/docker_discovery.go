@@ -1,13 +1,13 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/apptemplate"
+	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -311,6 +311,7 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			return
 		}
 		container.AppID = &req.AppID
+		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, req.AppID, &id, nil)
 		writeJSON(w, http.StatusOK, container)
 
 	case "create":
@@ -354,6 +355,7 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, app.ID, &id, nil)
 		writeJSON(w, http.StatusCreated, app)
 
 	default:
@@ -422,7 +424,7 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = req.AppID
 		route.AppID = &linkedAppID
-		h.maybeCreateSSLCheck(r.Context(), route)
+		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusOK, route)
 
 
@@ -468,7 +470,7 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = app.ID
 		route.AppID = &linkedAppID
-		h.maybeCreateSSLCheck(r.Context(), route)
+		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusCreated, app)
 
 	default:
@@ -494,27 +496,3 @@ func (h *DockerDiscoveryHandler) UnlinkRouteApp(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// maybeCreateSSLCheck creates an ssl monitor check for route.Domain if the route
-// has a domain and no ssl check for that domain already exists.
-func (h *DockerDiscoveryHandler) maybeCreateSSLCheck(ctx context.Context, route *models.DiscoveredRoute) {
-	if route.Domain == nil || *route.Domain == "" {
-		return
-	}
-	domain := *route.Domain
-	exists, err := h.store.Checks.ExistsForTypeAndTarget(ctx, "ssl", domain)
-	if err != nil || exists {
-		return
-	}
-	check := &models.MonitorCheck{
-		ID:           uuid.New().String(),
-		Name:         "SSL — " + domain,
-		Type:         "ssl",
-		Target:       domain,
-		IntervalSecs: 3600,
-		SSLWarnDays:  30,
-		SSLCritDays:  7,
-		Enabled:      true,
-		CreatedAt:    time.Now().UTC(),
-	}
-	_ = h.store.Checks.Create(ctx, check)
-}
