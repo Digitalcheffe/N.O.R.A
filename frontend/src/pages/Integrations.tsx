@@ -4,6 +4,12 @@ import './Integrations.css'
 
 const DRIVERS = [
   {
+    name: 'docker',
+    label: 'Docker',
+    description: 'Container discovery and resource metrics via Docker socket.',
+    capabilities: ['container discovery', 'resource metrics', 'app linking', 'socket polling'],
+  },
+  {
     name: 'traefik',
     label: 'Traefik',
     description: 'SSL cert discovery and routing visibility via Traefik API.',
