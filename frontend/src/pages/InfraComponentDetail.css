@@ -301,3 +301,137 @@
 
 .icd-route-status.enabled  { background: rgba(34,197,94,0.12); border-color: var(--green); color: var(--green); }
 .icd-route-status.disabled { background: rgba(239,68,68,0.12); border-color: var(--red); color: var(--red); }
+
+/* ── Proxmox child VM / LXC cards ─────────────────────────────────────────── */
+
+.icd-child-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.icd-child-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.icd-child-card:hover { border-color: var(--accent); }
+
+.icd-child-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.icd-child-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icd-child-type {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  background: var(--surface3);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.icd-child-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 14px;
+}
+
+.icd-child-ip,
+.icd-child-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* ── Linked apps section ──────────────────────────────────────────────────── */
+
+.icd-linked-apps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.icd-linked-app-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.icd-linked-app-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  flex: 1;
+}
+
+.icd-unlink-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  background: none;
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.icd-unlink-btn:hover { opacity: 1; }
+
+.icd-link-app-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icd-link-select {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  color: var(--text);
+  flex: 1;
+  max-width: 300px;
+}
+
+.icd-link-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 14px;
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 0.15s;
+}
+
+.icd-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }

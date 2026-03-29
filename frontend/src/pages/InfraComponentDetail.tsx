@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
-import { infrastructure as infraApi } from '../api/client'
+import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
+  App,
   InfrastructureComponent,
   ResourceSummary,
   ResourceHistory,
@@ -199,12 +200,17 @@ export function InfraComponentDetail() {
   const navigate = useNavigate()
   const { tick } = useAutoRefresh()
 
-  const [component,    setComponent]    = useState<InfrastructureComponent | null>(null)
-  const [resources,    setResources]    = useState<ResourceSummary | null>(null)
-  const [history,      setHistory]      = useState<ResourceHistory | null>(null)
+  const [component,     setComponent]     = useState<InfrastructureComponent | null>(null)
+  const [resources,     setResources]     = useState<ResourceSummary | null>(null)
+  const [history,       setHistory]       = useState<ResourceHistory | null>(null)
   const [traefikDetail, setTraefikDetail] = useState<TraefikComponentDetail | null>(null)
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState<string | null>(null)
+  const [children,      setChildren]      = useState<InfrastructureComponent[]>([])
+  const [linkedApps,    setLinkedApps]    = useState<App[]>([])
+  const [allApps,       setAllApps]       = useState<App[]>([])
+  const [linkingAppId,  setLinkingAppId]  = useState('')
+  const [linkBusy,      setLinkBusy]      = useState(false)
+  const [loading,       setLoading]       = useState(true)
+  const [error,         setError]         = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -213,11 +219,17 @@ export function InfraComponentDetail() {
       infraApi.get(id),
       infraApi.resources(id, 'hour'),
       infraApi.resourceHistory(id, 'hour', 24),
+      infraApi.children(id),
+      infraApi.linkedApps(id),
+      appsApi.list(),
     ])
-      .then(([comp, res, hist]) => {
+      .then(([comp, res, hist, ch, linked, allA]) => {
         setComponent(comp)
         setResources(res)
         setHistory(hist)
+        setChildren(ch.data)
+        setLinkedApps(linked.data)
+        setAllApps(allA.data)
         if (comp.type === 'traefik') {
           return infraApi.traefikDetail(id).then(det => setTraefikDetail(det))
         }
@@ -225,6 +237,25 @@ export function InfraComponentDetail() {
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false))
   }, [id, tick])
+
+  async function handleLinkApp() {
+    if (!id || !linkingAppId) return
+    setLinkBusy(true)
+    try {
+      await infraApi.linkApp(id, linkingAppId)
+      const linked = await infraApi.linkedApps(id)
+      setLinkedApps(linked.data)
+      setLinkingAppId('')
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
+  async function handleUnlinkApp(appId: string) {
+    if (!id) return
+    await infraApi.unlinkApp(id, appId)
+    setLinkedApps(prev => prev.filter(a => a.id !== appId))
+  }
 
   const statusClass = (s: string) => {
     if (s === 'online')   return 'online'
@@ -296,7 +327,175 @@ export function InfraComponentDetail() {
           </div>
         )}
 
+        {/* Discovered VMs & LXC containers (Proxmox nodes) */}
+        {component.type === 'proxmox_node' && (
+          <ProxmoxChildrenSection children={children} onNavigate={navigate} />
+        )}
+
+        {/* Linked Applications */}
+        <LinkedAppsSection
+          linkedApps={linkedApps}
+          allApps={allApps}
+          linkingAppId={linkingAppId}
+          linkBusy={linkBusy}
+          onSelectApp={setLinkingAppId}
+          onLink={() => void handleLinkApp()}
+          onUnlink={(appId) => void handleUnlinkApp(appId)}
+        />
+
       </div>
     </>
+  )
+}
+
+// ── Proxmox children section ──────────────────────────────────────────────────
+
+function statusDotClass(s: string) {
+  if (s === 'online')   return 'online'
+  if (s === 'degraded') return 'degraded'
+  if (s === 'offline')  return 'offline'
+  return 'unknown'
+}
+
+const CHILD_TYPE_LABEL: Record<string, string> = {
+  vm:  'VM',
+  lxc: 'LXC',
+}
+
+interface ProxmoxChildrenSectionProps {
+  children: InfrastructureComponent[]
+  onNavigate: (path: string) => void
+}
+
+function ProxmoxChildrenSection({ children, onNavigate }: ProxmoxChildrenSectionProps) {
+  const vms  = children.filter(c => c.type === 'vm')
+  const lxcs = children.filter(c => c.type === 'lxc')
+
+  if (children.length === 0) {
+    return (
+      <div className="icd-section">
+        <div className="icd-section-title">Virtual Machines</div>
+        <div className="icd-empty">No VMs or containers discovered yet. Run Scan Now to discover.</div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {vms.length > 0 && (
+        <div className="icd-section">
+          <div className="icd-section-title">Virtual Machines</div>
+          <div className="icd-child-grid">
+            {vms.map(c => (
+              <div
+                key={c.id}
+                className="icd-child-card"
+                onClick={() => onNavigate(`/topology/${c.id}`)}
+              >
+                <div className="icd-child-header">
+                  <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
+                  <span className="icd-child-name">{c.name}</span>
+                  <span className="icd-child-type">{CHILD_TYPE_LABEL[c.type] ?? c.type}</span>
+                </div>
+                <div className="icd-child-meta">
+                  {c.ip && <span className="icd-child-ip">{c.ip}</span>}
+                  <span className="icd-child-status">{c.last_status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {lxcs.length > 0 && (
+        <div className="icd-section">
+          <div className="icd-section-title">LXC Containers</div>
+          <div className="icd-child-grid">
+            {lxcs.map(c => (
+              <div
+                key={c.id}
+                className="icd-child-card"
+                onClick={() => onNavigate(`/topology/${c.id}`)}
+              >
+                <div className="icd-child-header">
+                  <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
+                  <span className="icd-child-name">{c.name}</span>
+                  <span className="icd-child-type">{CHILD_TYPE_LABEL[c.type] ?? c.type}</span>
+                </div>
+                <div className="icd-child-meta">
+                  {c.ip && <span className="icd-child-ip">{c.ip}</span>}
+                  <span className="icd-child-status">{c.last_status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Linked applications section ───────────────────────────────────────────────
+
+interface LinkedAppsSectionProps {
+  linkedApps: App[]
+  allApps: App[]
+  linkingAppId: string
+  linkBusy: boolean
+  onSelectApp: (id: string) => void
+  onLink: () => void
+  onUnlink: (appId: string) => void
+}
+
+function LinkedAppsSection({
+  linkedApps, allApps, linkingAppId, linkBusy, onSelectApp, onLink, onUnlink,
+}: LinkedAppsSectionProps) {
+  const linkedIds = new Set(linkedApps.map(a => a.id))
+  const available = allApps.filter(a => !linkedIds.has(a.id))
+
+  return (
+    <div className="icd-section">
+      <div className="icd-section-title">Linked Applications</div>
+
+      {linkedApps.length === 0 ? (
+        <div className="icd-empty">No applications linked to this host yet.</div>
+      ) : (
+        <div className="icd-linked-apps">
+          {linkedApps.map(app => (
+            <div key={app.id} className="icd-linked-app-row">
+              <span className="icd-linked-app-name">{app.name}</span>
+              <button
+                className="icd-unlink-btn"
+                onClick={() => onUnlink(app.id)}
+              >
+                Unlink
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {available.length > 0 && (
+        <div className="icd-link-app-row">
+          <select
+            className="icd-link-select"
+            value={linkingAppId}
+            onChange={e => onSelectApp(e.target.value)}
+          >
+            <option value="">— select app to link —</option>
+            {available.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <button
+            className="icd-link-btn"
+            disabled={!linkingAppId || linkBusy}
+            onClick={onLink}
+          >
+            {linkBusy ? 'Linking…' : 'Link App'}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }

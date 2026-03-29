@@ -359,6 +359,18 @@ export const infrastructure = {
 
   scan: (id: string) =>
     request<ScanResult>('POST', `/infrastructure/${id}/scan`),
+
+  children: (id: string) =>
+    request<ListResponse<InfrastructureComponent>>('GET', `/infrastructure/${id}/children`),
+
+  linkedApps: (id: string) =>
+    request<ListResponse<App>>('GET', `/infrastructure/${id}/apps`),
+
+  linkApp: (componentId: string, appId: string) =>
+    request<void>('POST', `/infrastructure/${componentId}/apps/${appId}`),
+
+  unlinkApp: (componentId: string, appId: string) =>
+    request<void>('DELETE', `/infrastructure/${componentId}/apps/${appId}`),
 }
 
 // ── Docker Discovery ──────────────────────────────────────────────────────────

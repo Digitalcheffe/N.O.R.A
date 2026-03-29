@@ -41,6 +41,10 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
 	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
 	r.Get("/infrastructure/{id}/traefik", h.GetTraefikDetail)
+	r.Get("/infrastructure/{id}/children", h.ListChildren)
+	r.Get("/infrastructure/{id}/apps", h.ListLinkedApps)
+	r.Post("/infrastructure/{id}/apps/{appID}", h.LinkApp)
+	r.Delete("/infrastructure/{id}/apps/{appID}", h.UnlinkApp)
 }
 
 // ── request / response types ──────────────────────────────────────────────────
@@ -710,4 +714,91 @@ func (h *InfraComponentHandler) GetTraefikDetail(w http.ResponseWriter, r *http.
 		Certs:       certItems,
 		Routes:      routes,
 	})
+}
+
+// ── Children & linked-app endpoints ──────────────────────────────────────────
+
+// ListChildren returns all infrastructure components whose parent_id matches id.
+// GET /api/v1/infrastructure/{id}/children
+func (h *InfraComponentHandler) ListChildren(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.components.Get(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	children, err := h.components.ListByParent(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Strip credentials from child records before returning.
+	resp := make([]infraComponentResponse, len(children))
+	for i, c := range children {
+		resp[i] = toResponse(&c)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"data": resp, "total": len(resp)})
+}
+
+// ListLinkedApps returns all apps whose host_component_id matches id.
+// GET /api/v1/infrastructure/{id}/apps
+func (h *InfraComponentHandler) ListLinkedApps(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.components.Get(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	apps, err := h.store.Apps.ListByHost(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"data": apps, "total": len(apps)})
+}
+
+// LinkApp sets host_component_id on an app to link it to this component.
+// POST /api/v1/infrastructure/{id}/apps/{appID}
+func (h *InfraComponentHandler) LinkApp(w http.ResponseWriter, r *http.Request) {
+	id    := chi.URLParam(r, "id")
+	appID := chi.URLParam(r, "appID")
+
+	if _, err := h.components.Get(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err := h.store.Apps.SetHostComponentID(r.Context(), appID, &id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// UnlinkApp clears host_component_id on an app.
+// DELETE /api/v1/infrastructure/{id}/apps/{appID}
+func (h *InfraComponentHandler) UnlinkApp(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "appID")
+
+	if err := h.store.Apps.SetHostComponentID(r.Context(), appID, nil); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

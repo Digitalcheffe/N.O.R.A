@@ -42,14 +42,16 @@ type mockAppRepo struct {
 	apps []models.App
 }
 
-func (r *mockAppRepo) List(_ context.Context) ([]models.App, error)                  { return r.apps, nil }
-func (r *mockAppRepo) Create(_ context.Context, _ *models.App) error                 { return nil }
-func (r *mockAppRepo) Get(_ context.Context, _ string) (*models.App, error)          { return nil, repo.ErrNotFound }
-func (r *mockAppRepo) GetByToken(_ context.Context, _ string) (*models.App, error)   { return nil, repo.ErrNotFound }
-func (r *mockAppRepo) Update(_ context.Context, _ *models.App) error                 { return nil }
-func (r *mockAppRepo) Delete(_ context.Context, _ string) error                      { return nil }
-func (r *mockAppRepo) UpdateToken(_ context.Context, _, _ string) error              { return nil }
-func (r *mockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error       { return nil }
+func (r *mockAppRepo) List(_ context.Context) ([]models.App, error)                          { return r.apps, nil }
+func (r *mockAppRepo) ListByHost(_ context.Context, _ string) ([]models.App, error)          { return nil, nil }
+func (r *mockAppRepo) Create(_ context.Context, _ *models.App) error                         { return nil }
+func (r *mockAppRepo) Get(_ context.Context, _ string) (*models.App, error)                  { return nil, repo.ErrNotFound }
+func (r *mockAppRepo) GetByToken(_ context.Context, _ string) (*models.App, error)           { return nil, repo.ErrNotFound }
+func (r *mockAppRepo) Update(_ context.Context, _ *models.App) error                         { return nil }
+func (r *mockAppRepo) Delete(_ context.Context, _ string) error                              { return nil }
+func (r *mockAppRepo) UpdateToken(_ context.Context, _, _ string) error                      { return nil }
+func (r *mockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error               { return nil }
+func (r *mockAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error      { return nil }
 
 type mockEventRepo struct {
 	created []*models.Event

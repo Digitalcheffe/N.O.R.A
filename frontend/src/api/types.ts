@@ -45,6 +45,7 @@ export interface App {
   token: string
   profile_id: string | null
   docker_engine_id: string | null
+  host_component_id?: string | null
   config: Record<string, unknown>
   rate_limit: number
   created_at: string
@@ -54,6 +55,7 @@ export interface CreateAppInput {
   name: string
   profile_id?: string  // empty string clears the profile, undefined leaves it unchanged
   docker_engine_id?: string
+  host_component_id?: string | null
   config?: Record<string, unknown>
   rate_limit?: number
 }
