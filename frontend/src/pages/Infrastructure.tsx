@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Topbar } from '../components/Topbar'
+import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { infrastructure as infraApi } from '../api/client'
 import type {
   ComponentType,
@@ -739,9 +740,10 @@ export function Infrastructure() {
 
         {/* ── Network Map tab ── */}
         {activeTab === 'map' && (
-          <div className="infra-map-placeholder">
-            Network map coming soon — relationships between components will be visualised here.
-          </div>
+          <InfraNetworkMap
+            components={components}
+            onEditComponent={openEdit}
+          />
         )}
 
       </div>

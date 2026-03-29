@@ -86,6 +86,48 @@
   border-style: dashed;
 }
 
+/* ── NETWORK MAP ────────────────────────────────────────────────────────────── */
+
+.infra-map-container {
+  height: calc(100vh - 200px);
+  min-height: 400px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.infra-map-empty {
+  padding: 60px 40px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Override ReactFlow controls for dark theme */
+.infra-map-container .react-flow__controls-button {
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  fill: var(--text2);
+}
+
+.infra-map-container .react-flow__controls-button:hover {
+  background: var(--bg4);
+}
+
+.infra-map-container .react-flow__controls-button svg {
+  fill: var(--text2);
+}
+
+/* Hide ReactFlow attribution */
+.infra-map-container .react-flow__attribution {
+  display: none;
+}
+
 /* ── CARD LIST ─────────────────────────────────────────────────────────────── */
 
 .infra-card-list {
