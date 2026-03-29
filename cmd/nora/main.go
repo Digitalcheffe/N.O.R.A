@@ -126,6 +126,14 @@ func main() {
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
 
+	// Ensure a local docker engine record exists so discovered containers can
+	// be associated with it. This is idempotent — it reuses the existing record
+	// if one with socket_type="local" is already present.
+	localEngineID, err := docker.EnsureLocalEngine(context.Background(), store)
+	if err != nil {
+		log.Printf("docker discovery: could not ensure local engine record: %v", err)
+	}
+
 	if watcher, err := docker.NewWatcher(store); err != nil {
 		log.Printf("docker watcher: socket not available, skipping (%v)", err)
 	} else {
@@ -136,6 +144,17 @@ func main() {
 			watcher.SetContainerStartHook(healthPoller.CheckContainer)
 			go healthPoller.Start(dockerCtx)
 		}
+
+		// Wire up the discovery worker to upsert containers and run profile matching.
+		if localEngineID != "" {
+			if discoverer, err := docker.NewDiscoverer(store, registry, localEngineID); err != nil {
+				log.Printf("docker discoverer: %v", err)
+			} else {
+				watcher.SetDiscoveryHook(discoverer.HandleEvent)
+				go discoverer.ScanAll(dockerCtx)
+			}
+		}
+
 		go watcher.Start(dockerCtx)
 	}
 
@@ -165,6 +184,7 @@ func main() {
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, traefikComponentRepo).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
+		api.NewDockerDiscoveryHandler(store).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
