@@ -250,7 +250,7 @@ export function Checks() {
 
   return (
     <>
-      <Topbar title="Monitor Checks" onAdd={() => setShowAddForm(prev => !prev)} />
+      <Topbar title="Monitor Checks" />
       <div className="content">
 
         {showAddForm && (

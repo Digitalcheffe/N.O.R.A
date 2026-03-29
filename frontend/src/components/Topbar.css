@@ -1,5 +1,6 @@
 .topbar {
   height: 52px;
+  flex-shrink: 0;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
   display: flex;
