@@ -17,11 +17,13 @@ import (
 type InfraComponentHandler struct {
 	components repo.InfraComponentRepo
 	rollups    repo.ResourceRollupRepo
+	checks     repo.CheckRepo
+	traefik    repo.TraefikComponentRepo
 }
 
 // NewInfraComponentHandler returns a handler wired to the given repos.
-func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo) *InfraComponentHandler {
-	return &InfraComponentHandler{components: components, rollups: rollups}
+func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo, checks repo.CheckRepo, traefik repo.TraefikComponentRepo) *InfraComponentHandler {
+	return &InfraComponentHandler{components: components, rollups: rollups, checks: checks, traefik: traefik}
 }
 
 // Routes registers all infrastructure component endpoints on r.
@@ -32,6 +34,7 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Put("/infrastructure/{id}", h.Update)
 	r.Delete("/infrastructure/{id}", h.Delete)
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
+	r.Get("/infrastructure/{id}/traefik", h.GetTraefikDetail)
 }
 
 // ── request / response types ──────────────────────────────────────────────────
@@ -92,6 +95,7 @@ var validComponentTypes = map[string]bool{
 	"bare_metal":    true,
 	"windows_host":  true,
 	"docker_engine": true,
+	"traefik":       true,
 }
 
 var validCollectionMethods = map[string]bool{
@@ -99,6 +103,7 @@ var validCollectionMethods = map[string]bool{
 	"synology_api":  true,
 	"snmp":          true,
 	"docker_socket": true,
+	"traefik_api":   true,
 	"none":          true,
 }
 
@@ -266,14 +271,31 @@ func (h *InfraComponentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toResponse(existing))
 }
 
-// Delete removes an infrastructure component.
+// Delete removes an infrastructure component and any owned SSL checks.
 // DELETE /api/v1/infrastructure/{id}
 func (h *InfraComponentHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if err := h.components.Delete(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "component not found")
 		return
-	} else if err != nil {
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// For traefik components, delete owned SSL checks before removing the component.
+	// traefik_component_certs and traefik_routes cascade automatically via FK.
+	if comp.Type == "traefik" {
+		if err := h.checks.DeleteBySourceComponent(r.Context(), id); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	if err := h.components.Delete(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -353,4 +375,110 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── Traefik detail ────────────────────────────────────────────────────────────
+
+// traefikCertWithCheck extends TraefikComponentCert with the matching SSL check status.
+type traefikCertWithCheck struct {
+	ID          string  `json:"id"`
+	Domain      string  `json:"domain"`
+	Issuer      *string `json:"issuer,omitempty"`
+	ExpiresAt   *string `json:"expires_at,omitempty"`
+	SANs        []string `json:"sans"`
+	LastSeenAt  string  `json:"last_seen_at"`
+	CheckStatus string  `json:"check_status"` // "", "up", "warn", "down", "critical"
+	CheckID     string  `json:"check_id,omitempty"`
+}
+
+type traefikDetailResponse struct {
+	ComponentID string                 `json:"component_id"`
+	CertCount   int                    `json:"cert_count"`
+	WarnCount   int                    `json:"warn_count"`
+	CritCount   int                    `json:"crit_count"`
+	Certs       []traefikCertWithCheck `json:"certs"`
+	Routes      []models.TraefikRoute  `json:"routes"`
+}
+
+// GetTraefikDetail returns certs, routes, and SSL check status for a Traefik component.
+// GET /api/v1/infrastructure/{id}/traefik
+func (h *InfraComponentHandler) GetTraefikDetail(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if comp.Type != "traefik" {
+		writeError(w, http.StatusBadRequest, "component is not a traefik type")
+		return
+	}
+
+	certs, err := h.traefik.ListCerts(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	routes, err := h.traefik.ListRoutes(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Build a map of SSL checks owned by this component, keyed by target (domain).
+	ownedChecks, err := h.checks.ListBySourceComponent(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	checkByDomain := make(map[string]models.MonitorCheck, len(ownedChecks))
+	for _, ch := range ownedChecks {
+		checkByDomain[ch.Target] = ch
+	}
+
+	now := time.Now().UTC()
+	warnDays := 30
+	critDays := 7
+
+	certItems := make([]traefikCertWithCheck, len(certs))
+	warnCount, critCount := 0, 0
+	for i, c := range certs {
+		item := traefikCertWithCheck{
+			ID:         c.ID,
+			Domain:     c.Domain,
+			Issuer:     c.Issuer,
+			SANs:       c.SANs,
+			LastSeenAt: c.LastSeenAt.UTC().Format(time.RFC3339),
+		}
+		if c.ExpiresAt != nil {
+			s := c.ExpiresAt.UTC().Format(time.RFC3339)
+			item.ExpiresAt = &s
+			days := int(c.ExpiresAt.Sub(now).Hours() / 24)
+			if days <= critDays {
+				critCount++
+			} else if days <= warnDays {
+				warnCount++
+			}
+		}
+		if ch, ok := checkByDomain[c.Domain]; ok {
+			item.CheckStatus = ch.LastStatus
+			item.CheckID = ch.ID
+		}
+		certItems[i] = item
+	}
+
+	writeJSON(w, http.StatusOK, traefikDetailResponse{
+		ComponentID: id,
+		CertCount:   len(certs),
+		WarnCount:   warnCount,
+		CritCount:   critCount,
+		Certs:       certItems,
+		Routes:      routes,
+	})
 }

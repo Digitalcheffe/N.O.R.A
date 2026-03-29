@@ -179,7 +179,9 @@ func TestGetTopology_FullChain(t *testing.T) {
 
 	// Use a combined router so both topology and infra_components are available.
 	topoHandler := api.NewTopologyHandler(ic, de, apps, rollups)
-	icHandler := api.NewInfraComponentHandler(ic, rollups)
+	checks := repo.NewCheckRepo(db)
+	tc := repo.NewTraefikComponentRepo(db)
+	icHandler := api.NewInfraComponentHandler(ic, rollups, checks, tc)
 	r := chi.NewRouter()
 	topoHandler.Routes(r)
 	icHandler.Routes(r)

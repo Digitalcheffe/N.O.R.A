@@ -136,14 +136,24 @@ function EditModal({
             traefikCerts={traefikCerts}
             onIntegrationChange={onIntegrationChange}
             extraAction={
-              <button
-                className="form-btn danger"
-                onClick={() => void handleDelete()}
-                disabled={deleting}
-                style={{ marginLeft: 'auto' }}
-              >
-                {deleting ? 'Deleting…' : 'Delete Check'}
-              </button>
+              check.source_component_id ? (
+                <span
+                  className="form-btn secondary"
+                  style={{ marginLeft: 'auto', opacity: 0.5, cursor: 'default' }}
+                  title="This check is managed by a Traefik component. Delete the component to remove it."
+                >
+                  Managed by Traefik
+                </span>
+              ) : (
+                <button
+                  className="form-btn danger"
+                  onClick={() => void handleDelete()}
+                  disabled={deleting}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  {deleting ? 'Deleting…' : 'Delete Check'}
+                </button>
+              )
             }
           />
         </div>

@@ -33,6 +33,7 @@ const TYPE_COLOR: Record<ComponentType, string> = {
   bare_metal:    '#6b7280',
   windows_host:  '#6b7280',
   docker_engine: '#14b8a6',
+  traefik:       '#f97316',
 }
 
 const TYPE_LABEL: Record<ComponentType, string> = {
@@ -43,6 +44,7 @@ const TYPE_LABEL: Record<ComponentType, string> = {
   bare_metal:    'Bare Metal',
   windows_host:  'Windows Host',
   docker_engine: 'Docker Engine',
+  traefik:       'Traefik',
 }
 
 const STATUS_COLOR: Record<string, string> = {

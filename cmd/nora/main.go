@@ -51,11 +51,13 @@ func main() {
 	settingsRepo := repo.NewSettingsRepo(db)
 	metricsRepo := repo.NewMetricsRepo(db)
 	userRepo := repo.NewUserRepo(db)
+	traefikComponentRepo := repo.NewTraefikComponentRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
 		infraComponentRepo, dockerEngineRepo,
 		infraRepo, settingsRepo, metricsRepo, userRepo,
+		traefikComponentRepo,
 	)
 
 	// App template registry — load all bundled YAML app templates
@@ -112,6 +114,11 @@ func main() {
 	defer snmpCancel()
 	go jobs.StartSNMPPollers(snmpCtx, store)
 
+	// Traefik component pollers — polls all enabled traefik components every 5 minutes.
+	traefikCtx, traefikCancel := context.WithCancel(context.Background())
+	defer traefikCancel()
+	go jobs.StartTraefikComponentPollers(traefikCtx, store)
+
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
@@ -152,11 +159,12 @@ func main() {
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
-		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo).Routes(r)
+		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, traefikComponentRepo).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)
 		api.NewSettingsHandler(store).Routes(r)
+		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
 		api.NewUsersHandler(userRepo).Routes(r)
 	})

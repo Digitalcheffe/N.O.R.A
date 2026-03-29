@@ -86,6 +86,81 @@
   margin-top: 2px;
 }
 
+/* ── Driver grid ────────────────────────────────────────────────────────────── */
+
+.int-driver-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.int-driver-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.int-driver-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.int-driver-desc {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  line-height: 1.4;
+}
+
+.int-driver-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.int-cap-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* ── Capabilities line ──────────────────────────────────────────────────────── */
+
+.int-capabilities {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 3px;
+}
+
+/* ── Status badge row ───────────────────────────────────────────────────────── */
+
+.int-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.int-badge-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
 /* ── Status dot ─────────────────────────────────────────────────────────────── */
 
 .int-dot {

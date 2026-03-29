@@ -23,6 +23,7 @@ import type {
   InfrastructureComponent,
   InfrastructureComponentInput,
   InstanceMetrics,
+  IntegrationDriver,
   ListResponse,
   LoginInput,
   MonitorCheck,
@@ -34,6 +35,7 @@ import type {
   TimeseriesBucket,
   TimeseriesFilter,
   TraefikCert,
+  TraefikComponentDetail,
   User,
   ValidationResult,
   VirtualHost,
@@ -282,6 +284,19 @@ export const integrations = {
     request<ListResponse<TraefikCert>>('GET', `/integrations/${id}/certs`),
 }
 
+// ── Integration Drivers ───────────────────────────────────────────────────────
+
+export const integrationDrivers = {
+  list: () =>
+    request<ListResponse<IntegrationDriver>>('GET', '/integration-drivers'),
+
+  configure: (name: string, creds: Record<string, string>) =>
+    request<{ configured: boolean }>('PUT', `/integration-drivers/${name}`, creds),
+
+  disconnect: (name: string) =>
+    request<void>('DELETE', `/integration-drivers/${name}`),
+}
+
 // ── Digest ────────────────────────────────────────────────────────────────────
 
 export const digestSettings = {
@@ -331,6 +346,9 @@ export const infrastructure = {
 
   resources: (id: string, period = 'hour') =>
     request<ResourceSummary>('GET', `/infrastructure/${id}/resources?period=${period}`),
+
+  traefikDetail: (id: string) =>
+    request<TraefikComponentDetail>('GET', `/infrastructure/${id}/traefik`),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────

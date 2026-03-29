@@ -18,7 +18,9 @@ func newInfraComponentRouter(t *testing.T) http.Handler {
 	db := newTestDB(t)
 	ic := repo.NewInfraComponentRepo(db)
 	rollups := repo.NewResourceRollupRepo(db)
-	h := api.NewInfraComponentHandler(ic, rollups)
+	checks := repo.NewCheckRepo(db)
+	tc := repo.NewTraefikComponentRepo(db)
+	h := api.NewInfraComponentHandler(ic, rollups, checks, tc)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r

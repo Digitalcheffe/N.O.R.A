@@ -254,14 +254,25 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete removes a check: DELETE /api/v1/checks/{id}
+// Returns 409 if the check is owned by a Traefik component (delete the component instead).
 func (h *ChecksHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	err := h.checks.Delete(r.Context(), id)
+
+	check, err := h.checks.Get(r.Context(), id)
 	if errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "check not found")
 		return
 	}
 	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if check.SourceComponentID != nil && *check.SourceComponentID != "" {
+		writeError(w, http.StatusConflict, "check is managed by a Traefik component and cannot be deleted directly")
+		return
+	}
+
+	if err := h.checks.Delete(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

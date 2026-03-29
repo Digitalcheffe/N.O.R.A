@@ -19,6 +19,12 @@ type CheckRepo interface {
 	Update(ctx context.Context, check *models.MonitorCheck) error
 	Delete(ctx context.Context, id string) error
 	UpdateStatus(ctx context.Context, id, status, result string, checkedAt time.Time) error
+	// ListBySourceComponent returns all checks owned by the given component.
+	ListBySourceComponent(ctx context.Context, componentID string) ([]models.MonitorCheck, error)
+	// DeleteBySourceComponent removes all checks owned by the given component.
+	DeleteBySourceComponent(ctx context.Context, componentID string) error
+	// UpsertForComponent inserts or updates a Traefik-owned SSL check.
+	UpsertForComponent(ctx context.Context, check *models.MonitorCheck) error
 }
 
 type sqliteCheckRepo struct {
@@ -34,6 +40,7 @@ const selectCheckCols = `
 	SELECT id, COALESCE(app_id,'') AS app_id, name, type, target,
 	       interval_secs, COALESCE(expected_status,0) AS expected_status,
 	       ssl_warn_days, ssl_crit_days, ssl_source, integration_id,
+	       source_component_id,
 	       COALESCE(skip_tls_verify,0) AS skip_tls_verify, enabled,
 	       last_checked_at, COALESCE(last_status,'') AS last_status,
 	       COALESCE(last_result,'') AS last_result, created_at
@@ -131,6 +138,57 @@ func (r *sqliteCheckRepo) UpdateStatus(ctx context.Context, id, status, result s
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteCheckRepo) ListBySourceComponent(ctx context.Context, componentID string) ([]models.MonitorCheck, error) {
+	var checks []models.MonitorCheck
+	err := r.db.SelectContext(ctx, &checks, selectCheckCols+` WHERE source_component_id = ? ORDER BY created_at ASC`, componentID)
+	if err != nil {
+		return nil, fmt.Errorf("list checks by component: %w", err)
+	}
+	if checks == nil {
+		checks = []models.MonitorCheck{}
+	}
+	return checks, nil
+}
+
+func (r *sqliteCheckRepo) DeleteBySourceComponent(ctx context.Context, componentID string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM monitor_checks WHERE source_component_id = ?`, componentID)
+	if err != nil {
+		return fmt.Errorf("delete checks by component: %w", err)
+	}
+	return nil
+}
+
+// UpsertForComponent inserts or updates a Traefik-owned SSL check identified by
+// (source_component_id, target). The id field on check must be pre-populated;
+// on conflict the existing row's id is preserved.
+func (r *sqliteCheckRepo) UpsertForComponent(ctx context.Context, check *models.MonitorCheck) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO monitor_checks
+		  (id, app_id, name, type, target, interval_secs, expected_status,
+		   ssl_warn_days, ssl_crit_days, ssl_source, integration_id,
+		   source_component_id, skip_tls_verify, enabled)
+		VALUES (?, NULLIF(?,?), ?, ?, ?, ?, NULLIF(?,0), ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+		  name               = excluded.name,
+		  ssl_warn_days      = excluded.ssl_warn_days,
+		  ssl_crit_days      = excluded.ssl_crit_days,
+		  ssl_source         = excluded.ssl_source,
+		  source_component_id = excluded.source_component_id,
+		  enabled            = excluded.enabled`,
+		check.ID, check.AppID, check.AppID,
+		check.Name, check.Type, check.Target, check.IntervalSecs,
+		check.ExpectedStatus,
+		check.SSLWarnDays, check.SSLCritDays,
+		check.SSLSource, check.IntegrationID,
+		check.SourceComponentID,
+		check.SkipTLSVerify,
+		check.Enabled)
+	if err != nil {
+		return fmt.Errorf("upsert check for component: %w", err)
 	}
 	return nil
 }

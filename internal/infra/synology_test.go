@@ -38,6 +38,7 @@ func newSynologyTestStore(t *testing.T) *repo.Store {
 		repo.NewSettingsRepo(db),
 		repo.NewMetricsRepo(db),
 		repo.NewUserRepo(db),
+		repo.NewTraefikComponentRepo(db),
 	)
 }
 
