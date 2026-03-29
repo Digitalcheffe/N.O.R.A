@@ -27,43 +27,52 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 	switch c.CollectionMethod {
 	case "proxmox_api":
 		if c.Credentials == nil || *c.Credentials == "" {
+			log.Printf("scan: %s (%s): no credentials configured", c.Name, c.ID)
 			return "offline", fmt.Errorf("no credentials configured — edit the component and save credentials first")
 		}
 		poller, err := infra.NewProxmoxPoller(c.ID, *c.Credentials)
 		if err != nil {
+			log.Printf("scan: %s (%s): invalid credentials: %v", c.Name, c.ID, err)
 			return "offline", fmt.Errorf("invalid credentials: %w", err)
 		}
 		pollErr = poller.Poll(ctx, store)
 
 	case "synology_api":
 		if c.Credentials == nil || *c.Credentials == "" {
+			log.Printf("scan: %s (%s): no credentials configured", c.Name, c.ID)
 			return "offline", fmt.Errorf("no credentials configured — edit the component and save credentials first")
 		}
 		poller, err := infra.NewSynologyPoller(c.ID, *c.Credentials)
 		if err != nil {
+			log.Printf("scan: %s (%s): invalid credentials: %v", c.Name, c.ID, err)
 			return "offline", fmt.Errorf("invalid credentials: %w", err)
 		}
 		pollErr = poller.Poll(ctx, store)
 
 	case "snmp":
 		if c.SNMPConfig == nil || *c.SNMPConfig == "" {
+			log.Printf("scan: %s (%s): no SNMP config", c.Name, c.ID)
 			return "offline", fmt.Errorf("no SNMP config — edit the component and save SNMP settings first")
 		}
 		poller, err := infra.NewSNMPPoller(c.ID, c.IP, *c.SNMPConfig)
 		if err != nil {
+			log.Printf("scan: %s (%s): invalid SNMP config: %v", c.Name, c.ID, err)
 			return "offline", fmt.Errorf("invalid SNMP config: %w", err)
 		}
 		pollErr = poller.Poll(ctx, store)
 
 	case "traefik_api":
 		if c.Credentials == nil || *c.Credentials == "" {
+			log.Printf("scan: %s (%s): no credentials configured", c.Name, c.ID)
 			return "offline", fmt.Errorf("no credentials configured — edit the component and save credentials first")
 		}
 		var creds traefikComponentCredentials
 		if err := json.Unmarshal([]byte(*c.Credentials), &creds); err != nil {
+			log.Printf("scan: %s (%s): invalid credentials JSON: %v", c.Name, c.ID, err)
 			return "offline", fmt.Errorf("invalid credentials JSON: %w", err)
 		}
 		if creds.APIURL == "" {
+			log.Printf("scan: %s (%s): api_url is empty", c.Name, c.ID)
 			return "offline", fmt.Errorf("api_url is empty — edit the component and set the Traefik API URL")
 		}
 		pollErr = pollTraefikComponent(ctx, store, *c, creds)

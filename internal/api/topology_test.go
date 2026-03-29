@@ -181,7 +181,15 @@ func TestGetTopology_FullChain(t *testing.T) {
 	topoHandler := api.NewTopologyHandler(ic, de, apps, rollups)
 	checks := repo.NewCheckRepo(db)
 	tc := repo.NewTraefikComponentRepo(db)
-	icHandler := api.NewInfraComponentHandler(ic, rollups, checks, tc)
+	store := repo.NewStore(
+		apps, repo.NewEventRepo(db), checks,
+		repo.NewRollupRepo(db), repo.NewResourceReadingRepo(db), rollups,
+		ic, de,
+		repo.NewInfraRepo(db), repo.NewSettingsRepo(db), repo.NewMetricsRepo(db),
+		repo.NewUserRepo(db), tc,
+		repo.NewDiscoveredContainerRepo(db), repo.NewDiscoveredRouteRepo(db), nil,
+	)
+	icHandler := api.NewInfraComponentHandler(ic, rollups, checks, tc, store)
 	r := chi.NewRouter()
 	topoHandler.Routes(r)
 	icHandler.Routes(r)
