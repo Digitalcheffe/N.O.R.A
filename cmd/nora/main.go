@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	noraappprofiles "github.com/digitalcheffe/nora/appprofiles"
 	"github.com/digitalcheffe/nora/internal/api"
 	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/auth"
@@ -20,7 +21,6 @@ import (
 	"github.com/digitalcheffe/nora/internal/monitor"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/migrations"
-	noraappprofiles "github.com/digitalcheffe/nora/appprofiles"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -44,15 +44,19 @@ func main() {
 	rollupRepo := repo.NewRollupRepo(db)
 	resourceRepo := repo.NewResourceReadingRepo(db)
 	resourceRollupRepo := repo.NewResourceRollupRepo(db)
-	physicalHostRepo := repo.NewPhysicalHostRepo(db)
-	virtualHostRepo := repo.NewVirtualHostRepo(db)
+	infraComponentRepo := repo.NewInfraComponentRepo(db)
 	dockerEngineRepo := repo.NewDockerEngineRepo(db)
 	customProfileRepo := repo.NewCustomProfileRepo(db)
 	infraRepo := repo.NewInfraRepo(db)
 	settingsRepo := repo.NewSettingsRepo(db)
 	metricsRepo := repo.NewMetricsRepo(db)
 	userRepo := repo.NewUserRepo(db)
-	store := repo.NewStore(appRepo, eventRepo, checkRepo, rollupRepo, resourceRepo, resourceRollupRepo, physicalHostRepo, virtualHostRepo, dockerEngineRepo, infraRepo, settingsRepo, metricsRepo, userRepo)
+	store := repo.NewStore(
+		appRepo, eventRepo, checkRepo,
+		rollupRepo, resourceRepo, resourceRollupRepo,
+		infraComponentRepo, dockerEngineRepo,
+		infraRepo, settingsRepo, metricsRepo, userRepo,
+	)
 
 	// App template registry — load all bundled YAML app templates
 	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
@@ -132,7 +136,8 @@ func main() {
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
-		api.NewTopologyHandler(physicalHostRepo, virtualHostRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
+		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
+		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)
