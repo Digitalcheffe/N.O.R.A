@@ -97,6 +97,13 @@ func (p *ResourcePoller) Start(ctx context.Context) {
 	}
 }
 
+// PollAll is the exported, on-demand counterpart to the ticker-driven pollAll.
+// It performs a single full poll of all running containers and is called when
+// a user triggers a manual "Scan Now" on a docker_socket infrastructure component.
+func (p *ResourcePoller) PollAll(ctx context.Context) {
+	p.pollAll(ctx)
+}
+
 // pollAll lists running containers and calls PollContainer for each one.
 func (p *ResourcePoller) pollAll(ctx context.Context) {
 	containers, err := p.client.ContainerList(ctx, container.ListOptions{})

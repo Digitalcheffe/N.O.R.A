@@ -393,6 +393,145 @@ func TestProxmoxPoller_Poll_ConnectionRefused_ReturnsError(t *testing.T) {
 	// Process should not have panicked. If we reach here, it didn't.
 }
 
+// ── VM/LXC auto-discovery tests ───────────────────────────────────────────────
+
+func TestProxmoxPoller_Poll_CreatesVMChildren(t *testing.T) {
+	srv, fs := newFakeServer(t)
+	fs.nodes = []proxmoxNode{{Node: "pve", Status: "online"}}
+	fs.statusByNode["pve"] = defaultNodeStatus()
+	fs.storageByNode["pve"] = defaultStorage()
+	fs.qemuByNode["pve"] = []proxmoxVM{
+		{VMID: 100, Name: "ubuntu-vm", Status: "running"},
+		{VMID: 101, Name: "win11-vm", Status: "stopped"},
+	}
+	fs.lxcByNode["pve"] = []proxmoxVM{
+		{VMID: 200, Name: "debian-ct", Status: "running"},
+	}
+
+	ctx := context.Background()
+	store := newProxmoxTestStore(t)
+	compID := "comp-discovery"
+	createTestComponent(t, store, compID)
+
+	poller, _ := NewProxmoxPoller(compID, makeCredentials(srv.URL))
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+
+	all, err := store.InfraComponents.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	// Expect: 1 proxmox_node + 2 vms + 1 lxc = 4 total.
+	if len(all) != 4 {
+		t.Fatalf("expected 4 components, got %d", len(all))
+	}
+
+	byID := make(map[string]models.InfrastructureComponent)
+	for _, c := range all {
+		byID[c.ID] = c
+	}
+
+	// Check the VM child IDs are deterministic.
+	ubuntuID := proxmoxChildID(compID, 100)
+	winID := proxmoxChildID(compID, 101)
+	ctID := proxmoxChildID(compID, 200)
+
+	for _, tc := range []struct {
+		id     string
+		name   string
+		kind   string
+		status string
+	}{
+		{ubuntuID, "ubuntu-vm", "vm", "online"},
+		{winID, "win11-vm", "vm", "offline"},
+		{ctID, "debian-ct", "lxc", "online"},
+	} {
+		c, ok := byID[tc.id]
+		if !ok {
+			t.Errorf("child %s (%s) not found", tc.name, tc.id)
+			continue
+		}
+		if c.Type != tc.kind {
+			t.Errorf("%s: type=%q, want %q", tc.name, c.Type, tc.kind)
+		}
+		if c.LastStatus != tc.status {
+			t.Errorf("%s: last_status=%q, want %q", tc.name, c.LastStatus, tc.status)
+		}
+		if c.ParentID == nil || *c.ParentID != compID {
+			t.Errorf("%s: parent_id=%v, want %q", tc.name, c.ParentID, compID)
+		}
+		if c.CollectionMethod != "none" {
+			t.Errorf("%s: collection_method=%q, want \"none\"", tc.name, c.CollectionMethod)
+		}
+	}
+}
+
+func TestProxmoxPoller_Poll_ChildIDsAreStable(t *testing.T) {
+	// Running Poll twice must not duplicate children.
+	srv, fs := newFakeServer(t)
+	fs.nodes = []proxmoxNode{{Node: "pve", Status: "online"}}
+	fs.statusByNode["pve"] = defaultNodeStatus()
+	fs.storageByNode["pve"] = defaultStorage()
+	fs.qemuByNode["pve"] = []proxmoxVM{{VMID: 100, Name: "ubuntu-vm", Status: "running"}}
+
+	ctx := context.Background()
+	store := newProxmoxTestStore(t)
+	compID := "comp-stable"
+	createTestComponent(t, store, compID)
+
+	poller, _ := NewProxmoxPoller(compID, makeCredentials(srv.URL))
+
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("first Poll: %v", err)
+	}
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("second Poll: %v", err)
+	}
+
+	all, _ := store.InfraComponents.List(ctx)
+	// 1 proxmox_node + 1 vm — no duplicates.
+	if len(all) != 2 {
+		t.Fatalf("expected 2 components after two polls, got %d", len(all))
+	}
+}
+
+func TestProxmoxPoller_Poll_ChildStatusUpdatesOnSubsequentPoll(t *testing.T) {
+	srv, fs := newFakeServer(t)
+	fs.nodes = []proxmoxNode{{Node: "pve", Status: "online"}}
+	fs.statusByNode["pve"] = defaultNodeStatus()
+	fs.storageByNode["pve"] = defaultStorage()
+	fs.qemuByNode["pve"] = []proxmoxVM{{VMID: 100, Name: "ubuntu-vm", Status: "running"}}
+
+	ctx := context.Background()
+	store := newProxmoxTestStore(t)
+	compID := "comp-status-update"
+	createTestComponent(t, store, compID)
+
+	poller, _ := NewProxmoxPoller(compID, makeCredentials(srv.URL))
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("first Poll: %v", err)
+	}
+
+	childID := proxmoxChildID(compID, 100)
+	c, _ := store.InfraComponents.Get(ctx, childID)
+	if c.LastStatus != "online" {
+		t.Fatalf("after first poll: want online, got %q", c.LastStatus)
+	}
+
+	// VM shuts down.
+	fs.qemuByNode["pve"] = []proxmoxVM{{VMID: 100, Name: "ubuntu-vm", Status: "stopped"}}
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("second Poll: %v", err)
+	}
+
+	c, _ = store.InfraComponents.Get(ctx, childID)
+	if c.LastStatus != "offline" {
+		t.Errorf("after second poll: want offline, got %q", c.LastStatus)
+	}
+}
+
 func TestProxmoxPoller_AuthHeader(t *testing.T) {
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

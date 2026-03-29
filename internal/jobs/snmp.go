@@ -49,12 +49,14 @@ func RunSNMPPollers(ctx context.Context, store *repo.Store) {
 			log.Printf("snmp scheduler: polling %s (%s)", name, id)
 			if err := poller.Poll(pollCtx, store); err != nil {
 				log.Printf("snmp scheduler: poll %s (%s): %v", name, id, err)
+				emitInfraEvent(ctx, store, id, name, "snmp", "scheduled", "failed", err.Error())
 				polledAt := time.Now().UTC().Format(time.RFC3339Nano)
 				if updateErr := store.InfraComponents.UpdateStatus(ctx, id, "offline", polledAt); updateErr != nil {
 					log.Printf("snmp scheduler: update status %s: %v", id, updateErr)
 				}
 			} else {
 				log.Printf("snmp scheduler: poll %s (%s): complete", name, id)
+				emitInfraEvent(ctx, store, id, name, "snmp", "scheduled", "ok", "")
 			}
 		}(c.ID, c.Name, c.IP, *c.SNMPConfig)
 	}

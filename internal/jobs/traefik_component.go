@@ -51,12 +51,14 @@ func RunTraefikComponentPollers(ctx context.Context, store *repo.Store) {
 		log.Printf("traefik component scheduler: polling %s (%s)", c.Name, c.ID)
 		if err := pollTraefikComponent(ctx, store, c, creds); err != nil {
 			log.Printf("traefik component scheduler: poll %s (%s): %v", c.Name, c.ID, err)
+			emitInfraEvent(ctx, store, c.ID, c.Name, "traefik", "scheduled", "failed", err.Error())
 			polledAt := time.Now().UTC().Format(time.RFC3339Nano)
 			if updateErr := store.InfraComponents.UpdateStatus(ctx, c.ID, "offline", polledAt); updateErr != nil {
 				log.Printf("traefik component scheduler: update status %s: %v", c.ID, updateErr)
 			}
 		} else {
 			log.Printf("traefik component scheduler: poll %s (%s): complete", c.Name, c.ID)
+			emitInfraEvent(ctx, store, c.ID, c.Name, "traefik", "scheduled", "ok", "")
 		}
 	}
 }

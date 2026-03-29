@@ -577,6 +577,7 @@ export function Infrastructure() {
 
   function renderDockerCard(c: InfrastructureComponent) {
     const isDeleting = deletingId === c.id
+    const isScanning = scanningId === c.id
 
     return (
       <div key={c.id} className="infra-card">
@@ -592,18 +593,26 @@ export function Infrastructure() {
           <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
             <span className="infra-status-label">{statusLabel(c.last_status)}</span>
+            {renderScanFeedback(c.id)}
             <div className="infra-card-actions" style={{ marginLeft: 8 }}>
               <button
                 className="infra-card-btn"
+                onClick={e => { e.stopPropagation(); void handleScan(c.id) }}
+                disabled={isDeleting || isScanning || scanningId !== null}
+              >
+                {isScanning ? 'Scanning…' : 'Scan Now'}
+              </button>
+              <button
+                className="infra-card-btn"
                 onClick={e => { e.stopPropagation(); openEdit(c) }}
-                disabled={isDeleting}
+                disabled={isDeleting || isScanning}
               >
                 Edit
               </button>
               <button
                 className="infra-card-btn danger"
                 onClick={e => { e.stopPropagation(); void handleDelete(c.id) }}
-                disabled={isDeleting}
+                disabled={isDeleting || isScanning}
               >
                 {isDeleting ? 'Deleting…' : 'Delete'}
               </button>
@@ -628,7 +637,7 @@ export function Infrastructure() {
     const res = resourcesMap[c.id]
     const isDeleting = deletingId === c.id
     const isScanning = scanningId === c.id
-    const canScan = c.collection_method !== 'none' && c.collection_method !== 'docker_socket'
+    const canScan = c.collection_method !== 'none'
 
     return (
       <div key={c.id} className="infra-card">

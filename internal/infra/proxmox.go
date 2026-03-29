@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +15,17 @@ import (
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/google/uuid"
 )
+
+// proxmoxChildNS is the fixed UUID v5 namespace used to derive stable child
+// component IDs from a (parentComponentID, vmid) pair.
+var proxmoxChildNS = uuid.MustParse("b5a4c3d2-1e0f-4d8c-9b7a-2c1d0e3f8a9b")
+
+// proxmoxChildID returns a deterministic UUID for a VM or LXC container that
+// belongs to a specific Proxmox component.  The same (parentID, vmid) pair
+// always produces the same UUID, making upserts idempotent across polls.
+func proxmoxChildID(parentID string, vmid int) string {
+	return uuid.NewSHA1(proxmoxChildNS, []byte(fmt.Sprintf("%s/%d", parentID, vmid))).String()
+}
 
 // ProxmoxCredentials is the JSON shape stored in infrastructure_components.credentials.
 type ProxmoxCredentials struct {
@@ -221,6 +233,7 @@ func (p *ProxmoxPoller) pollNode(ctx context.Context, store *repo.Store, node st
 		log.Printf("proxmox poller %s: list qemu on %s: %v", p.componentID, node, err)
 	} else {
 		p.checkStateChanges(ctx, store, node, "VM", vms)
+		p.upsertChildren(ctx, store, vms, "vm", now)
 	}
 
 	var ctrs []proxmoxVM
@@ -228,9 +241,56 @@ func (p *ProxmoxPoller) pollNode(ctx context.Context, store *repo.Store, node st
 		log.Printf("proxmox poller %s: list lxc on %s: %v", p.componentID, node, err)
 	} else {
 		p.checkStateChanges(ctx, store, node, "LXC", ctrs)
+		p.upsertChildren(ctx, store, ctrs, "lxc", now)
 	}
 
 	return nil
+}
+
+// upsertChildren creates or updates an InfrastructureComponent child record for
+// each VM or LXC in the list.  Child IDs are derived deterministically from
+// (componentID, vmid) so re-runs are fully idempotent.
+func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, vms []proxmoxVM, kind string, now time.Time) {
+	polledAt := now.Format(time.RFC3339Nano)
+
+	for _, vm := range vms {
+		id := proxmoxChildID(p.componentID, vm.VMID)
+
+		status := "offline"
+		if vm.Status == "running" {
+			status = "online"
+		}
+
+		// Try an update-in-place first (fast path for subsequent polls).
+		err := store.InfraComponents.UpdateStatus(ctx, id, status, polledAt)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, repo.ErrNotFound) {
+			log.Printf("proxmox poller %s: update child %s %q: %v", p.componentID, kind, vm.Name, err)
+			continue
+		}
+
+		// First time seeing this VM/LXC — create a child component.
+		parentID := p.componentID
+		c := &models.InfrastructureComponent{
+			ID:               id,
+			Name:             vm.Name,
+			IP:               "",
+			Type:             kind,
+			CollectionMethod: "none",
+			ParentID:         &parentID,
+			Enabled:          true,
+			LastStatus:       status,
+			CreatedAt:        polledAt,
+		}
+		if err := store.InfraComponents.Create(ctx, c); err != nil {
+			log.Printf("proxmox poller %s: create child %s %q: %v", p.componentID, kind, vm.Name, err)
+			continue
+		}
+		log.Printf("proxmox poller %s: discovered %s %q (vmid=%d, status=%s)",
+			p.componentID, kind, vm.Name, vm.VMID, vm.Status)
+	}
 }
 
 // checkStateChanges compares current VM/LXC statuses against the last known
