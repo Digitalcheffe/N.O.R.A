@@ -41,6 +41,7 @@ func newSynologyTestStore(t *testing.T) *repo.Store {
 		repo.NewTraefikComponentRepo(db),
 		repo.NewDiscoveredContainerRepo(db),
 		repo.NewDiscoveredRouteRepo(db),
+		nil,
 	)
 }
 

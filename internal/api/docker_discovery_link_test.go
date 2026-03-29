@@ -39,6 +39,7 @@ func newDiscoveryLinkRouter(t *testing.T, profiles apptemplate.Loader) (http.Han
 		repo.NewTraefikComponentRepo(db),
 		repo.NewDiscoveredContainerRepo(db),
 		repo.NewDiscoveredRouteRepo(db),
+		nil,
 	)
 	h := api.NewDockerDiscoveryHandler(store, profiles)
 	r := chi.NewRouter()

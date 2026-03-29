@@ -2,21 +2,22 @@ package repo
 
 // Store bundles all repository interfaces into a single dependency.
 type Store struct {
-	Apps                 AppRepo
-	Events               EventRepo
-	Checks               CheckRepo
-	Rollups              RollupRepo
-	Resources            ResourceReadingRepo
-	ResourceRollups      ResourceRollupRepo
-	InfraComponents      InfraComponentRepo
-	DockerEngines        DockerEngineRepo
-	Infra                InfraRepo
-	Settings             SettingsRepo
-	Metrics              MetricsRepo
-	Users                UserRepo
-	TraefikComponents    TraefikComponentRepo
-	DiscoveredContainers DiscoveredContainerRepo
-	DiscoveredRoutes     DiscoveredRouteRepo
+	Apps                  AppRepo
+	Events                EventRepo
+	Checks                CheckRepo
+	Rollups               RollupRepo
+	Resources             ResourceReadingRepo
+	ResourceRollups       ResourceRollupRepo
+	InfraComponents       InfraComponentRepo
+	DockerEngines         DockerEngineRepo
+	Infra                 InfraRepo
+	Settings              SettingsRepo
+	Metrics               MetricsRepo
+	Users                 UserRepo
+	TraefikComponents     TraefikComponentRepo
+	DiscoveredContainers  DiscoveredContainerRepo
+	DiscoveredRoutes      DiscoveredRouteRepo
+	WebPushSubscriptions  WebPushSubscriptionRepo
 }
 
 // NewStore creates a Store backed by the given repositories.
@@ -36,6 +37,7 @@ func NewStore(
 	traefikComponents TraefikComponentRepo,
 	discoveredContainers DiscoveredContainerRepo,
 	discoveredRoutes DiscoveredRouteRepo,
+	webPushSubscriptions WebPushSubscriptionRepo,
 ) *Store {
 	return &Store{
 		Apps:                 apps,
@@ -53,5 +55,6 @@ func NewStore(
 		TraefikComponents:    traefikComponents,
 		DiscoveredContainers: discoveredContainers,
 		DiscoveredRoutes:     discoveredRoutes,
+		WebPushSubscriptions: webPushSubscriptions,
 	}
 }

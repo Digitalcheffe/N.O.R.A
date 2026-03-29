@@ -34,6 +34,7 @@ func newDigestRouter(t *testing.T) (http.Handler, *repo.Store) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	digestJob := jobs.NewDigestJob(store, &config.Config{})
 	h := api.NewDigestHandler(store, digestJob)
@@ -64,6 +65,7 @@ func newDigestRouterWithSMTP(t *testing.T) (http.Handler, *repo.Store) {
 		repo.NewDockerEngineRepo(db),
 		repo.NewInfraRepo(db),
 		repo.NewSettingsRepo(db),
+		nil,
 		nil,
 		nil,
 		nil,

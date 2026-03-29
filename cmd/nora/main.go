@@ -19,6 +19,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/monitor"
+	"github.com/digitalcheffe/nora/internal/push"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/migrations"
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,10 @@ import (
 func main() {
 	cfg := config.Load()
 	startTime := time.Now()
+
+	if err := push.EnsureVAPIDKeys(cfg); err != nil {
+		log.Fatalf("VAPID key init failed: %v", err)
+	}
 
 	db, err := repo.Open(cfg, migrations.Files)
 	if err != nil {
@@ -54,6 +59,7 @@ func main() {
 	traefikComponentRepo := repo.NewTraefikComponentRepo(db)
 	discoveredContainerRepo := repo.NewDiscoveredContainerRepo(db)
 	discoveredRouteRepo := repo.NewDiscoveredRouteRepo(db)
+	webPushSubscriptionRepo := repo.NewWebPushSubscriptionRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
@@ -61,7 +67,11 @@ func main() {
 		infraRepo, settingsRepo, metricsRepo, userRepo,
 		traefikComponentRepo,
 		discoveredContainerRepo, discoveredRouteRepo,
+		webPushSubscriptionRepo,
 	)
+
+	// Push notification sender
+	pushSender := push.NewSender(cfg, store)
 
 	// App template registry — load all bundled YAML app templates
 	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
@@ -172,6 +182,8 @@ func main() {
 	// Public routes — no session auth
 	api.RegisterDocsRoutes(r)
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
+	pushHandler := api.NewPushHandler(cfg, store, pushSender)
+	pushHandler.RegisterPublicRoutes(r)
 
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
@@ -190,6 +202,7 @@ func main() {
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
 		api.NewUsersHandler(userRepo).Routes(r)
+		pushHandler.Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html
