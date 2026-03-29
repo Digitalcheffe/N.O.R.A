@@ -1,23 +1,28 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // DockerDiscoveryHandler serves the container discovery endpoints.
 type DockerDiscoveryHandler struct {
-	store *repo.Store
+	store    *repo.Store
+	profiles apptemplate.Loader
 }
 
-// NewDockerDiscoveryHandler returns a DockerDiscoveryHandler wired to store.
-func NewDockerDiscoveryHandler(store *repo.Store) *DockerDiscoveryHandler {
-	return &DockerDiscoveryHandler{store: store}
+// NewDockerDiscoveryHandler returns a DockerDiscoveryHandler wired to store and profiles.
+func NewDockerDiscoveryHandler(store *repo.Store, profiles apptemplate.Loader) *DockerDiscoveryHandler {
+	return &DockerDiscoveryHandler{store: store, profiles: profiles}
 }
 
 // Routes registers the docker discovery endpoints on r.
@@ -25,6 +30,10 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 	r.Get("/docker-engines/{id}/containers", h.ListContainers)
 	r.Get("/infrastructure/{id}/routes", h.ListRoutes)
 	r.Get("/discovery/all", h.ListAll)
+	r.Post("/discovered-containers/{id}/link-app", h.LinkContainerApp)
+	r.Delete("/discovered-containers/{id}/link-app", h.UnlinkContainerApp)
+	r.Post("/discovered-routes/{id}/link-app", h.LinkRouteApp)
+	r.Delete("/discovered-routes/{id}/link-app", h.UnlinkRouteApp)
 }
 
 // discoveredContainerResponse is the per-container shape returned by the API.
@@ -251,4 +260,268 @@ func (h *DockerDiscoveryHandler) ListAll(w http.ResponseWriter, r *http.Request)
 		Containers: containerOut,
 		Routes:     routeOut,
 	})
+}
+
+// ── Link / Unlink ─────────────────────────────────────────────────────────────
+
+type linkAppRequest struct {
+	Mode      string          `json:"mode"`       // "existing" | "create"
+	AppID     string          `json:"app_id"`     // mode=existing
+	ProfileID string          `json:"profile_id"` // mode=create
+	Name      string          `json:"name"`       // mode=create
+	Config    json.RawMessage `json:"config"`     // mode=create
+}
+
+// LinkContainerApp links a discovered container to an app.
+// POST /api/v1/discovered-containers/{id}/link-app
+func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	container, err := h.store.DiscoveredContainers.GetDiscoveredContainer(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "discovered container not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var req linkAppRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	switch req.Mode {
+	case "existing":
+		if req.AppID == "" {
+			writeError(w, http.StatusUnprocessableEntity, "app_id is required for mode=existing")
+			return
+		}
+		app, err := h.store.Apps.Get(r.Context(), req.AppID)
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusUnprocessableEntity, "app_id does not exist")
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := h.store.DiscoveredContainers.SetDiscoveredContainerApp(r.Context(), id, req.AppID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		// Set docker_engine_id on the app if not already set.
+		if app.DockerEngineID == "" {
+			_ = h.store.Apps.SetDockerEngineID(r.Context(), req.AppID, container.DockerEngineID)
+		}
+		container.AppID = &req.AppID
+		writeJSON(w, http.StatusOK, container)
+
+	case "create":
+		if req.Name == "" {
+			writeError(w, http.StatusUnprocessableEntity, "name is required for mode=create")
+			return
+		}
+		if req.ProfileID == "" {
+			writeError(w, http.StatusUnprocessableEntity, "profile_id is required for mode=create")
+			return
+		}
+		if t, _ := h.profiles.Get(req.ProfileID); t == nil {
+			writeError(w, http.StatusUnprocessableEntity, "profile_id does not exist")
+			return
+		}
+		token, err := generateToken()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate token")
+			return
+		}
+		cfg := models.ConfigJSON("{}")
+		if len(req.Config) > 0 {
+			cfg = models.ConfigJSON(req.Config)
+		}
+		app := &models.App{
+			ID:             uuid.New().String(),
+			Name:           req.Name,
+			Token:          token,
+			ProfileID:      req.ProfileID,
+			DockerEngineID: container.DockerEngineID,
+			Config:         cfg,
+			RateLimit:      100,
+			CreatedAt:      time.Now().UTC(),
+		}
+		if err := h.store.Apps.Create(r.Context(), app); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := h.store.DiscoveredContainers.SetDiscoveredContainerApp(r.Context(), id, app.ID); err != nil {
+			// Best-effort rollback — orphaned app is better than silent failure.
+			_ = h.store.Apps.Delete(r.Context(), app.ID)
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, app)
+
+	default:
+		writeError(w, http.StatusUnprocessableEntity, "mode must be 'existing' or 'create'")
+	}
+}
+
+// UnlinkContainerApp sets app_id back to null on a discovered container.
+// DELETE /api/v1/discovered-containers/{id}/link-app
+func (h *DockerDiscoveryHandler) UnlinkContainerApp(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.store.DiscoveredContainers.GetDiscoveredContainer(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "discovered container not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.store.DiscoveredContainers.ClearDiscoveredContainerApp(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// LinkRouteApp links a discovered route to an app, and auto-creates an SSL check
+// for the route's domain if one does not already exist.
+// POST /api/v1/discovered-routes/{id}/link-app
+func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	route, err := h.store.DiscoveredRoutes.GetDiscoveredRoute(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "discovered route not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var req linkAppRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	var linkedAppID string
+
+	switch req.Mode {
+	case "existing":
+		if req.AppID == "" {
+			writeError(w, http.StatusUnprocessableEntity, "app_id is required for mode=existing")
+			return
+		}
+		if _, err := h.store.Apps.Get(r.Context(), req.AppID); errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusUnprocessableEntity, "app_id does not exist")
+			return
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := h.store.DiscoveredRoutes.SetDiscoveredRouteApp(r.Context(), id, req.AppID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		linkedAppID = req.AppID
+		route.AppID = &linkedAppID
+		h.maybeCreateSSLCheck(r.Context(), route)
+		writeJSON(w, http.StatusOK, route)
+
+
+	case "create":
+		if req.Name == "" {
+			writeError(w, http.StatusUnprocessableEntity, "name is required for mode=create")
+			return
+		}
+		if req.ProfileID == "" {
+			writeError(w, http.StatusUnprocessableEntity, "profile_id is required for mode=create")
+			return
+		}
+		if t, _ := h.profiles.Get(req.ProfileID); t == nil {
+			writeError(w, http.StatusUnprocessableEntity, "profile_id does not exist")
+			return
+		}
+		token, err := generateToken()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate token")
+			return
+		}
+		cfg := models.ConfigJSON("{}")
+		if len(req.Config) > 0 {
+			cfg = models.ConfigJSON(req.Config)
+		}
+		app := &models.App{
+			ID:        uuid.New().String(),
+			Name:      req.Name,
+			Token:     token,
+			ProfileID: req.ProfileID,
+			Config:    cfg,
+			RateLimit: 100,
+			CreatedAt: time.Now().UTC(),
+		}
+		if err := h.store.Apps.Create(r.Context(), app); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if err := h.store.DiscoveredRoutes.SetDiscoveredRouteApp(r.Context(), id, app.ID); err != nil {
+			_ = h.store.Apps.Delete(r.Context(), app.ID)
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		linkedAppID = app.ID
+		route.AppID = &linkedAppID
+		h.maybeCreateSSLCheck(r.Context(), route)
+		writeJSON(w, http.StatusCreated, app)
+
+	default:
+		writeError(w, http.StatusUnprocessableEntity, "mode must be 'existing' or 'create'")
+	}
+}
+
+// UnlinkRouteApp sets app_id back to null on a discovered route.
+// DELETE /api/v1/discovered-routes/{id}/link-app
+func (h *DockerDiscoveryHandler) UnlinkRouteApp(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.store.DiscoveredRoutes.GetDiscoveredRoute(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "discovered route not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.store.DiscoveredRoutes.ClearDiscoveredRouteApp(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// maybeCreateSSLCheck creates an ssl monitor check for route.Domain if the route
+// has a domain and no ssl check for that domain already exists.
+func (h *DockerDiscoveryHandler) maybeCreateSSLCheck(ctx context.Context, route *models.DiscoveredRoute) {
+	if route.Domain == nil || *route.Domain == "" {
+		return
+	}
+	domain := *route.Domain
+	exists, err := h.store.Checks.ExistsForTypeAndTarget(ctx, "ssl", domain)
+	if err != nil || exists {
+		return
+	}
+	check := &models.MonitorCheck{
+		ID:           uuid.New().String(),
+		Name:         "SSL — " + domain,
+		Type:         "ssl",
+		Target:       domain,
+		IntervalSecs: 3600,
+		SSLWarnDays:  30,
+		SSLCritDays:  7,
+		Enabled:      true,
+		CreatedAt:    time.Now().UTC(),
+	}
+	_ = h.store.Checks.Create(ctx, check)
 }

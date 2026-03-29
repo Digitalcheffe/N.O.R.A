@@ -25,6 +25,8 @@ type CheckRepo interface {
 	DeleteBySourceComponent(ctx context.Context, componentID string) error
 	// UpsertForComponent inserts or updates a Traefik-owned SSL check.
 	UpsertForComponent(ctx context.Context, check *models.MonitorCheck) error
+	// ExistsForTypeAndTarget reports whether any check with the given type and target exists.
+	ExistsForTypeAndTarget(ctx context.Context, checkType, target string) (bool, error)
 }
 
 type sqliteCheckRepo struct {
@@ -160,6 +162,16 @@ func (r *sqliteCheckRepo) DeleteBySourceComponent(ctx context.Context, component
 		return fmt.Errorf("delete checks by component: %w", err)
 	}
 	return nil
+}
+
+func (r *sqliteCheckRepo) ExistsForTypeAndTarget(ctx context.Context, checkType, target string) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM monitor_checks WHERE type = ? AND target = ?`, checkType, target).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("exists check for type/target: %w", err)
+	}
+	return count > 0, nil
 }
 
 // UpsertForComponent inserts or updates a Traefik-owned SSL check identified by
