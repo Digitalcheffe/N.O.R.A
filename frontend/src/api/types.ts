@@ -343,7 +343,9 @@ export type ComponentType =
   | 'vm'
   | 'lxc'
   | 'bare_metal'
+  | 'linux_host'
   | 'windows_host'
+  | 'generic_host'
   | 'docker_engine'
   | 'traefik'
 

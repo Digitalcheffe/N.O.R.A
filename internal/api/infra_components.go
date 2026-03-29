@@ -95,7 +95,9 @@ var validComponentTypes = map[string]bool{
 	"vm":            true,
 	"lxc":           true,
 	"bare_metal":    true,
+	"linux_host":    true,
 	"windows_host":  true,
+	"generic_host":  true,
 	"docker_engine": true,
 	"traefik":       true,
 }

@@ -33,6 +33,30 @@ const DRIVERS = [
     description: 'Generic host polling via SNMP v2c/v3 for devices without a dedicated API.',
     capabilities: ['resource metrics', 'ping baseline', 'generic host support'],
   },
+  {
+    name: 'bare_metal',
+    label: 'Bare Metal',
+    description: 'Physical servers monitored via SNMP or ping.',
+    capabilities: ['ping', 'SNMP polling', 'resource metrics'],
+  },
+  {
+    name: 'linux_host',
+    label: 'Linux Host',
+    description: 'Linux servers and VMs monitored via SNMP.',
+    capabilities: ['ping', 'SNMP polling', 'resource metrics'],
+  },
+  {
+    name: 'windows_host',
+    label: 'Windows Host',
+    description: 'Windows servers and workstations monitored via SNMP.',
+    capabilities: ['ping', 'SNMP polling', 'resource metrics'],
+  },
+  {
+    name: 'generic_host',
+    label: 'Generic Host',
+    description: 'Any network-reachable device — routers, switches, appliances.',
+    capabilities: ['ping', 'availability monitoring'],
+  },
 ]
 
 // ── Driver card ───────────────────────────────────────────────────────────────
