@@ -156,8 +156,10 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
   }
 
   if (form.type === 'proxmox_node') {
-    const hasNewCreds = form.proxmox_base_url && form.proxmox_token_id && form.proxmox_token_secret
-    if (!isEdit || hasNewCreds) {
+    // On edit, send credentials whenever base_url or token_id is set so the
+    // backend can merge the existing secret if token_secret is left blank.
+    const hasCredFields = form.proxmox_base_url || form.proxmox_token_id || form.proxmox_token_secret
+    if (!isEdit || hasCredFields) {
       payload.credentials = JSON.stringify({
         base_url:     form.proxmox_base_url,
         token_id:     form.proxmox_token_id,
@@ -166,8 +168,8 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
       })
     }
   } else if (form.type === 'synology') {
-    const hasNewCreds = form.synology_base_url && form.synology_username && form.synology_password
-    if (!isEdit || hasNewCreds) {
+    const hasCredFields = form.synology_base_url || form.synology_username || form.synology_password
+    if (!isEdit || hasCredFields) {
       payload.credentials = JSON.stringify({
         base_url:   form.synology_base_url,
         username:   form.synology_username,
@@ -176,17 +178,13 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
       })
     }
   } else if (form.type === 'docker_engine') {
-    const hasNewCreds = form.docker_socket_type !== DEFAULT_FORM.docker_socket_type
-      || form.docker_socket_path !== DEFAULT_FORM.docker_socket_path
-    if (!isEdit || hasNewCreds) {
-      payload.credentials = JSON.stringify({
-        socket_type: form.docker_socket_type,
-        socket_path: form.docker_socket_path,
-      })
-    }
+    payload.credentials = JSON.stringify({
+      socket_type: form.docker_socket_type,
+      socket_path: form.docker_socket_path,
+    })
   } else if (form.type === 'traefik') {
-    const hasNewCreds = !!form.traefik_api_url
-    if (!isEdit || hasNewCreds) {
+    const hasCredFields = !!form.traefik_api_url
+    if (!isEdit || hasCredFields) {
       payload.credentials = JSON.stringify({
         api_url: form.traefik_api_url,
         api_key: form.traefik_api_key,
@@ -219,16 +217,36 @@ function componentToForm(c: InfrastructureComponent): InfraForm {
     notes:     c.notes,
     enabled:   c.enabled,
   }
+
+  // Pre-populate non-secret credential fields from credential_meta
+  const m = c.credential_meta
+  if (m) {
+    if (c.type === 'proxmox_node') {
+      form.proxmox_base_url   = (m.base_url   as string)  ?? ''
+      form.proxmox_token_id   = (m.token_id   as string)  ?? ''
+      form.proxmox_verify_tls = (m.verify_tls as boolean) ?? false
+    } else if (c.type === 'synology') {
+      form.synology_base_url   = (m.base_url   as string)  ?? ''
+      form.synology_username   = (m.username   as string)  ?? ''
+      form.synology_verify_tls = (m.verify_tls as boolean) ?? false
+    } else if (c.type === 'docker_engine') {
+      form.docker_socket_type = (m.socket_type as 'local' | 'remote_proxy') ?? 'local'
+      form.docker_socket_path = (m.socket_path as string) ?? '/var/run/docker.sock'
+    } else if (c.type === 'traefik') {
+      form.traefik_api_url = (m.api_url as string) ?? ''
+    }
+  }
+
   if (c.snmp_config) {
     try {
       const s = JSON.parse(c.snmp_config) as Record<string, unknown>
-      form.snmp_version       = (s.version as '2c' | '3') ?? '2c'
-      form.snmp_community     = (s.community as string) ?? 'public'
-      form.snmp_port          = String(s.port ?? 161)
-      form.snmp_auth_protocol  = (s.auth_protocol as string) ?? 'SHA'
-      form.snmp_auth_passphrase = (s.auth_passphrase as string) ?? ''
-      form.snmp_priv_protocol  = (s.priv_protocol as string) ?? 'AES'
-      form.snmp_priv_passphrase = (s.priv_passphrase as string) ?? ''
+      form.snmp_version         = (s.version         as '2c' | '3') ?? '2c'
+      form.snmp_community       = (s.community       as string)     ?? 'public'
+      form.snmp_port            = String(s.port ?? 161)
+      form.snmp_auth_protocol   = (s.auth_protocol   as string)     ?? 'SHA'
+      form.snmp_auth_passphrase = (s.auth_passphrase as string)     ?? ''
+      form.snmp_priv_protocol   = (s.priv_protocol   as string)     ?? 'AES'
+      form.snmp_priv_passphrase = (s.priv_passphrase as string)     ?? ''
     } catch { /* keep defaults */ }
   }
   return form
@@ -294,12 +312,13 @@ export function Infrastructure() {
   const [tick,            setTick]            = useState(0)
 
   // Modal state
-  const [modalOpen,  setModalOpen]  = useState(false)
-  const [editingId,  setEditingId]  = useState<string | null>(null)
-  const [form,       setForm]       = useState<InfraForm>(DEFAULT_FORM)
-  const [formError,  setFormError]  = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [modalOpen,             setModalOpen]             = useState(false)
+  const [editingId,             setEditingId]             = useState<string | null>(null)
+  const [editingHasCreds,       setEditingHasCreds]       = useState(false)
+  const [form,                  setForm]                  = useState<InfraForm>(DEFAULT_FORM)
+  const [formError,             setFormError]             = useState<string | null>(null)
+  const [submitting,            setSubmitting]            = useState(false)
+  const [deletingId,            setDeletingId]            = useState<string | null>(null)
 
   // ── Polling ─────────────────────────────────────────────────────────────────
 
@@ -376,6 +395,7 @@ export function Infrastructure() {
 
   function openEdit(c: InfrastructureComponent) {
     setEditingId(c.id)
+    setEditingHasCreds(c.has_credentials ?? false)
     setForm(componentToForm(c))
     setFormError(null)
     setModalOpen(true)
@@ -384,6 +404,7 @@ export function Infrastructure() {
   function closeModal() {
     setModalOpen(false)
     setEditingId(null)
+    setEditingHasCreds(false)
     setFormError(null)
   }
 
@@ -703,7 +724,12 @@ export function Infrastructure() {
         {/* ── Proxmox credentials ── */}
         {form.type === 'proxmox_node' && (
           <>
-            <SectionHeading>Proxmox Credentials {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
+            <SectionHeading>
+              Proxmox Credentials{' '}
+              {editingId && editingHasCreds
+                ? <span className="infra-cred-saved">Credentials saved</span>
+                : editingId && <span className="infra-optional">(leave blank to keep existing)</span>}
+            </SectionHeading>
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">Base URL</div>
@@ -721,7 +747,7 @@ export function Infrastructure() {
                 <div className="form-label">Token Secret</div>
                 <input className="form-input" type="password" value={form.proxmox_token_secret}
                   onChange={e => setField('proxmox_token_secret', e.target.value)}
-                  placeholder="••••••••" />
+                  placeholder={editingHasCreds ? 'leave blank to keep saved secret' : '••••••••'} />
               </div>
             </div>
             <Toggle checked={form.proxmox_verify_tls} onChange={v => setField('proxmox_verify_tls', v)} label="Verify TLS" />
@@ -731,7 +757,12 @@ export function Infrastructure() {
         {/* ── Synology credentials ── */}
         {form.type === 'synology' && (
           <>
-            <SectionHeading>Synology Credentials {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
+            <SectionHeading>
+              Synology Credentials{' '}
+              {editingId && editingHasCreds
+                ? <span className="infra-cred-saved">Credentials saved</span>
+                : editingId && <span className="infra-optional">(leave blank to keep existing)</span>}
+            </SectionHeading>
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">Base URL</div>
@@ -749,7 +780,7 @@ export function Infrastructure() {
                 <div className="form-label">Password</div>
                 <input className="form-input" type="password" value={form.synology_password}
                   onChange={e => setField('synology_password', e.target.value)}
-                  placeholder="••••••••" />
+                  placeholder={editingHasCreds ? 'leave blank to keep saved password' : '••••••••'} />
               </div>
             </div>
             <Toggle checked={form.synology_verify_tls} onChange={v => setField('synology_verify_tls', v)} label="Verify TLS" />
@@ -848,7 +879,12 @@ export function Infrastructure() {
         {/* ── Traefik credentials ── */}
         {form.type === 'traefik' && (
           <>
-            <SectionHeading>Traefik API {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
+            <SectionHeading>
+              Traefik API{' '}
+              {editingId && editingHasCreds
+                ? <span className="infra-cred-saved">Credentials saved</span>
+                : editingId && <span className="infra-optional">(leave blank to keep existing)</span>}
+            </SectionHeading>
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">API URL</div>
@@ -860,7 +896,7 @@ export function Infrastructure() {
                 <div className="form-label">API Key <span className="infra-optional">(optional)</span></div>
                 <input className="form-input" type="password" value={form.traefik_api_key}
                   onChange={e => setField('traefik_api_key', e.target.value)}
-                  placeholder="Bearer ••••••••" />
+                  placeholder={editingHasCreds ? 'leave blank to keep saved key' : 'Bearer ••••••••'} />
               </div>
             </div>
             <div className="infra-hint">
