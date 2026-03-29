@@ -31,7 +31,9 @@ const TYPE_COLOR: Record<ComponentType, string> = {
   vm:            '#6b7280',
   lxc:           '#6b7280',
   bare_metal:    '#6b7280',
+  linux_host:    '#6b7280',
   windows_host:  '#6b7280',
+  generic_host:  '#6b7280',
   docker_engine: '#14b8a6',
   traefik:       '#f97316',
 }
@@ -42,7 +44,9 @@ const TYPE_LABEL: Record<ComponentType, string> = {
   vm:            'VM',
   lxc:           'LXC',
   bare_metal:    'Bare Metal',
+  linux_host:    'Linux Host',
   windows_host:  'Windows Host',
+  generic_host:  'Generic Host',
   docker_engine: 'Docker Engine',
   traefik:       'Traefik',
 }
@@ -131,6 +135,7 @@ function TypeIcon({ type, color }: { type: ComponentType; color: string }) {
   switch (type) {
     case 'proxmox_node':
     case 'bare_metal':
+    case 'linux_host':
       return (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <rect x="2" y="4" width="16" height="12" rx="2" stroke={color} strokeWidth="1.5" />
@@ -165,6 +170,14 @@ function TypeIcon({ type, color }: { type: ComponentType; color: string }) {
           <rect x="10.5" y="3"  width="7.5" height="6.5" rx="0.5" fill={color} opacity="0.8" />
           <rect x="2"  y="10.5" width="7.5" height="6.5" rx="0.5" fill={color} opacity="0.8" />
           <rect x="10.5" y="10.5" width="7.5" height="6.5" rx="0.5" fill={color} opacity="0.8" />
+        </svg>
+      )
+    case 'generic_host':
+      return (
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="7" stroke={color} strokeWidth="1.5" />
+          <line x1="10" y1="6" x2="10" y2="10" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="10" cy="13" r="1" fill={color} />
         </svg>
       )
     case 'docker_engine':

@@ -1,0 +1,47 @@
+meta:
+  name: Plex
+  category: Media
+  logo: plex.png
+  description: Personal media server and streaming platform
+  capability: full
+
+webhook:
+  setup_instructions: |
+    Requires Plex Pass. In Plex go to Settings → Webhooks → Add Webhook.
+    Set the URL to {base_url}/ingest/{token}. All media events will be forwarded.
+  recommended_events:
+    - media.play
+    - media.pause
+    - media.resume
+    - media.stop
+    - media.scrobble
+    - library.new
+  not_recommended: []
+  field_mappings:
+    event: "$.event"
+    metadata_title: "$.Metadata.title"
+    metadata_type: "$.Metadata.type"
+    grandparent_title: "$.Metadata.grandparentTitle"
+    account_title: "$.Account.title"
+  severity_field: event
+  display_template: "{event} — {metadata_title} ({account_title})"
+  severity_mapping:
+    media.play: info
+    media.pause: info
+    media.resume: info
+    media.stop: info
+    media.scrobble: info
+    library.new: info
+
+monitor:
+  check_type: url
+  check_url: "{base_url}:32400/identity"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Activity
+      match_field: ""
+      match_value: ""
+      match_severity: ""

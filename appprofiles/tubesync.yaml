@@ -1,0 +1,17 @@
+meta:
+  name: TubeSync
+  category: Media
+  logo: tubesync.png
+  description: YouTube PVR — automatically downloads and syncs YouTube channels and playlists
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No webhook support. TubeSync is a yt-dlp based YouTube PVR.
+    NORA monitors the web UI base URL for availability.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}"
+  healthy_status: 200
+  check_interval: 5m

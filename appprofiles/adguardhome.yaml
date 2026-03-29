@@ -1,0 +1,17 @@
+meta:
+  name: AdGuard Home
+  category: Network
+  logo: adguardhome.png
+  description: Network-wide ad and tracker blocking DNS server
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No webhook support. NORA monitors the status API endpoint.
+    A shorter check interval is used because DNS availability is critical infrastructure.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/control/status"
+  healthy_status: 200
+  check_interval: 2m

@@ -1,0 +1,17 @@
+meta:
+  name: Matrix Admin
+  category: Infrastructure
+  logo: matrixadmin.png
+  description: Synapse Admin UI for Matrix homeserver administration
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No webhook or API. NORA monitors the admin UI base URL only.
+    This profile monitors the Synapse Admin web interface, not the Matrix homeserver itself.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}"
+  healthy_status: 200
+  check_interval: 5m

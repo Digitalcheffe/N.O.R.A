@@ -22,7 +22,9 @@ const TYPE_LABEL: Record<string, string> = {
   vm:            'VM',
   lxc:           'LXC',
   bare_metal:    'Bare Metal',
+  linux_host:    'Linux Host',
   windows_host:  'Windows Host',
+  generic_host:  'Generic Host',
   docker_engine: 'Docker Engine',
   traefik:       'Traefik',
 }

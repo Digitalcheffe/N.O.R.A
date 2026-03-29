@@ -25,7 +25,9 @@ const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   vm:            'snmp',
   lxc:           'none',
   bare_metal:    'snmp',
+  linux_host:    'snmp',
   windows_host:  'snmp',
+  generic_host:  'none',
   docker_engine: 'docker_socket',
   traefik:       'traefik_api',
 }
@@ -36,14 +38,16 @@ const TYPE_LABEL: Record<ComponentType, string> = {
   vm:            'VM',
   lxc:           'LXC',
   bare_metal:    'Bare Metal',
+  linux_host:    'Linux Host',
   windows_host:  'Windows Host',
+  generic_host:  'Generic Host',
   docker_engine: 'Docker Engine',
   traefik:       'Traefik',
 }
 
 const CAN_HAVE_CHILDREN = new Set<ComponentType>(['proxmox_node', 'bare_metal', 'vm'])
 
-const SNMP_TYPES = new Set<ComponentType>(['vm', 'bare_metal', 'windows_host'])
+const SNMP_TYPES = new Set<ComponentType>(['vm', 'bare_metal', 'linux_host', 'windows_host'])
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
@@ -640,7 +644,9 @@ export function Infrastructure() {
               <option value="synology">Synology NAS</option>
               <option value="vm">VM</option>
               <option value="bare_metal">Bare Metal</option>
+              <option value="linux_host">Linux Host</option>
               <option value="windows_host">Windows Host</option>
+              <option value="generic_host">Generic Host</option>
               <option value="docker_engine">Docker Engine</option>
               <option value="traefik">Traefik</option>
             </select>

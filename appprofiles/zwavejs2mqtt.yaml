@@ -1,0 +1,17 @@
+meta:
+  name: Z-Wave JS to MQTT
+  category: Automation
+  logo: zwavejs2mqtt.png
+  description: Z-Wave to MQTT gateway with web UI
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No HTTP webhook — Z-Wave JS to MQTT is MQTT-based. NORA monitors the REST health
+    endpoint only. Ensure the web server is enabled in Z-Wave JS to MQTT settings.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/health"
+  healthy_status: 200
+  check_interval: 5m

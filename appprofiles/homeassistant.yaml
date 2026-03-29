@@ -1,0 +1,49 @@
+meta:
+  name: Home Assistant
+  category: Automation
+  logo: homeassistant.png
+  description: Open-source home automation platform
+  capability: full
+
+webhook:
+  setup_instructions: |
+    Create an automation in Home Assistant that uses a REST command or notify.rest
+    action to POST to {base_url}/ingest/{token} on state changes or events.
+    A long-lived access token is required for the monitor health check.
+    Example REST command configuration:
+      rest_command:
+        nora_event:
+          url: "{base_url}/ingest/{token}"
+          method: POST
+          content_type: application/json
+          payload: '{"event_type":"{{trigger.platform}}","entity_id":"{{trigger.entity_id}}","new_state":{"state":"{{trigger.to_state.state}}","attributes":{"friendly_name":"{{trigger.to_state.attributes.friendly_name}}"}}}'
+  recommended_events:
+    - state_changed
+    - automation_triggered
+    - script_started
+  not_recommended: []
+  field_mappings:
+    event_type: "$.event_type"
+    entity_id: "$.entity_id"
+    new_state_state: "$.new_state.state"
+    friendly_name: "$.new_state.attributes.friendly_name"
+  severity_field: event_type
+  display_template: "{event_type} — {friendly_name}: {new_state_state}"
+  severity_mapping:
+    state_changed: info
+    automation_triggered: info
+    script_started: info
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/"
+  auth_header: "Authorization: Bearer {token}"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Events
+      match_field: ""
+      match_value: ""
+      match_severity: ""

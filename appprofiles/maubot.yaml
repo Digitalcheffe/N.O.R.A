@@ -1,0 +1,16 @@
+meta:
+  name: Maubot
+  category: Automation
+  logo: maubot.png
+  description: Plugin-based Matrix bot manager
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No outbound webhook. NORA monitors the Maubot management API endpoint for availability.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/_matrix/maubot/v1/"
+  healthy_status: 200
+  check_interval: 5m
