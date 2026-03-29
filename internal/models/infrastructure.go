@@ -2,6 +2,24 @@ package models
 
 import "time"
 
+// InfrastructureComponent is the unified model for every infrastructure entity
+// (Proxmox nodes, Synology, VMs, LXC containers, bare-metal, Windows hosts, etc.).
+type InfrastructureComponent struct {
+	ID               string  `db:"id"                 json:"id"`
+	Name             string  `db:"name"               json:"name"`
+	IP               string  `db:"ip"                 json:"ip"`
+	Type             string  `db:"type"               json:"type"`
+	CollectionMethod string  `db:"collection_method"  json:"collection_method"`
+	ParentID         *string `db:"parent_id"          json:"parent_id,omitempty"`
+	Credentials      *string `db:"credentials"        json:"-"` // never serialised to API response
+	SNMPConfig       *string `db:"snmp_config"        json:"snmp_config,omitempty"`
+	Notes            string  `db:"notes"              json:"notes"`
+	Enabled          bool    `db:"enabled"            json:"enabled"`
+	LastPolledAt     *string `db:"last_polled_at"     json:"last_polled_at,omitempty"`
+	LastStatus       string  `db:"last_status"        json:"last_status"`
+	CreatedAt        string  `db:"created_at"         json:"created_at"`
+}
+
 // InfraIntegration represents a connected infrastructure provider (e.g. Traefik).
 type InfraIntegration struct {
 	ID           string     `db:"id"             json:"id"`

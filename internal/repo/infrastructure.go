@@ -13,6 +13,105 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+// ── InfraComponentRepo ───────────────────────────────────────────────────────
+
+// InfraComponentRepo defines CRUD for infrastructure_components.
+type InfraComponentRepo interface {
+	List(ctx context.Context) ([]models.InfrastructureComponent, error)
+	Get(ctx context.Context, id string) (*models.InfrastructureComponent, error)
+	Create(ctx context.Context, c *models.InfrastructureComponent) error
+	Update(ctx context.Context, c *models.InfrastructureComponent) error
+	Delete(ctx context.Context, id string) error
+}
+
+type sqliteInfraComponentRepo struct{ db *sqlx.DB }
+
+// NewInfraComponentRepo returns an InfraComponentRepo backed by SQLite.
+func NewInfraComponentRepo(db *sqlx.DB) InfraComponentRepo {
+	return &sqliteInfraComponentRepo{db: db}
+}
+
+func (r *sqliteInfraComponentRepo) List(ctx context.Context) ([]models.InfrastructureComponent, error) {
+	var rows []models.InfrastructureComponent
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
+		       parent_id, credentials, snmp_config,
+		       COALESCE(notes,'') AS notes, enabled,
+		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
+		       created_at
+		FROM infrastructure_components
+		ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list infrastructure_components: %w", err)
+	}
+	if rows == nil {
+		rows = []models.InfrastructureComponent{}
+	}
+	return rows, nil
+}
+
+func (r *sqliteInfraComponentRepo) Get(ctx context.Context, id string) (*models.InfrastructureComponent, error) {
+	var c models.InfrastructureComponent
+	err := r.db.GetContext(ctx, &c, `
+		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
+		       parent_id, credentials, snmp_config,
+		       COALESCE(notes,'') AS notes, enabled,
+		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
+		       created_at
+		FROM infrastructure_components WHERE id = ?`, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get infrastructure_component: %w", err)
+	}
+	return &c, nil
+}
+
+func (r *sqliteInfraComponentRepo) Create(ctx context.Context, c *models.InfrastructureComponent) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO infrastructure_components
+		  (id, name, ip, type, collection_method, parent_id, credentials, snmp_config, notes, enabled, last_status, created_at)
+		VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
+		c.ID, c.Name, c.IP, c.Type, c.CollectionMethod,
+		c.ParentID, c.Credentials, c.SNMPConfig,
+		c.Notes, c.Enabled, c.LastStatus, c.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("create infrastructure_component: %w", err)
+	}
+	return nil
+}
+
+func (r *sqliteInfraComponentRepo) Update(ctx context.Context, c *models.InfrastructureComponent) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE infrastructure_components
+		SET name=?, ip=NULLIF(?, ''), type=?, collection_method=?,
+		    parent_id=?, credentials=?, snmp_config=?,
+		    notes=NULLIF(?, ''), enabled=?, last_status=?
+		WHERE id=?`,
+		c.Name, c.IP, c.Type, c.CollectionMethod,
+		c.ParentID, c.Credentials, c.SNMPConfig,
+		c.Notes, c.Enabled, c.LastStatus, c.ID)
+	if err != nil {
+		return fmt.Errorf("update infrastructure_component: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteInfraComponentRepo) Delete(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM infrastructure_components WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete infrastructure_component: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // InfraRepo defines CRUD operations for infrastructure integrations and the
 // Traefik cert cache.
 type InfraRepo interface {
