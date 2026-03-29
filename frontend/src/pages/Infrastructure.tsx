@@ -10,6 +10,7 @@ import type {
   InfrastructureComponent,
   InfrastructureComponentInput,
   ResourceSummary,
+  ScanResult,
   TraefikComponentDetail,
   VolumeResource,
 } from '../api/types'
@@ -319,6 +320,8 @@ export function Infrastructure() {
   const [formError,             setFormError]             = useState<string | null>(null)
   const [submitting,            setSubmitting]            = useState(false)
   const [deletingId,            setDeletingId]            = useState<string | null>(null)
+  const [scanningId,            setScanningId]            = useState<string | null>(null)
+  const [scanResults,           setScanResults]           = useState<Record<string, ScanResult>>({})
 
   // ── Polling ─────────────────────────────────────────────────────────────────
 
@@ -448,6 +451,24 @@ export function Infrastructure() {
     }
   }
 
+  async function handleScan(id: string) {
+    setScanningId(id)
+    setScanResults(prev => { const n = { ...prev }; delete n[id]; return n })
+    try {
+      const result = await infraApi.scan(id)
+      setScanResults(prev => ({ ...prev, [id]: result }))
+      // Refresh the component list so last_status updates immediately.
+      const res = await infraApi.list()
+      setComponents(res.data)
+      void pollAll(res.data)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Scan failed'
+      setScanResults(prev => ({ ...prev, [id]: { component_id: id, status: 'offline', last_polled_at: new Date().toISOString(), error: msg } }))
+    } finally {
+      setScanningId(null)
+    }
+  }
+
   // ── Render helpers ──────────────────────────────────────────────────────────
 
   function renderResourceBars(c: InfrastructureComponent) {
@@ -480,6 +501,7 @@ export function Infrastructure() {
   function renderTraefikCard(c: InfrastructureComponent) {
     const detail = traefikDetailMap[c.id]
     const isDeleting = deletingId === c.id
+    const isScanning = scanningId === c.id
 
     return (
       <div key={c.id} className="infra-card">
@@ -512,28 +534,38 @@ export function Infrastructure() {
         </div>
 
         <div className="infra-card-footer">
-          {lastPolledAt && (
-            <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
-          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+            {lastPolledAt && (
+              <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
+            )}
+            {renderScanFeedback(c.id)}
+          </div>
           <div className="infra-card-actions">
             <button
               className="infra-card-btn accent"
               onClick={() => navigate(`/topology/${c.id}`)}
-              disabled={isDeleting}
+              disabled={isDeleting || isScanning}
             >
               View Detail
             </button>
             <button
+              className="infra-card-btn accent"
+              onClick={() => void handleScan(c.id)}
+              disabled={isDeleting || isScanning || scanningId !== null}
+            >
+              {isScanning ? 'Scanning…' : 'Scan Now'}
+            </button>
+            <button
               className="infra-card-btn"
               onClick={() => openEdit(c)}
-              disabled={isDeleting}
+              disabled={isDeleting || isScanning}
             >
               Edit
             </button>
             <button
               className="infra-card-btn danger"
               onClick={() => void handleDelete(c.id)}
-              disabled={isDeleting}
+              disabled={isDeleting || isScanning}
             >
               {isDeleting ? 'Deleting…' : 'Delete'}
             </button>
@@ -582,12 +614,21 @@ export function Infrastructure() {
     )
   }
 
+  function renderScanFeedback(id: string) {
+    const r = scanResults[id]
+    if (!r) return null
+    if (r.error) return <span className="infra-scan-feedback error">{r.error}</span>
+    return <span className="infra-scan-feedback ok">Status: {r.status}</span>
+  }
+
   function renderCard(c: InfrastructureComponent) {
     if (c.type === 'traefik')       return renderTraefikCard(c)
     if (c.type === 'docker_engine') return renderDockerCard(c)
 
     const res = resourcesMap[c.id]
     const isDeleting = deletingId === c.id
+    const isScanning = scanningId === c.id
+    const canScan = c.collection_method !== 'none' && c.collection_method !== 'docker_socket'
 
     return (
       <div key={c.id} className="infra-card">
@@ -607,24 +648,36 @@ export function Infrastructure() {
         {renderResourceBars(c)}
 
         <div className="infra-card-footer">
-          {lastPolledAt && (
-            <span className="infra-last-updated">
-              Last updated: {timeAgo(lastPolledAt)}
-              {res?.recorded_at ? ` · data from ${new Date(res.recorded_at).toLocaleTimeString()}` : ''}
-            </span>
-          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+            {lastPolledAt && (
+              <span className="infra-last-updated">
+                Last updated: {timeAgo(lastPolledAt)}
+                {res?.recorded_at ? ` · data from ${new Date(res.recorded_at).toLocaleTimeString()}` : ''}
+              </span>
+            )}
+            {renderScanFeedback(c.id)}
+          </div>
           <div className="infra-card-actions">
+            {canScan && (
+              <button
+                className="infra-card-btn accent"
+                onClick={() => void handleScan(c.id)}
+                disabled={isDeleting || isScanning || scanningId !== null}
+              >
+                {isScanning ? 'Scanning…' : 'Scan Now'}
+              </button>
+            )}
             <button
               className="infra-card-btn"
               onClick={() => openEdit(c)}
-              disabled={isDeleting}
+              disabled={isDeleting || isScanning}
             >
               Edit
             </button>
             <button
               className="infra-card-btn danger"
               onClick={() => void handleDelete(c.id)}
-              disabled={isDeleting}
+              disabled={isDeleting || isScanning}
             >
               {isDeleting ? 'Deleting…' : 'Delete'}
             </button>
@@ -632,7 +685,7 @@ export function Infrastructure() {
               <button
                 className="infra-card-btn accent"
                 onClick={() => openAdd(c.id)}
-                disabled={isDeleting}
+                disabled={isDeleting || isScanning}
               >
                 + Add Child
               </button>

@@ -33,6 +33,7 @@ import type {
   ResourceHistory,
   ResourceSummary,
   SMTPSettings,
+  ScanResult,
   SendNowResult,
   SyncResult,
   TimeseriesBucket,
@@ -355,6 +356,9 @@ export const infrastructure = {
 
   resourceHistory: (id: string, period: 'hour' | 'day' = 'hour', limit = 24) =>
     request<ResourceHistory>('GET', `/infrastructure/${id}/resources/history?period=${period}&limit=${limit}`),
+
+  scan: (id: string) =>
+    request<ScanResult>('POST', `/infrastructure/${id}/scan`),
 }
 
 // ── Docker Discovery ──────────────────────────────────────────────────────────

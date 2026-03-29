@@ -391,6 +391,14 @@ export interface VolumeResource {
   percent: number
 }
 
+export interface ScanResult {
+  component_id: string
+  status: string
+  last_polled_at: string
+  message?: string
+  error?: string
+}
+
 // ── Traefik Component ─────────────────────────────────────────────────────────
 
 export interface TraefikRoute {

@@ -546,3 +546,19 @@
   color: var(--red);
   border: 1px solid var(--red-dim);
 }
+
+/* ── SCAN FEEDBACK ─────────────────────────────────────────────────────────── */
+
+.infra-scan-feedback {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 0;
+}
+
+.infra-scan-feedback.ok {
+  color: var(--green);
+}
+
+.infra-scan-feedback.error {
+  color: var(--red);
+}
