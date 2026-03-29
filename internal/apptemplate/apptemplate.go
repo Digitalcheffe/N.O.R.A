@@ -35,6 +35,7 @@ type Webhook struct {
 	NotRecommended    []string          `yaml:"not_recommended"`
 	FieldMappings     map[string]string `yaml:"field_mappings"`
 	DisplayTemplate   string            `yaml:"display_template"`
+	DisplayTemplates  map[string]string `yaml:"display_templates"`
 	SeverityField     string            `yaml:"severity_field"`
 	SeverityMapping   map[string]string `yaml:"severity_mapping"`
 }
@@ -148,14 +149,29 @@ func (r *Registry) ExtractFields(templateID string, payload []byte) (map[string]
 	return out, nil
 }
 
-// RenderDisplayText substitutes {field_name} tokens in the template's display_template
-// with values from fields. Returns "Event received" when the template is empty.
+// RenderDisplayText substitutes {field_name} tokens in the best matching display template.
+// Checks display_templates[event_type] first, then falls back to display_template.
+// Returns "Event received" when no template is configured.
 func (r *Registry) RenderDisplayText(templateID string, fields map[string]string) string {
 	t, ok := r.templates[templateID]
-	if !ok || t.Webhook.DisplayTemplate == "" {
+	if !ok {
 		return "Event received"
 	}
-	result := t.Webhook.DisplayTemplate
+
+	// Pick per-eventType template if available, fall back to global template.
+	tmpl := t.Webhook.DisplayTemplate
+	if len(t.Webhook.DisplayTemplates) > 0 {
+		if et, ok := fields["event_type"]; ok {
+			if specific, ok := t.Webhook.DisplayTemplates[et]; ok {
+				tmpl = specific
+			}
+		}
+	}
+
+	if tmpl == "" {
+		return "Event received"
+	}
+	result := tmpl
 	for k, v := range fields {
 		result = strings.ReplaceAll(result, "{"+k+"}", v)
 	}

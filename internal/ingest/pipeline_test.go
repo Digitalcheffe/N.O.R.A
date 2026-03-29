@@ -2,6 +2,7 @@ package ingest_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -221,6 +222,130 @@ func TestProcess_UnmatchedEventType(t *testing.T) {
 	}
 	if ev.Severity != "info" {
 		t.Errorf("severity: want info got %s", ev.Severity)
+	}
+}
+
+// TestProcess_ArrayFieldExtraction verifies that field paths using array indexing
+// (e.g. $.episodes[0].seasonNumber) are resolved correctly during ingest.
+func TestProcess_ArrayFieldExtraction(t *testing.T) {
+	store := newTestStore(t)
+	token := "array-token"
+	app := &models.App{
+		ID:        uuid.NewString(),
+		Name:      "sonarr",
+		Token:     token,
+		ProfileID: "sonarr",
+		RateLimit: 100,
+		Config:    models.ConfigJSON("{}"),
+	}
+	if err := store.Apps.Create(context.Background(), app); err != nil {
+		t.Fatalf("seed app: %v", err)
+	}
+
+	tmpl := &apptemplate.AppTemplate{
+		Webhook: apptemplate.Webhook{
+			FieldMappings: map[string]string{
+				"event_type":   "$.eventType",
+				"series_title": "$.series.title",
+				"season":       "$.episodes[0].seasonNumber",
+				"episode":      "$.episodes[0].episodeNumber",
+			},
+			SeverityField:   "event_type",
+			SeverityMapping: map[string]string{"Download": "info"},
+			DisplayTemplates: map[string]string{
+				"Download": "Download — {series_title} S{season}E{episode}",
+			},
+			DisplayTemplate: "{event_type} — {series_title}",
+		},
+	}
+
+	loader := &stubLoader{template: tmpl}
+	limiter := ingest.NewRateLimiter()
+	payload := []byte(`{
+		"eventType": "Download",
+		"series": {"title": "The Expanse"},
+		"episodes": [{"seasonNumber": 2, "episodeNumber": 7}]
+	}`)
+
+	result, err := ingest.Process(context.Background(), store, loader, limiter, token, payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ev, err := store.Events.Get(context.Background(), result.EventID)
+	if err != nil {
+		t.Fatalf("get event: %v", err)
+	}
+	if ev.DisplayText != "Download — The Expanse S2E7" {
+		t.Errorf("display_text: want 'Download — The Expanse S2E7' got %q", ev.DisplayText)
+	}
+}
+
+// TestProcess_PerEventTypeTemplate verifies that Health events use the per-eventType template.
+func TestProcess_PerEventTypeTemplate(t *testing.T) {
+	store := newTestStore(t)
+	token := "health-token"
+	app := &models.App{
+		ID:        uuid.NewString(),
+		Name:      "sonarr",
+		Token:     token,
+		ProfileID: "sonarr",
+		RateLimit: 100,
+		Config:    models.ConfigJSON("{}"),
+	}
+	if err := store.Apps.Create(context.Background(), app); err != nil {
+		t.Fatalf("seed app: %v", err)
+	}
+
+	tmpl := &apptemplate.AppTemplate{
+		Webhook: apptemplate.Webhook{
+			FieldMappings: map[string]string{
+				"event_type": "$.eventType",
+				"message":    "$.message",
+			},
+			SeverityField:   "event_type",
+			SeverityMapping: map[string]string{"Health": "warn"},
+			DisplayTemplates: map[string]string{
+				"Health":         "Health Issue — {message}",
+				"HealthRestored": "Health Restored — {message}",
+			},
+			DisplayTemplate: "{event_type}",
+		},
+	}
+
+	cases := []struct {
+		eventType   string
+		message     string
+		wantDisplay string
+		wantSev     string
+	}{
+		{"Health", "Indexer search failed", "Health Issue — Indexer search failed", "warn"},
+		{"HealthRestored", "Indexer back online", "Health Restored — Indexer back online", "info"},
+		{"Test", "", "Test", "info"},
+	}
+
+	loader := &stubLoader{template: tmpl}
+	limiter := ingest.NewRateLimiter()
+
+	for _, c := range cases {
+		payload, _ := json.Marshal(map[string]string{
+			"eventType": c.eventType,
+			"message":   c.message,
+		})
+		result, err := ingest.Process(context.Background(), store, loader, limiter, token, payload)
+		if err != nil {
+			t.Fatalf("eventType=%q: unexpected error: %v", c.eventType, err)
+		}
+		ev, err := store.Events.Get(context.Background(), result.EventID)
+		if err != nil {
+			t.Fatalf("get event: %v", err)
+		}
+		if ev.DisplayText != c.wantDisplay {
+			t.Errorf("eventType=%q display_text: want %q got %q", c.eventType, c.wantDisplay, ev.DisplayText)
+		}
+		if ev.Severity != c.wantSev {
+			t.Errorf("eventType=%q severity: want %q got %q", c.eventType, c.wantSev, ev.Severity)
+		}
 	}
 }
 

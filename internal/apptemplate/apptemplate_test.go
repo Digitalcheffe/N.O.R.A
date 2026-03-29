@@ -19,11 +19,16 @@ webhook:
     event_type: "$.eventType"
     series_title: "$.series.title"
     episode_title: "$.episodes[0].title"
-    season_number: "$.episodes[0].seasonNumber"
-    episode_number: "$.episodes[0].episodeNumber"
-    health_type: "$.healthCheck.type"
+    season: "$.episodes[0].seasonNumber"
+    episode: "$.episodes[0].episodeNumber"
+    message: "$.message"
   severity_field: event_type
-  display_template: "{event_type} — {series_title} S{season_number}E{episode_number}"
+  display_template: "{event_type} — {series_title}"
+  display_templates:
+    Download: "Download — {series_title} S{season}E{episode}"
+    Grab: "Grabbed — {series_title} S{season}E{episode}"
+    Health: "Health Issue — {message}"
+    HealthRestored: "Health Restored — {message}"
   severity_mapping:
     Download: info
     HealthIssue: warn
@@ -112,7 +117,7 @@ func TestExtractFields(t *testing.T) {
 		"episodes": [
 			{"title": "Pilot", "seasonNumber": 1, "episodeNumber": 1}
 		],
-		"healthCheck": {"type": "IndexerSearch"}
+		"message": ""
 	}`)
 
 	fields, err := reg.ExtractFields("sonarr", payload)
@@ -121,12 +126,11 @@ func TestExtractFields(t *testing.T) {
 	}
 
 	cases := map[string]string{
-		"event_type":     "Download",
-		"series_title":   "The Expanse",
-		"episode_title":  "Pilot",
-		"season_number":  "1",
-		"episode_number": "1",
-		"health_type":    "IndexerSearch",
+		"event_type":    "Download",
+		"series_title":  "The Expanse",
+		"episode_title": "Pilot",
+		"season":        "1",
+		"episode":       "1",
 	}
 	for tag, want := range cases {
 		if got := fields[tag]; got != want {
@@ -156,21 +160,86 @@ func TestExtractFields_InvalidJSON(t *testing.T) {
 	}
 }
 
-// TestRenderDisplayText verifies {token} substitution from extracted fields.
+// TestRenderDisplayText verifies per-eventType template is selected for Download events.
 func TestRenderDisplayText(t *testing.T) {
 	reg := newTestRegistry(t)
 
 	fields := map[string]string{
-		"event_type":     "Download",
-		"series_title":   "The Expanse",
-		"season_number":  "1",
-		"episode_number": "1",
+		"event_type":   "Download",
+		"series_title": "The Expanse",
+		"season":       "1",
+		"episode":      "1",
 	}
 
 	got := reg.RenderDisplayText("sonarr", fields)
 	want := "Download — The Expanse S1E1"
 	if got != want {
 		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}
+
+// TestRenderDisplayText_PerEventType verifies each per-eventType template renders correctly.
+func TestRenderDisplayText_PerEventType(t *testing.T) {
+	reg := newTestRegistry(t)
+
+	cases := []struct {
+		fields map[string]string
+		want   string
+	}{
+		{
+			fields: map[string]string{
+				"event_type":   "Download",
+				"series_title": "The Expanse",
+				"season":       "2",
+				"episode":      "5",
+			},
+			want: "Download — The Expanse S2E5",
+		},
+		{
+			fields: map[string]string{
+				"event_type":   "Grab",
+				"series_title": "Breaking Bad",
+				"season":       "3",
+				"episode":      "10",
+			},
+			want: "Grabbed — Breaking Bad S3E10",
+		},
+		{
+			fields: map[string]string{
+				"event_type": "Health",
+				"message":    "Indexer search failed",
+			},
+			want: "Health Issue — Indexer search failed",
+		},
+		{
+			fields: map[string]string{
+				"event_type": "HealthRestored",
+				"message":    "Indexer back online",
+			},
+			want: "Health Restored — Indexer back online",
+		},
+	}
+
+	for _, c := range cases {
+		got := reg.RenderDisplayText("sonarr", c.fields)
+		if got != c.want {
+			t.Errorf("RenderDisplayText(event_type=%q) = %q, want %q", c.fields["event_type"], got, c.want)
+		}
+	}
+}
+
+// TestRenderDisplayText_FallbackTemplate verifies unknown eventTypes use the fallback display_template.
+func TestRenderDisplayText_FallbackTemplate(t *testing.T) {
+	reg := newTestRegistry(t)
+
+	fields := map[string]string{
+		"event_type":   "Test",
+		"series_title": "Sonarr",
+	}
+	got := reg.RenderDisplayText("sonarr", fields)
+	want := "Test — Sonarr"
+	if got != want {
+		t.Errorf("RenderDisplayText(fallback) = %q, want %q", got, want)
 	}
 }
 

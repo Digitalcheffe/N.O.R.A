@@ -20,13 +20,19 @@ webhook:
     event_type: "$.eventType"
     series_title: "$.series.title"
     episode_title: "$.episodes[0].title"
-    season_number: "$.episodes[0].seasonNumber"
-    episode_number: "$.episodes[0].episodeNumber"
+    season: "$.episodes[0].seasonNumber"
+    episode: "$.episodes[0].episodeNumber"
     quality: "$.episodes[0].quality.quality.name"
-    health_message: "$.healthCheck.message"
-    new_version: "$.applicationUpdate.newVersion"
+    level: "$.level"
+    message: "$.message"
   severity_field: event_type
-  display_template: "{event_type} — {series_title} S{season_number}E{episode_number}"
+  display_template: "{event_type} — {series_title}"
+  display_templates:
+    Download: "Download — {series_title} S{season}E{episode}"
+    Grab: "Grabbed — {series_title} S{season}E{episode}"
+    Health: "Health Issue — {message}"
+    HealthRestored: "Health Restored — {message}"
+    ApplicationUpdate: "Sonarr updated to {message}"
   severity_mapping:
     Download: info
     Upgrade: info

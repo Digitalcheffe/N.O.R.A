@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,8 @@ import (
 type Result struct {
 	EventID string
 }
+
+var arrayIndexRe = regexp.MustCompile(`^([^\[]+)\[(\d+)\]$`)
 
 // ErrInvalidToken is returned when no app matches the token.
 type ErrInvalidToken struct{}
@@ -57,7 +61,16 @@ func Process(ctx context.Context, store *repo.Store, profiler apptemplate.Loader
 		if err == nil && p != nil {
 			fieldsMap = extractFields(rawBody, p.Webhook.FieldMappings)
 			severity = mapSeverity(fieldsMap, p.Webhook.SeverityField, p.Webhook.SeverityMapping)
-			displayText = renderTemplate(p.Webhook.DisplayTemplate, fieldsMap)
+			// Pick per-eventType template if available, fall back to global template.
+			tmpl := p.Webhook.DisplayTemplate
+			if len(p.Webhook.DisplayTemplates) > 0 {
+				if et, ok := fieldsMap["event_type"]; ok {
+					if specific, ok := p.Webhook.DisplayTemplates[et]; ok {
+						tmpl = specific
+					}
+				}
+			}
+			displayText = renderTemplate(tmpl, fieldsMap)
 		}
 	}
 
@@ -107,10 +120,9 @@ func extractFields(rawBody []byte, mappings map[string]string) map[string]string
 	return result
 }
 
-// jsonPathGet resolves a simple JSONPath expression (e.g. "$.eventType", "$.nested.field")
-// against a decoded JSON value. Returns the string representation and true on success.
+// jsonPathGet resolves a JSONPath expression against a decoded JSON value.
+// Supports dot-notation ($.field.nested) and array indexing ($.arr[0].field).
 func jsonPathGet(v interface{}, path string) (string, bool) {
-	// Strip leading "$." or "$"
 	path = strings.TrimPrefix(path, "$.")
 	path = strings.TrimPrefix(path, "$")
 	if path == "" {
@@ -118,18 +130,43 @@ func jsonPathGet(v interface{}, path string) (string, bool) {
 	}
 
 	parts := strings.SplitN(path, ".", 2)
-	m, ok := v.(map[string]interface{})
+	segment := parts[0]
+	rest := ""
+	if len(parts) == 2 {
+		rest = parts[1]
+	}
+
+	// Handle array index notation: episodes[0]
+	if m := arrayIndexRe.FindStringSubmatch(segment); m != nil {
+		key := m[1]
+		idx, _ := strconv.Atoi(m[2])
+		obj, ok := v.(map[string]interface{})
+		if !ok {
+			return "", false
+		}
+		arr, ok := obj[key].([]interface{})
+		if !ok || idx >= len(arr) {
+			return "", false
+		}
+		child := arr[idx]
+		if rest == "" {
+			return toString(child), true
+		}
+		return jsonPathGet(child, rest)
+	}
+
+	obj, ok := v.(map[string]interface{})
 	if !ok {
 		return "", false
 	}
-	child, ok := m[parts[0]]
+	child, ok := obj[segment]
 	if !ok {
 		return "", false
 	}
-	if len(parts) == 1 {
+	if rest == "" {
 		return toString(child), true
 	}
-	return jsonPathGet(child, parts[1])
+	return jsonPathGet(child, rest)
 }
 
 func toString(v interface{}) string {
