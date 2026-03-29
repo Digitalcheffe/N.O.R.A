@@ -704,9 +704,6 @@ export function Infrastructure() {
         {form.type === 'proxmox_node' && (
           <>
             <SectionHeading>Proxmox Credentials {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
-            {editingId && components.find(c => c.id === editingId)?.has_credentials && (
-              <div className="infra-cred-hint">Credentials currently configured — fill all three fields to replace</div>
-            )}
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">Base URL</div>
@@ -735,9 +732,6 @@ export function Infrastructure() {
         {form.type === 'synology' && (
           <>
             <SectionHeading>Synology Credentials {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
-            {editingId && components.find(c => c.id === editingId)?.has_credentials && (
-              <div className="infra-cred-hint">Credentials currently configured — fill all three fields to replace</div>
-            )}
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">Base URL</div>
@@ -855,9 +849,6 @@ export function Infrastructure() {
         {form.type === 'traefik' && (
           <>
             <SectionHeading>Traefik API {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
-            {editingId && components.find(c => c.id === editingId)?.has_credentials && (
-              <div className="infra-cred-hint">API URL currently configured — enter a new URL to replace</div>
-            )}
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">API URL</div>

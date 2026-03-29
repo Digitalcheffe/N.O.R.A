@@ -185,7 +185,7 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
   }
 
   return (
-    <div className="de-detail">
+    <div className="de-card-grid">
       {containers.map(c => {
         const isLinked   = !!c.app_id
         const hasSugg    = !isLinked && !!c.profile_suggestion
@@ -197,58 +197,49 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
         return (
           <div key={c.id} className="de-container-block">
 
-            {/* ── Container row ── */}
-            <div className={`de-container-row${isFormOpen ? ' form-open' : ''}`}>
-              <span className={`de-dot ${dotCls}`} />
-              <span className="de-name">{c.container_name}</span>
+            {/* ── Container card ── */}
+            <div className={`de-container-card${isFormOpen ? ' form-open' : ''}`}>
 
-              {isLinked && (
-                <>
-                  <button
-                    className="de-app-chip"
-                    onClick={() => navigate(`/apps/${c.app_id}`)}
-                  >
+              {/* Card header: status + name + status text */}
+              <div className="de-card-header">
+                <span className={`de-dot ${dotCls}`} />
+                <span className="de-name">{c.container_name}</span>
+                <span className={`de-status-text ${dotCls}`}>{c.status}</span>
+              </div>
+
+              {/* Card meta: image / app chip / suggestion */}
+              <div className="de-card-meta">
+                {isLinked && (
+                  <button className="de-app-chip" onClick={() => navigate(`/apps/${c.app_id}`)}>
                     {linkedApp?.name ?? c.app_id}
                   </button>
-                  <div className="de-res-mini">
-                    <MiniBar value={c.cpu_percent} label="CPU" />
-                    <MiniBar value={c.mem_percent} label="MEM" />
-                  </div>
-                  <span className="de-last-seen">{timeAgo(c.last_seen_at)}</span>
-                </>
-              )}
-
-              {hasSugg && (
-                <>
+                )}
+                {hasSugg && (
                   <span className="de-suggestion-badge">Looks like {c.profile_suggestion}</span>
-                  <div className="de-res-mini">
-                    <MiniBar value={c.cpu_percent} label="CPU" />
-                    <MiniBar value={c.mem_percent} label="MEM" />
-                  </div>
-                  <button
-                    className="de-link-btn accent"
-                    onClick={() => isFormOpen ? closeLinkForm() : openLinkForm(c)}
-                  >
-                    {isFormOpen ? 'Cancel' : 'Add App'}
-                  </button>
-                </>
-              )}
-
-              {isUnlinked && (
-                <>
+                )}
+                {isUnlinked && (
                   <span className="de-image">{c.image}</span>
-                  <div className="de-res-mini">
-                    <MiniBar value={c.cpu_percent} label="CPU" />
-                    <MiniBar value={c.mem_percent} label="MEM" />
-                  </div>
+                )}
+              </div>
+
+              {/* Resource bars */}
+              <div className="de-card-res">
+                <MiniBar value={c.cpu_percent} label="CPU" />
+                <MiniBar value={c.mem_percent} label="MEM" />
+              </div>
+
+              {/* Card footer: last seen + action button */}
+              <div className="de-card-footer">
+                <span className="de-last-seen">{timeAgo(c.last_seen_at)}</span>
+                {!isLinked && (
                   <button
-                    className="de-link-btn"
+                    className={`de-link-btn${hasSugg ? ' accent' : ''}`}
                     onClick={() => isFormOpen ? closeLinkForm() : openLinkForm(c)}
                   >
-                    {isFormOpen ? 'Cancel' : 'Link Manually'}
+                    {isFormOpen ? 'Cancel' : hasSugg ? 'Add App' : 'Link Manually'}
                   </button>
-                </>
-              )}
+                )}
+              </div>
             </div>
 
             {/* ── Inline link form ── */}

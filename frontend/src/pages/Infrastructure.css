@@ -445,16 +445,6 @@
   padding: 8px 10px;
 }
 
-.infra-cred-hint {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--green);
-  background: var(--green-dim);
-  border: 1px solid #166534;
-  border-radius: 4px;
-  padding: 6px 10px;
-}
-
 /* ── TOGGLE SWITCH ─────────────────────────────────────────────────────────── */
 
 .infra-toggle-row {
