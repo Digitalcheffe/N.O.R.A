@@ -430,6 +430,19 @@
   opacity: 0.7;
 }
 
+.infra-cred-saved {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--green);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 3px;
+  padding: 1px 7px;
+}
+
 .infra-textarea {
   resize: vertical;
   min-height: 50px;

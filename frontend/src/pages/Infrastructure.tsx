@@ -294,12 +294,13 @@ export function Infrastructure() {
   const [tick,            setTick]            = useState(0)
 
   // Modal state
-  const [modalOpen,  setModalOpen]  = useState(false)
-  const [editingId,  setEditingId]  = useState<string | null>(null)
-  const [form,       setForm]       = useState<InfraForm>(DEFAULT_FORM)
-  const [formError,  setFormError]  = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [modalOpen,             setModalOpen]             = useState(false)
+  const [editingId,             setEditingId]             = useState<string | null>(null)
+  const [editingHasCreds,       setEditingHasCreds]       = useState(false)
+  const [form,                  setForm]                  = useState<InfraForm>(DEFAULT_FORM)
+  const [formError,             setFormError]             = useState<string | null>(null)
+  const [submitting,            setSubmitting]            = useState(false)
+  const [deletingId,            setDeletingId]            = useState<string | null>(null)
 
   // ── Polling ─────────────────────────────────────────────────────────────────
 
@@ -376,6 +377,7 @@ export function Infrastructure() {
 
   function openEdit(c: InfrastructureComponent) {
     setEditingId(c.id)
+    setEditingHasCreds(c.has_credentials ?? false)
     setForm(componentToForm(c))
     setFormError(null)
     setModalOpen(true)
@@ -384,6 +386,7 @@ export function Infrastructure() {
   function closeModal() {
     setModalOpen(false)
     setEditingId(null)
+    setEditingHasCreds(false)
     setFormError(null)
   }
 
@@ -703,7 +706,12 @@ export function Infrastructure() {
         {/* ── Proxmox credentials ── */}
         {form.type === 'proxmox_node' && (
           <>
-            <SectionHeading>Proxmox Credentials {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
+            <SectionHeading>
+              Proxmox Credentials{' '}
+              {editingId && editingHasCreds
+                ? <span className="infra-cred-saved">Credentials saved</span>
+                : editingId && <span className="infra-optional">(leave blank to keep existing)</span>}
+            </SectionHeading>
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">Base URL</div>
@@ -731,7 +739,12 @@ export function Infrastructure() {
         {/* ── Synology credentials ── */}
         {form.type === 'synology' && (
           <>
-            <SectionHeading>Synology Credentials {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
+            <SectionHeading>
+              Synology Credentials{' '}
+              {editingId && editingHasCreds
+                ? <span className="infra-cred-saved">Credentials saved</span>
+                : editingId && <span className="infra-optional">(leave blank to keep existing)</span>}
+            </SectionHeading>
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">Base URL</div>
@@ -848,7 +861,12 @@ export function Infrastructure() {
         {/* ── Traefik credentials ── */}
         {form.type === 'traefik' && (
           <>
-            <SectionHeading>Traefik API {editingId && <span className="infra-optional">(leave blank to keep existing)</span>}</SectionHeading>
+            <SectionHeading>
+              Traefik API{' '}
+              {editingId && editingHasCreds
+                ? <span className="infra-cred-saved">Credentials saved</span>
+                : editingId && <span className="infra-optional">(leave blank to keep existing)</span>}
+            </SectionHeading>
             <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-field form-field-full">
                 <div className="form-label">API URL</div>

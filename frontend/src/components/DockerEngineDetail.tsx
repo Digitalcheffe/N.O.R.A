@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { discovery, apps as appsApi, appTemplates as templatesApi } from '../api/client'
+import './DockerEngineDetail.css'
 import type { DiscoveredContainer, App, AppTemplate } from '../api/types'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
