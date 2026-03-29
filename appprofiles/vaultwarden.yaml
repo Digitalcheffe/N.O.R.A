@@ -1,0 +1,17 @@
+meta:
+  name: Vaultwarden
+  category: Security
+  logo: vaultwarden.png
+  description: Lightweight self-hosted Bitwarden-compatible password manager
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No webhook support. NORA monitors the health endpoint for availability.
+    SSL certificate monitoring is strongly recommended — this is a password manager.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/alive"
+  healthy_status: 200
+  check_interval: 5m

@@ -448,3 +448,235 @@ func TestDuplicati_RenderDisplayText(t *testing.T) {
 		t.Errorf("RenderDisplayText = %q, want %q", got, want)
 	}
 }
+
+// ---- Plex ----
+
+const plexYAML = `
+meta:
+  name: Plex
+  category: Media
+  logo: plex.png
+  description: Personal media server and streaming platform
+  capability: full
+webhook:
+  field_mappings:
+    event: "$.event"
+    metadata_title: "$.Metadata.title"
+    metadata_type: "$.Metadata.type"
+    grandparent_title: "$.Metadata.grandparentTitle"
+    account_title: "$.Account.title"
+  severity_field: event
+  display_template: "{event} — {metadata_title} ({account_title})"
+  severity_mapping:
+    media.play: info
+    media.pause: info
+    media.resume: info
+    media.stop: info
+    media.scrobble: info
+    library.new: info
+monitor:
+  check_type: url
+  check_url: "{base_url}:32400/identity"
+  healthy_status: 200
+  check_interval: 5m
+digest:
+  categories:
+    - label: Activity
+      match_field: ""
+      match_value: ""
+      match_severity: ""
+`
+
+func newPlexRegistry(t *testing.T) *apptemplate.Registry {
+	t.Helper()
+	fsys := fstest.MapFS{
+		"plex.yaml": {Data: []byte(plexYAML)},
+	}
+	reg, err := apptemplate.NewRegistry(fsys)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return reg
+}
+
+// TestPlex_ExtractFields verifies Plex field extraction from a media.play payload.
+func TestPlex_ExtractFields(t *testing.T) {
+	reg := newPlexRegistry(t)
+
+	payload := []byte(`{
+		"event": "media.play",
+		"Account": {"title": "homeuser"},
+		"Metadata": {
+			"type": "episode",
+			"title": "Pilot",
+			"grandparentTitle": "The Expanse"
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("plex", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	cases := map[string]string{
+		"event":           "media.play",
+		"metadata_title":  "Pilot",
+		"metadata_type":   "episode",
+		"grandparent_title": "The Expanse",
+		"account_title":   "homeuser",
+	}
+	for tag, want := range cases {
+		if got := fields[tag]; got != want {
+			t.Errorf("fields[%q] = %q, want %q", tag, got, want)
+		}
+	}
+}
+
+// TestPlex_RenderDisplayText verifies the display template substitutes event and account fields.
+func TestPlex_RenderDisplayText(t *testing.T) {
+	reg := newPlexRegistry(t)
+
+	fields := map[string]string{
+		"event":          "media.play",
+		"metadata_title": "Pilot",
+		"account_title":  "homeuser",
+	}
+	got := reg.RenderDisplayText("plex", fields)
+	want := "media.play — Pilot (homeuser)"
+	if got != want {
+		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}
+
+// TestPlex_SeverityMapping verifies all known Plex event types map to info.
+func TestPlex_SeverityMapping(t *testing.T) {
+	reg := newPlexRegistry(t)
+
+	events := []string{"media.play", "media.pause", "media.resume", "media.stop", "media.scrobble", "library.new", "unknown.event"}
+	for _, ev := range events {
+		fields := map[string]string{"event": ev}
+		got := reg.MapSeverity("plex", fields)
+		if got != "info" {
+			t.Errorf("MapSeverity(event=%q) = %q, want info", ev, got)
+		}
+	}
+}
+
+// ---- Home Assistant ----
+
+const homeassistantYAML = `
+meta:
+  name: Home Assistant
+  category: Automation
+  logo: homeassistant.png
+  description: Open-source home automation platform
+  capability: full
+webhook:
+  field_mappings:
+    event_type: "$.event_type"
+    entity_id: "$.entity_id"
+    new_state_state: "$.new_state.state"
+    friendly_name: "$.new_state.attributes.friendly_name"
+  severity_field: event_type
+  display_template: "{event_type} — {friendly_name}: {new_state_state}"
+  severity_mapping:
+    state_changed: info
+    automation_triggered: info
+    script_started: info
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/"
+  auth_header: "Authorization: Bearer {token}"
+  healthy_status: 200
+  check_interval: 5m
+digest:
+  categories:
+    - label: Events
+      match_field: ""
+      match_value: ""
+      match_severity: ""
+`
+
+func newHomeAssistantRegistry(t *testing.T) *apptemplate.Registry {
+	t.Helper()
+	fsys := fstest.MapFS{
+		"homeassistant.yaml": {Data: []byte(homeassistantYAML)},
+	}
+	reg, err := apptemplate.NewRegistry(fsys)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return reg
+}
+
+// TestHomeAssistant_ExtractFields verifies nested field extraction including attributes.
+func TestHomeAssistant_ExtractFields(t *testing.T) {
+	reg := newHomeAssistantRegistry(t)
+
+	payload := []byte(`{
+		"event_type": "state_changed",
+		"entity_id": "light.living_room",
+		"new_state": {
+			"state": "on",
+			"attributes": {
+				"friendly_name": "Living Room Light"
+			}
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("homeassistant", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	cases := map[string]string{
+		"event_type":      "state_changed",
+		"entity_id":       "light.living_room",
+		"new_state_state": "on",
+		"friendly_name":   "Living Room Light",
+	}
+	for tag, want := range cases {
+		if got := fields[tag]; got != want {
+			t.Errorf("fields[%q] = %q, want %q", tag, got, want)
+		}
+	}
+}
+
+// TestHomeAssistant_RenderDisplayText verifies template renders with nested state fields.
+func TestHomeAssistant_RenderDisplayText(t *testing.T) {
+	reg := newHomeAssistantRegistry(t)
+
+	fields := map[string]string{
+		"event_type":      "state_changed",
+		"friendly_name":   "Living Room Light",
+		"new_state_state": "on",
+	}
+	got := reg.RenderDisplayText("homeassistant", fields)
+	want := "state_changed — Living Room Light: on"
+	if got != want {
+		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}
+
+// TestHomeAssistant_SeverityMapping verifies known HA event types map to info.
+func TestHomeAssistant_SeverityMapping(t *testing.T) {
+	reg := newHomeAssistantRegistry(t)
+
+	cases := []struct {
+		event string
+		want  string
+	}{
+		{"state_changed", "info"},
+		{"automation_triggered", "info"},
+		{"script_started", "info"},
+		{"unknown_event", "info"},
+	}
+
+	for _, c := range cases {
+		fields := map[string]string{"event_type": c.event}
+		got := reg.MapSeverity("homeassistant", fields)
+		if got != c.want {
+			t.Errorf("MapSeverity(event=%q) = %q, want %q", c.event, got, c.want)
+		}
+	}
+}

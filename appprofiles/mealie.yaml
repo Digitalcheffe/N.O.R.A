@@ -1,0 +1,16 @@
+meta:
+  name: Mealie
+  category: Automation
+  logo: mealie.png
+  description: Self-hosted recipe manager and meal planner
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No webhook support. NORA monitors the app info endpoint for availability.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/app/about"
+  healthy_status: 200
+  check_interval: 5m

@@ -1,0 +1,12 @@
+meta:
+  name: Cloudflare DDNS
+  category: Network
+  logo: cloudflare-ddns.png
+  description: Automatic Cloudflare DNS updater for dynamic IP addresses
+  capability: docker_only
+
+webhook:
+  setup_instructions: |
+    No HTTP interface. NORA monitors the container via Docker socket.
+    A healthy running container indicates the DDNS updater is active.
+    Docker socket integration must be enabled in NORA settings.

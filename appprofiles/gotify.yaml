@@ -1,0 +1,17 @@
+meta:
+  name: Gotify
+  category: Infrastructure
+  logo: gotify.png
+  description: Self-hosted push notification server
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    Gotify is itself a notification server — it does not emit webhooks outbound.
+    NORA monitors the health endpoint to ensure the notification server is reachable.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/health"
+  healthy_status: 200
+  check_interval: 5m

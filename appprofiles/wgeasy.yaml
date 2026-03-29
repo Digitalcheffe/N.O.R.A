@@ -1,0 +1,16 @@
+meta:
+  name: WG Easy
+  category: Network
+  logo: wgeasy.png
+  description: Easy WireGuard VPN server with web UI
+  capability: monitor_only
+
+webhook:
+  setup_instructions: |
+    No webhook support. NORA monitors the WireGuard client API endpoint for availability.
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/api/wireguard/client"
+  healthy_status: 200
+  check_interval: 5m
