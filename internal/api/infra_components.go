@@ -68,6 +68,7 @@ type infraComponentResponse struct {
 	LastPolledAt     *string `json:"last_polled_at,omitempty"`
 	LastStatus       string  `json:"last_status"`
 	CreatedAt        string  `json:"created_at"`
+	HasCredentials   bool    `json:"has_credentials"`
 }
 
 func toResponse(c *models.InfrastructureComponent) infraComponentResponse {
@@ -84,6 +85,7 @@ func toResponse(c *models.InfrastructureComponent) infraComponentResponse {
 		LastPolledAt:     c.LastPolledAt,
 		LastStatus:       c.LastStatus,
 		CreatedAt:        c.CreatedAt,
+		HasCredentials:   c.Credentials != nil && *c.Credentials != "",
 	}
 }
 

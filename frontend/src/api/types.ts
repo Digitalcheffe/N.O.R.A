@@ -370,6 +370,7 @@ export interface InfrastructureComponent {
   last_polled_at?: string | null
   last_status: string
   created_at: string
+  has_credentials?: boolean
 }
 
 export interface InfrastructureComponentInput {
