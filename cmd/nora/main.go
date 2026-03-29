@@ -97,6 +97,11 @@ func main() {
 	syncWorker := infra.NewSyncWorker(store)
 	go syncWorker.Start(infraCtx)
 
+	// Proxmox pollers — polls all enabled proxmox_node components every 5 minutes.
+	proxmoxCtx, proxmoxCancel := context.WithCancel(context.Background())
+	defer proxmoxCancel()
+	go jobs.StartProxmoxPollers(proxmoxCtx, store)
+
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
