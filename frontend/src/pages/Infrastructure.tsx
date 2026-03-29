@@ -696,7 +696,7 @@ export function Infrastructure() {
 
   return (
     <>
-      <Topbar title="Infrastructure" onAdd={() => openAdd()} />
+      <Topbar title="Infrastructure" />
       <div className="content">
 
         {/* ── Tab toggle + Add button ── */}
