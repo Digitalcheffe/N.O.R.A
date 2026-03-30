@@ -93,7 +93,7 @@ func newSynologyFakeServer(t *testing.T) (*httptest.Server, *synologyFakeServer)
 			Model:       "DS920+",
 			FirmwareVer: "7.2.1-69057",
 			HostName:    "synology",
-			UpTime:      86400,
+			UpTime:      "86400",
 			Temperature: 38,
 		},
 		utilization: synoUtilization{

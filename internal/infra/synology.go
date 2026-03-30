@@ -133,11 +133,12 @@ type synoAuthData struct {
 }
 
 // SYNO.Core.System method=info — system identity
+// DSM returns up_time as a JSON string (e.g. "86400"), not a number.
 type synoCoreSystemInfo struct {
 	Model       string `json:"model"`
 	FirmwareVer string `json:"firmware_ver"`
 	HostName    string `json:"host_name"`
-	UpTime      int64  `json:"up_time"`    // seconds
+	UpTime      string `json:"up_time"`    // seconds, returned as string by DSM
 	Temperature int    `json:"temperature"` // Celsius
 }
 
@@ -456,11 +457,12 @@ func (p *SynologyPoller) fetchSystemInfo(ctx context.Context, meta *SynologyMeta
 		return err
 	}
 
+	uptimeSecs, _ := strconv.ParseInt(strings.TrimSpace(info.UpTime), 10, 64)
 	meta.Model = info.Model
 	meta.DSMVersion = info.FirmwareVer
 	meta.Hostname = info.HostName
-	meta.UptimeSecs = info.UpTime
-	meta.Uptime = formatSynoUptime(info.UpTime)
+	meta.UptimeSecs = uptimeSecs
+	meta.Uptime = formatSynoUptime(uptimeSecs)
 	meta.TemperatureC = info.Temperature
 	return nil
 }
