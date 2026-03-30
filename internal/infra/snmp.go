@@ -188,6 +188,68 @@ func snmpPrivProtocol(s string) gosnmp.SnmpV3PrivProtocol {
 	}
 }
 
+// ── Metrics-only collection ───────────────────────────────────────────────────
+
+// SNMPDiskReading holds the utilisation for a single disk from HOST-RESOURCES-MIB.
+type SNMPDiskReading struct {
+	Label   string  // original hrStorageDescr (e.g. "/", "C:")
+	Percent float64 // disk_percent value
+}
+
+// SNMPMetricsSnapshot holds the raw metric values collected in one SNMP pass.
+// The MetricsScanner uses this to write resource_readings and apply thresholds.
+type SNMPMetricsSnapshot struct {
+	CPUPercent float64
+	MemPercent float64
+	MemUsedGB  float64
+	MemTotalGB float64
+	Disks      []SNMPDiskReading
+	Uptime     string
+}
+
+// CollectMetrics opens an SNMP connection, reads CPU, memory, disk, and uptime,
+// and returns raw values without any database writes or status updates.
+func (p *SNMPPoller) CollectMetrics(ctx context.Context) (*SNMPMetricsSnapshot, error) {
+	client := p.newClient()
+	if err := client.Connect(); err != nil {
+		return nil, fmt.Errorf("snmp connect %s: %w", p.ip, err)
+	}
+	defer client.Close() //nolint:errcheck
+
+	snap := &SNMPMetricsSnapshot{}
+
+	// System info — uptime
+	if sysInfo, err := p.pollSystemInfo(client); err == nil {
+		snap.Uptime = sysInfo.Uptime
+	}
+
+	// CPU
+	if cpuPct, err := p.pollCPU(client); err != nil {
+		log.Printf("snmp metrics %s: cpu: %v", p.componentID, err)
+	} else {
+		snap.CPUPercent = cpuPct
+	}
+
+	// Storage (memory + disks)
+	if rows, err := p.walkStorageTable(client); err != nil {
+		log.Printf("snmp metrics %s: storage: %v", p.componentID, err)
+	} else {
+		if mem, ok := computeMemResult(rows); ok {
+			snap.MemPercent = mem.percent
+			snap.MemUsedGB = float64(mem.usedBytes) / (1024 * 1024 * 1024)
+			snap.MemTotalGB = float64(mem.totalBytes) / (1024 * 1024 * 1024)
+		}
+		for _, d := range computeDiskResults(rows) {
+			snap.Disks = append(snap.Disks, SNMPDiskReading{
+				Label:   d.label,
+				Percent: d.percent,
+			})
+		}
+	}
+
+	return snap, nil
+}
+
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
 // Poll opens an SNMP connection, collects system identity + CPU / memory / disk
@@ -557,6 +619,12 @@ func snmpToString(v interface{}) string {
 
 // sanitizeDiskLabel converts a storage description to a safe metric-name suffix.
 // Examples: "/" → "root", "C:\\" → "c", "Label /dev/sda1" → "label__dev_sda1"
+// SanitizeDiskLabel is the exported form of sanitizeDiskLabel, used by the
+// metrics scanner package which lives outside the infra package.
+func SanitizeDiskLabel(s string) string {
+	return sanitizeDiskLabel(s)
+}
+
 func sanitizeDiskLabel(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "/" {

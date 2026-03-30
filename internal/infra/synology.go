@@ -380,6 +380,97 @@ func (p *SynologyPoller) doGet(ctx context.Context, sid string, params url.Value
 	return &env, nil
 }
 
+// ── Metrics-only collection ───────────────────────────────────────────────────
+
+// SynologyMetricsSnapshot holds the raw metric values collected in one pass.
+// The MetricsScanner uses this to write resource_readings and apply thresholds.
+type SynologyMetricsSnapshot struct {
+	CPUPercent  float64
+	MemPercent  float64
+	MemUsedGB   float64
+	MemTotalGB  float64
+	TempC       int
+	VolumeStats []SynologyVolumeMetric
+}
+
+// SynologyVolumeMetric holds utilization for a single DSM volume.
+type SynologyVolumeMetric struct {
+	Key         string // sanitised vol_path used as metric suffix
+	DiskPercent float64
+}
+
+// CollectMetrics fetches CPU%, memory, temperature, and volume utilisation from
+// DSM and returns raw values without any database writes or status updates.
+// Uses the cached session, re-authenticating if the SID has expired.
+func (p *SynologyPoller) CollectMetrics(ctx context.Context) (*SynologyMetricsSnapshot, error) {
+	snap := &SynologyMetricsSnapshot{}
+
+	// System info — temperature
+	sysParams := url.Values{}
+	sysParams.Set("api", "SYNO.Core.System")
+	sysParams.Set("version", "1")
+	sysParams.Set("method", "info")
+	var info synoCoreSystemInfo
+	if err := p.get(ctx, sysParams, &info); err != nil {
+		return nil, fmt.Errorf("system info: %w", err)
+	}
+	snap.TempC = info.Temperature
+
+	// CPU + memory utilisation
+	utilParams := url.Values{}
+	utilParams.Set("api", "SYNO.Core.System.Utilization")
+	utilParams.Set("version", "1")
+	utilParams.Set("method", "get")
+	var util synoUtilization
+	if err := p.get(ctx, utilParams, &util); err != nil {
+		log.Printf("synology metrics %s: utilization: %v (non-fatal)", p.componentID, err)
+	} else {
+		snap.CPUPercent = util.CPU.UserLoad
+		snap.MemPercent = util.Memory.RealUsage
+		totalBytes := util.Memory.RealTotal * 1024
+		availBytes := util.Memory.AvailReal * 1024
+		usedBytes := totalBytes - availBytes
+		if usedBytes < 0 {
+			usedBytes = 0
+		}
+		snap.MemUsedGB = float64(usedBytes) / (1024 * 1024 * 1024)
+		snap.MemTotalGB = float64(totalBytes) / (1024 * 1024 * 1024)
+	}
+
+	// Volume utilisation
+	volParams := url.Values{}
+	volParams.Set("api", "SYNO.Core.System")
+	volParams.Set("version", "1")
+	volParams.Set("method", "info")
+	volParams.Set("type", "storage")
+	var storageData synoCoreSystemStorage
+	if err := p.get(ctx, volParams, &storageData); err != nil {
+		log.Printf("synology metrics %s: volumes: %v (non-fatal)", p.componentID, err)
+	} else {
+		for _, vol := range storageData.VolInfo {
+			total, err := strconv.ParseInt(vol.TotalSize, 10, 64)
+			if err != nil || total == 0 {
+				continue
+			}
+			used, err := strconv.ParseInt(vol.UsedSize, 10, 64)
+			if err != nil {
+				continue
+			}
+			pct := (float64(used) / float64(total)) * 100
+			volKey := strings.TrimLeft(vol.VolPath, "/")
+			if volKey == "" {
+				volKey = "unknown"
+			}
+			snap.VolumeStats = append(snap.VolumeStats, SynologyVolumeMetric{
+				Key:         volKey,
+				DiskPercent: pct,
+			})
+		}
+	}
+
+	return snap, nil
+}
+
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
 // Poll runs one full cycle: system info, CPU/memory, volumes, disks, and updates.

@@ -25,6 +25,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/internal/scanner"
 	"github.com/digitalcheffe/nora/internal/scanner/discovery"
+	noraMetrics "github.com/digitalcheffe/nora/internal/scanner/metrics"
 	"github.com/digitalcheffe/nora/migrations"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -110,17 +111,31 @@ func main() {
 	go monitor.NewScheduler(store).Start(schedCtx)
 
 	// Scan scheduler — Discovery (1h), Metrics (2m), Snapshots (30m).
-	// Discovery scanners are registered here by entity type (and collection
-	// method for SNMP).  Metrics and Snapshot scanners are added in
-	// REFACTOR-07 and REFACTOR-08.
+	// Discovery scanners are registered by entity type (and collection method
+	// for SNMP).  Metrics scanners are registered here (REFACTOR-07).
+	// Snapshot scanners are added in REFACTOR-08.
+	//
+	// Note: the Docker MetricsScanner is wired to the ResourcePoller created
+	// below so they share the same poller instance; the poller's standalone
+	// Start() ticker is therefore NOT started — the scan scheduler drives it.
 	scanCtx, scanCancel := context.WithCancel(context.Background())
 	defer scanCancel()
 	scanScheduler := scanner.NewScanScheduler(store)
+
+	// Discovery
 	scanScheduler.RegisterDiscovery("proxmox_node", discovery.NewProxmoxDiscoveryScanner(store))
 	scanScheduler.RegisterDiscovery("docker_engine", discovery.NewDockerDiscoveryScanner(store))
 	scanScheduler.RegisterDiscovery("synology", discovery.NewSynologyDiscoveryScanner(store))
 	scanScheduler.RegisterDiscovery("opnsense", discovery.NewOPNsenseDiscoveryScanner(store))
 	scanScheduler.RegisterDiscoveryByMethod("snmp", discovery.NewSNMPDiscoveryScanner(store))
+
+	// Metrics (REFACTOR-07)
+	scanScheduler.RegisterMetrics("proxmox_node", noraMetrics.NewProxmoxMetricsScanner(store))
+	scanScheduler.RegisterMetrics("synology", noraMetrics.NewSynologyMetricsScanner(store))
+	scanScheduler.RegisterMetrics("opnsense", noraMetrics.NewOPNsenseMetricsScanner(store))
+	scanScheduler.RegisterMetricsByMethod("snmp", noraMetrics.NewSNMPMetricsScanner(store))
+	// Docker MetricsScanner is wired after the ResourcePoller is created below.
+
 	go scanScheduler.Start(scanCtx)
 
 	// Resource rollup jobs — hourly aggregation and daily rollup + retention purge.
@@ -204,10 +219,15 @@ func main() {
 		go watcher.Start(dockerCtx)
 	}
 
-	if poller, err := docker.NewResourcePoller(store, localEngineID); err != nil {
+	// Docker ResourcePoller — metrics collection is driven by the scan scheduler
+	// (every 2 minutes via DockerMetricsScanner) rather than a standalone ticker.
+	// The poller is registered with the scheduler so PollAll is called on the
+	// MetricsInterval instead of the legacy 60-second loop.
+	if resourcePoller, err := docker.NewResourcePoller(store, localEngineID); err != nil {
 		log.Printf("resource poller: socket not available, skipping (%v)", err)
 	} else {
-		go poller.Start(dockerCtx)
+		scanScheduler.RegisterMetrics("docker_engine",
+			noraMetrics.NewDockerMetricsScanner(store, localEngineID, resourcePoller))
 	}
 
 	// Router
