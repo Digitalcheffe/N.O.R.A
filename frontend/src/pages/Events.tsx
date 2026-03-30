@@ -208,7 +208,8 @@ export function Events() {
   const [severity, setSeverity] = useState<Severity | ''>('')
   const [sourceType, setSourceType] = useState<SourceType>('')
   const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
+  const [searchDraft, setSearchDraft] = useState('')
+  const [searchTrigger, setSearchTrigger] = useState(0)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [sort, setSort] = useState<EventSort>('newest')
@@ -256,7 +257,7 @@ export function Events() {
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [timeFilter, severity, sourceType, search, fromDate, toDate, sort, pageSize, page, tick])
+  }, [timeFilter, severity, sourceType, search, searchTrigger, fromDate, toDate, sort, pageSize, page, tick])
 
   // Fetch chart data
   useEffect(() => {
@@ -394,17 +395,23 @@ export function Events() {
               type="text"
               className="events-search-input"
               placeholder="Search events…"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
+              value={searchDraft}
+              onChange={e => setSearchDraft(e.target.value)}
               onKeyDown={e => {
-                if (e.key === 'Enter') { setSearch(searchInput); setPage(0) }
-                if (e.key === 'Escape') { setSearchInput(''); setSearch(''); setPage(0) }
+                if (e.key === 'Enter') { setSearch(searchDraft); setSearchTrigger(t => t + 1); setPage(0) }
+                if (e.key === 'Escape') { setSearchDraft(''); setSearch(''); setSearchTrigger(t => t + 1); setPage(0) }
               }}
             />
+            <button
+              className="events-search-btn"
+              onClick={() => { setSearch(searchDraft); setSearchTrigger(t => t + 1); setPage(0) }}
+            >
+              Search
+            </button>
             {search && (
               <button
                 className="events-date-clear"
-                onClick={() => { setSearchInput(''); setSearch(''); setPage(0) }}
+                onClick={() => { setSearchDraft(''); setSearch(''); setSearchTrigger(t => t + 1); setPage(0) }}
                 title="Clear search"
               >
                 ✕

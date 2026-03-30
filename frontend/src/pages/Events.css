@@ -320,6 +320,20 @@
 .events-search-input::placeholder { color: var(--text3); }
 .events-search-input:focus { outline: none; border-color: var(--accent); }
 
+.events-search-btn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.events-search-btn:hover { opacity: 0.85; }
+
 /* ── Pagination ──────────────────────────────────────────────────────────────── */
 
 .events-pagination {
