@@ -17,7 +17,8 @@
       "name": "NORA Frontend (Vite)",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
-      "port": 8081
+      "port": 8081,
+      "autoPort": true
     }
   ]
 }
