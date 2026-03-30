@@ -11,7 +11,6 @@ import type {
   InfrastructureComponentInput,
   ResourceSummary,
   ScanResult,
-  TraefikComponentDetail,
   VolumeResource,
 } from '../api/types'
 import './Infrastructure.css'
@@ -306,7 +305,6 @@ export function Infrastructure() {
   const { tick: refreshTick } = useAutoRefresh()
   const [components,      setComponents]      = useState<InfrastructureComponent[]>([])
   const [resourcesMap,    setResourcesMap]    = useState<Record<string, ResourceSummary>>({})
-  const [traefikDetailMap, setTraefikDetailMap] = useState<Record<string, TraefikComponentDetail>>({})
   const [lastPolledAt,    setLastPolledAt]    = useState<Date | null>(null)
   const [loading,         setLoading]         = useState(true)
   const [activeTab,       setActiveTab]       = useState<ActiveTab>('components')
@@ -328,33 +326,18 @@ export function Infrastructure() {
   const pollAll = useCallback(async (compList: InfrastructureComponent[]) => {
     if (compList.length === 0) return
 
-    const nonTraefikComps = compList.filter(c => c.type !== 'traefik')
-    const traefikComps    = compList.filter(c => c.type === 'traefik')
-
-    const [resourceResults, traefikResults] = await Promise.all([
-      Promise.allSettled(
-        nonTraefikComps.map(c =>
-          infraApi.resources(c.id, 'hour').then(r => ({ id: c.id, data: r }))
-        )
-      ),
-      Promise.allSettled(
-        traefikComps.map(c =>
-          infraApi.traefikDetail(c.id).then(r => ({ id: c.id, data: r }))
-        )
-      ),
-    ])
+    const results = await Promise.allSettled(
+      compList
+        .filter(c => c.type !== 'traefik')
+        .map(c => infraApi.resources(c.id, 'hour').then(r => ({ id: c.id, data: r })))
+    )
 
     const resMap: Record<string, ResourceSummary> = {}
-    for (const r of resourceResults) {
+    for (const r of results) {
       if (r.status === 'fulfilled') resMap[r.value.id] = r.value.data
-    }
-    const traefikMap: Record<string, TraefikComponentDetail> = {}
-    for (const r of traefikResults) {
-      if (r.status === 'fulfilled') traefikMap[r.value.id] = r.value.data
     }
 
     setResourcesMap(prev => ({ ...prev, ...resMap }))
-    setTraefikDetailMap(prev => ({ ...prev, ...traefikMap }))
     setLastPolledAt(new Date())
   }, [])
 
@@ -499,7 +482,6 @@ export function Infrastructure() {
   }
 
   function renderTraefikCard(c: InfrastructureComponent) {
-    const detail = traefikDetailMap[c.id]
     const isDeleting = deletingId === c.id
     const isScanning = scanningId === c.id
 
@@ -517,16 +499,6 @@ export function Infrastructure() {
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
             <span className="infra-status-label">{statusLabel(c.last_status)}</span>
           </div>
-        </div>
-
-        <div className="infra-traefik-summary">
-          {detail ? (
-            <span className="infra-traefik-route-count">
-              {detail.routes.length} route{detail.routes.length !== 1 ? 's' : ''}
-            </span>
-          ) : (
-            <span className="infra-traefik-route-count">—</span>
-          )}
         </div>
 
         <div className="infra-card-footer">

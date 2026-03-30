@@ -12,9 +12,6 @@ import type {
   ResourceRollupPoint,
   SNMPDetail,
   SNMPDisk,
-  TraefikComponentDetail,
-  TraefikCertWithCheck,
-  TraefikRoute,
 } from '../api/types'
 import './InfraComponentDetail.css'
 
@@ -33,10 +30,6 @@ const TYPE_LABEL: Record<string, string> = {
   traefik:       'Traefik',
 }
 
-function daysUntil(iso: string | null | undefined): number | null {
-  if (!iso) return null
-  return Math.floor((new Date(iso).getTime() - Date.now()) / 86_400_000)
-}
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
 
@@ -268,69 +261,6 @@ function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
   )
 }
 
-// ── Traefik section ───────────────────────────────────────────────────────────
-
-function TraefikSection({ detail }: { detail: TraefikComponentDetail }) {
-  return (
-    <>
-      <div className="icd-section">
-        <div className="icd-section-title">SSL Certificates</div>
-        {detail.certs.length === 0 ? (
-          <div className="icd-empty">No certificates discovered yet.</div>
-        ) : (
-          <table className="icd-table">
-            <thead>
-              <tr><th>Domain</th><th>Issuer</th><th>Expires</th><th>Days</th><th>Check</th></tr>
-            </thead>
-            <tbody>
-              {detail.certs.map((cert: TraefikCertWithCheck) => {
-                const days = daysUntil(cert.expires_at)
-                const rowCls = days !== null && days <= 7 ? 'icd-row-crit' : days !== null && days <= 30 ? 'icd-row-warn' : ''
-                return (
-                  <tr key={cert.id} className={rowCls}>
-                    <td className="icd-mono">{cert.domain}</td>
-                    <td className="icd-muted">{cert.issuer ?? '—'}</td>
-                    <td className="icd-muted">{cert.expires_at ? new Date(cert.expires_at).toLocaleDateString() : '—'}</td>
-                    <td>{days !== null ? <span className={`icd-badge${rowCls ? ' ' + rowCls : ''}`}>{days}d</span> : '—'}</td>
-                    <td>
-                      <span className={`icd-check-badge icd-check-${cert.check_status || 'unknown'}`}>
-                        {cert.check_status?.toUpperCase() || '—'}
-                      </span>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="icd-section">
-        <div className="icd-section-title">HTTP Routes</div>
-        {detail.routes.length === 0 ? (
-          <div className="icd-empty">No HTTP routes discovered yet.</div>
-        ) : (
-          <table className="icd-table">
-            <thead>
-              <tr><th>Name</th><th>Rule</th><th>Service</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              {detail.routes.map((route: TraefikRoute) => (
-                <tr key={route.id}>
-                  <td className="icd-mono">{route.name}</td>
-                  <td className="icd-muted icd-route-rule">{route.rule}</td>
-                  <td className="icd-muted">{route.service}</td>
-                  <td><span className={`icd-route-status ${route.status}`}>{route.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </>
-  )
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function InfraComponentDetail() {
@@ -341,7 +271,6 @@ export function InfraComponentDetail() {
   const [component,     setComponent]     = useState<InfrastructureComponent | null>(null)
   const [resources,     setResources]     = useState<ResourceSummary | null>(null)
   const [history,       setHistory]       = useState<ResourceHistory | null>(null)
-  const [traefikDetail, setTraefikDetail] = useState<TraefikComponentDetail | null>(null)
   const [snmpDetail,    setSnmpDetail]    = useState<SNMPDetail | null>(null)
   const [children,      setChildren]      = useState<InfrastructureComponent[]>([])
   const [linkedApps,    setLinkedApps]    = useState<App[]>([])
@@ -372,9 +301,6 @@ export function InfraComponentDetail() {
         setLinkedApps(linked.data)
         setAllApps(allA.data)
         const extras: Promise<unknown>[] = []
-        if (comp.type === 'traefik') {
-          extras.push(infraApi.traefikDetail(id).then(det => setTraefikDetail(det)))
-        }
         if (comp.collection_method === 'snmp') {
           extras.push(infraApi.snmpDetail(id).then(det => setSnmpDetail(det)))
         }
@@ -455,6 +381,12 @@ export function InfraComponentDetail() {
     )
   }
 
+  // Traefik components have their own detail page.
+  if (component.type === 'traefik') {
+    navigate(`/topology/traefik/${component.id}`, { replace: true })
+    return null
+  }
+
   return (
     <>
       <Topbar title={component.name} />
@@ -490,7 +422,7 @@ export function InfraComponentDetail() {
         )}
 
         {/* Non-SNMP resource metrics (Proxmox, Synology, etc.) */}
-        {component.type !== 'docker_engine' && component.type !== 'traefik' && component.collection_method !== 'snmp' && (
+        {component.type !== 'docker_engine' && component.collection_method !== 'snmp' && (
           <ResourceSection resources={resources} history={history} />
         )}
 
@@ -499,16 +431,6 @@ export function InfraComponentDetail() {
           <div className="icd-section">
             <div className="icd-section-title">Containers</div>
             <DockerEngineDetail engineId={component.id} onCountsLoaded={() => {}} />
-          </div>
-        )}
-
-        {component.type === 'traefik' && traefikDetail && (
-          <TraefikSection detail={traefikDetail} />
-        )}
-
-        {component.type === 'traefik' && !traefikDetail && !loading && (
-          <div className="icd-section">
-            <div className="icd-empty">Loading Traefik detail…</div>
           </div>
         )}
 

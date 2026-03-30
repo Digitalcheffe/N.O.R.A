@@ -190,7 +190,7 @@ func TestGetTopology_FullChain(t *testing.T) {
 		repo.NewTraefikOverviewRepo(db), repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db), repo.NewDiscoveredRouteRepo(db), nil,
 	)
-	icHandler := api.NewInfraComponentHandler(ic, rollups, checks, tc, store)
+	icHandler := api.NewInfraComponentHandler(ic, rollups, checks, store)
 	r := chi.NewRouter()
 	topoHandler.Routes(r)
 	icHandler.Routes(r)

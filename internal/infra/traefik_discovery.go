@@ -104,24 +104,6 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 		}
 	}
 
-	// domain → (ssl_expiry, ssl_issuer) from traefik_component_certs
-	type sslInfo struct {
-		expiry *time.Time
-		issuer *string
-	}
-	sslByDomain := make(map[string]sslInfo)
-	certs, err := t.store.TraefikComponents.ListCerts(ctx, component.ID)
-	if err != nil {
-		log.Printf("traefik discovery: list certs for ssl lookup: %v", err)
-	} else {
-		for _, cert := range certs {
-			sslByDomain[cert.Domain] = sslInfo{
-				expiry: cert.ExpiresAt,
-				issuer: cert.Issuer,
-			}
-		}
-	}
-
 	// ── Upsert discovered routes ──────────────────────────────────────────────
 
 	now := time.Now().UTC()
@@ -138,15 +120,6 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 		var containerIDPtr *string
 		if cid, ok := containerByName[backendService]; ok {
 			containerIDPtr = &cid
-		}
-
-		var sslExpiry *time.Time
-		var sslIssuer *string
-		if domain != nil {
-			if info, ok := sslByDomain[*domain]; ok {
-				sslExpiry = info.expiry
-				sslIssuer = info.issuer
-			}
 		}
 
 		var domainPtr *string
@@ -185,8 +158,6 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 			Domain:           domainPtr,
 			BackendService:   backendPtr,
 			ContainerID:      containerIDPtr,
-			SSLExpiry:        sslExpiry,
-			SSLIssuer:        sslIssuer,
 			LastSeenAt:       now,
 			CreatedAt:        now,
 			// Enriched fields (Infra-10).

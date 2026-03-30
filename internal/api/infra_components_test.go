@@ -29,7 +29,7 @@ func newInfraComponentRouter(t *testing.T) http.Handler {
 		repo.NewTraefikOverviewRepo(db), repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db), repo.NewDiscoveredRouteRepo(db), nil,
 	)
-	h := api.NewInfraComponentHandler(ic, rollups, checks, tc, store)
+	h := api.NewInfraComponentHandler(ic, rollups, checks, store)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
