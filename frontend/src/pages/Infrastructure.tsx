@@ -505,9 +505,12 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/${c.id}`)}>
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/traefik/${c.id}`)}>
           <div className="infra-card-title-group">
-            <div className="infra-card-name">{c.name}</div>
+            <div className="infra-card-name">
+              {c.name}
+              <span className="infra-card-nav-arrow" aria-hidden="true"> ›</span>
+            </div>
             <div className="infra-card-meta">Traefik · {c.ip || '—'}</div>
           </div>
           <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
@@ -543,7 +546,7 @@ export function Infrastructure() {
           <div className="infra-card-actions">
             <button
               className="infra-card-btn accent"
-              onClick={() => navigate(`/topology/${c.id}`)}
+              onClick={() => navigate(`/topology/traefik/${c.id}`)}
               disabled={isDeleting || isScanning}
             >
               View Detail

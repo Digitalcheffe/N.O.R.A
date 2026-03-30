@@ -530,6 +530,54 @@ export interface LinkAppInput {
   config?: Record<string, unknown>
 }
 
+// ── Traefik Expanded (Infra-10/11) ───────────────────────────────────────────
+
+export interface TraefikOverview {
+  component_id: string
+  version: string
+  routers_total: number
+  routers_errors: number
+  routers_warnings: number
+  services_total: number
+  services_errors: number
+  middlewares_total: number
+  updated_at: string | null
+}
+
+export interface DiscoveredRoute {
+  id: string
+  infrastructure_id: string
+  router_name: string
+  rule: string
+  domain: string | null
+  backend_service: string | null
+  container_id: string | null
+  app_id: string | null
+  ssl_expiry: string | null
+  ssl_issuer: string | null
+  last_seen_at: string
+  created_at: string
+  router_status: string
+  provider: string | null
+  entry_points: string | null  // JSON array string
+  has_tls_resolver: number
+  cert_resolver_name: string | null
+  service_name: string | null
+}
+
+export interface TraefikServiceDetail {
+  id: string
+  component_id: string
+  service_name: string
+  service_type: string
+  status: string
+  server_count: number
+  servers_up: number
+  servers_down: number
+  server_status_json: string  // JSON map: { "http://url:port": "UP"|"DOWN" }
+  last_seen: string
+}
+
 // ── Metrics ──────────────────────────────────────────────────────────────────
 
 export interface AppMetric {
