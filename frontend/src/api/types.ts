@@ -578,6 +578,31 @@ export interface TraefikServiceDetail {
   last_seen: string
 }
 
+// ── SNMP Detail ───────────────────────────────────────────────────────────────
+
+export interface SNMPMemory {
+  used_bytes: number
+  total_bytes: number
+  percent: number
+}
+
+export interface SNMPDisk {
+  label: string
+  used_bytes: number
+  total_bytes: number
+  percent: number
+}
+
+export interface SNMPDetail {
+  os_description: string
+  uptime: string
+  hostname: string
+  cpu_percent: number
+  memory: SNMPMemory
+  disks: SNMPDisk[]
+  no_data?: boolean
+}
+
 // ── Metrics ──────────────────────────────────────────────────────────────────
 
 export interface AppMetric {

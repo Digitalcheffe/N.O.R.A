@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -68,19 +67,8 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 
 	case "traefik_api":
 		source = "traefik"
-		if c.Credentials == nil || *c.Credentials == "" {
-			log.Printf("scan: %s (%s): no credentials configured", c.Name, c.ID)
-			return "offline", fmt.Errorf("no credentials configured — edit the component and save credentials first")
-		}
-		var creds traefikComponentCredentials
-		if err := json.Unmarshal([]byte(*c.Credentials), &creds); err != nil {
-			log.Printf("scan: %s (%s): invalid credentials JSON: %v", c.Name, c.ID, err)
-			return "offline", fmt.Errorf("invalid credentials JSON: %w", err)
-		}
-		if creds.APIURL == "" {
-			log.Printf("scan: %s (%s): api_url is empty", c.Name, c.ID)
-			return "offline", fmt.Errorf("api_url is empty — edit the component and set the Traefik API URL")
-		}
+		creds := resolveTraefikCreds(*c)
+		log.Printf("scan: %s (%s): traefik poll → %s", c.Name, c.ID, creds.APIURL)
 		pollErr = pollTraefikComponent(ctx, store, *c, creds)
 
 	case "docker_socket":

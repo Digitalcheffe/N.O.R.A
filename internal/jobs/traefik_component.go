@@ -15,7 +15,21 @@ import (
 // for traefik-type components.
 type traefikComponentCredentials struct {
 	APIURL string `json:"api_url"`
-	APIKey string `json:"api_key"`
+	APIKey string `json:"api_key"` // optional — Traefik may run without auth
+}
+
+// resolveTraefikCreds returns polling credentials for a Traefik component.
+// If no credentials are stored (or the JSON is malformed), it falls back to
+// http://{component.IP}:8080 — Traefik's default dashboard/API address.
+// api_key is always optional; absence never blocks polling.
+func resolveTraefikCreds(c models.InfrastructureComponent) traefikComponentCredentials {
+	if c.Credentials != nil && *c.Credentials != "" {
+		var creds traefikComponentCredentials
+		if err := json.Unmarshal([]byte(*c.Credentials), &creds); err == nil && creds.APIURL != "" {
+			return creds
+		}
+	}
+	return traefikComponentCredentials{APIURL: "http://" + c.IP + ":8080"}
 }
 
 // RunTraefikComponentPollers iterates all enabled traefik infrastructure components,
@@ -31,22 +45,8 @@ func RunTraefikComponentPollers(ctx context.Context, store *repo.Store) {
 		if c.Type != "traefik" || !c.Enabled {
 			continue
 		}
-		if c.Credentials == nil || *c.Credentials == "" {
-			log.Printf("traefik component scheduler: component %s (%s) has no credentials, skipping", c.Name, c.ID)
-			continue
-		}
-
-		var creds traefikComponentCredentials
-		if err := json.Unmarshal([]byte(*c.Credentials), &creds); err != nil {
-			log.Printf("traefik component scheduler: component %s (%s): invalid credentials: %v", c.Name, c.ID, err)
-			continue
-		}
-		if creds.APIURL == "" {
-			log.Printf("traefik component scheduler: component %s (%s): api_url is empty, skipping", c.Name, c.ID)
-			continue
-		}
-
-		log.Printf("traefik component scheduler: polling %s (%s)", c.Name, c.ID)
+		creds := resolveTraefikCreds(c)
+		log.Printf("traefik component scheduler: polling %s (%s) → %s", c.Name, c.ID, creds.APIURL)
 		if err := pollTraefikComponent(ctx, store, c, creds); err != nil {
 			log.Printf("traefik component scheduler: poll %s (%s): %v", c.Name, c.ID, err)
 			emitInfraEvent(ctx, store, c.ID, c.Name, "traefik", "scheduled", "failed", err.Error())

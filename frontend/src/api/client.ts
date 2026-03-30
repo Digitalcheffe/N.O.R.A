@@ -38,6 +38,7 @@ import type {
   ResourceHistory,
   ResourceSummary,
   SMTPSettings,
+  SNMPDetail,
   ScanResult,
   SendNowResult,
   SyncResult,
@@ -366,6 +367,9 @@ export const infrastructure = {
 
   scan: (id: string) =>
     request<ScanResult>('POST', `/infrastructure/${id}/scan`),
+
+  snmpDetail: (id: string) =>
+    request<SNMPDetail>('GET', `/infrastructure/${id}/snmp`),
 
   children: (id: string) =>
     request<ListResponse<InfrastructureComponent>>('GET', `/infrastructure/${id}/children`),

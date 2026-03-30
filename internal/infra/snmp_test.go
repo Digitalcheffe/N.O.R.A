@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -229,6 +230,37 @@ func TestSNMPWalkStorageTable_Memory(t *testing.T) {
 	}
 }
 
+func TestSNMPWalkStorageTable_MemoryBytes(t *testing.T) {
+	poller := &SNMPPoller{componentID: "c1", ip: "127.0.0.1", cfg: SNMPConfig{}}
+	client := &mockSNMPClient{
+		walkResults: map[string][]gosnmp.SnmpPDU{
+			oidHrStorageEntry: buildStorageWalkPDUs(),
+		},
+	}
+	rows, err := poller.walkStorageTable(client)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mem, ok := computeMemResult(rows)
+	if !ok {
+		t.Fatal("computeMemResult: no RAM entry found")
+	}
+	// allocUnit=1024, size=4194304 → total = 4 GB = 4294967296 bytes
+	wantTotal := int64(4194304) * 1024
+	if mem.totalBytes != wantTotal {
+		t.Errorf("total_bytes = %d, want %d", mem.totalBytes, wantTotal)
+	}
+	// used=2097152 → used = 2 GB = 2147483648 bytes
+	wantUsed := int64(2097152) * 1024
+	if mem.usedBytes != wantUsed {
+		t.Errorf("used_bytes = %d, want %d", mem.usedBytes, wantUsed)
+	}
+	if mem.percent != 50.0 {
+		t.Errorf("percent = %.2f, want 50.0", mem.percent)
+	}
+}
+
 func TestSNMPWalkStorageTable_Disks(t *testing.T) {
 	poller := &SNMPPoller{componentID: "c1", ip: "127.0.0.1", cfg: SNMPConfig{}}
 	client := &mockSNMPClient{
@@ -265,6 +297,49 @@ func TestSNMPWalkStorageTable_Disks(t *testing.T) {
 	}
 }
 
+func TestSNMPWalkStorageTable_DiskResults_Bytes(t *testing.T) {
+	poller := &SNMPPoller{componentID: "c1", ip: "127.0.0.1", cfg: SNMPConfig{}}
+	client := &mockSNMPClient{
+		walkResults: map[string][]gosnmp.SnmpPDU{
+			oidHrStorageEntry: buildStorageWalkPDUs(),
+		},
+	}
+	rows, err := poller.walkStorageTable(client)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	results := computeDiskResults(rows)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 disk results, got %d", len(results))
+	}
+
+	// Find C: entry by label
+	var cDisk *diskResult
+	for i := range results {
+		if results[i].label == "C:" {
+			cDisk = &results[i]
+			break
+		}
+	}
+	if cDisk == nil {
+		t.Fatal("disk with label 'C:' not found")
+	}
+
+	// C: allocUnit=512, size=204800000 → total = 104857600000 bytes (~100 GB)
+	wantTotal := int64(204800000) * 512
+	if cDisk.totalBytes != wantTotal {
+		t.Errorf("C: total_bytes = %d, want %d", cDisk.totalBytes, wantTotal)
+	}
+	wantUsed := int64(122880000) * 512
+	if cDisk.usedBytes != wantUsed {
+		t.Errorf("C: used_bytes = %d, want %d", cDisk.usedBytes, wantUsed)
+	}
+	if cDisk.percent < 59.9 || cDisk.percent > 60.1 {
+		t.Errorf("C: percent = %.4f, want ~60.0", cDisk.percent)
+	}
+}
+
 func TestSNMPWalkStorageTable_LinuxRoot(t *testing.T) {
 	pdus := []gosnmp.SnmpPDU{
 		pdu(storageEntryOID(2, 1), gosnmp.ObjectIdentifier, oidHrStorageFixDisk),
@@ -287,6 +362,73 @@ func TestSNMPWalkStorageTable_LinuxRoot(t *testing.T) {
 	if _, ok := disks["root"]; !ok {
 		t.Errorf("expected disk label 'root' for '/', got keys: %v", disks)
 	}
+
+	// Also verify computeDiskResults returns "/" as the label (not "root").
+	results := computeDiskResults(rows)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 disk result, got %d", len(results))
+	}
+	if results[0].label != "/" {
+		t.Errorf("label = %q, want %q", results[0].label, "/")
+	}
+}
+
+// ── System info tests ─────────────────────────────────────────────────────────
+
+func TestSNMPPollSystemInfo_HappyPath(t *testing.T) {
+	poller := &SNMPPoller{componentID: "c1", ip: "127.0.0.1", cfg: SNMPConfig{}}
+	client := &mockSNMPClient{
+		getVars: []gosnmp.SnmpPDU{
+			pdu(oidSysDescr, gosnmp.OctetString, []byte("Linux proxmox 6.8.12 #1 SMP x86_64")),
+			pdu(oidSysUpTime, gosnmp.TimeTicks, uint32(12_276_000)), // 14d 3h 0m (approx)
+			pdu(oidSysName, gosnmp.OctetString, []byte("proxmox-node1")),
+		},
+	}
+	result, err := poller.pollSystemInfo(client)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.OSDescription != "Linux proxmox 6.8.12 #1 SMP x86_64" {
+		t.Errorf("os_description = %q", result.OSDescription)
+	}
+	if result.Hostname != "proxmox-node1" {
+		t.Errorf("hostname = %q, want %q", result.Hostname, "proxmox-node1")
+	}
+	if result.Uptime == "" {
+		t.Error("uptime should not be empty")
+	}
+}
+
+func TestSNMPPollSystemInfo_GetError(t *testing.T) {
+	poller := &SNMPPoller{componentID: "c1", ip: "127.0.0.1", cfg: SNMPConfig{}}
+	client := &mockSNMPClient{
+		getErr: fmt.Errorf("no such object"),
+	}
+	_, err := poller.pollSystemInfo(client)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+// ── Timetick parsing tests ────────────────────────────────────────────────────
+
+func TestTicksToUptime(t *testing.T) {
+	cases := []struct {
+		ticks uint32
+		want  string
+	}{
+		{0, "0m"},
+		{6000, "1m"},        // 60 seconds
+		{360000, "1h 0m"},   // 1 hour
+		{8640000, "1d 0h 0m"}, // 1 day
+		{122_040_000, "14d 3h 0m"}, // ~14 days
+	}
+	for _, tc := range cases {
+		got := ticksToUptime(tc.ticks)
+		if got != tc.want {
+			t.Errorf("ticksToUptime(%d) = %q, want %q", tc.ticks, got, tc.want)
+		}
+	}
 }
 
 // ── Full Poll integration tests ───────────────────────────────────────────────
@@ -308,6 +450,11 @@ func TestSNMPPoller_Poll_HappyPath(t *testing.T) {
 			},
 			oidHrStorageEntry: buildStorageWalkPDUs(),
 		},
+		getVars: []gosnmp.SnmpPDU{
+			pdu(oidSysDescr, gosnmp.OctetString, []byte("Linux test 5.15")),
+			pdu(oidSysUpTime, gosnmp.TimeTicks, uint32(360000)),
+			pdu(oidSysName, gosnmp.OctetString, []byte("testhost")),
+		},
 	}
 	poller.newClient = func() snmpClient { return mockClient }
 
@@ -326,6 +473,30 @@ func TestSNMPPoller_Poll_HappyPath(t *testing.T) {
 	}
 	if comp.LastPolledAt == nil {
 		t.Error("last_polled_at should be set")
+	}
+
+	// snmp_meta should be written and parseable.
+	if comp.SNMPMeta == nil || *comp.SNMPMeta == "" {
+		t.Fatal("snmp_meta should be set after poll")
+	}
+	var meta SNMPMeta
+	if err := json.Unmarshal([]byte(*comp.SNMPMeta), &meta); err != nil {
+		t.Fatalf("parse snmp_meta JSON: %v", err)
+	}
+	if meta.Hostname != "testhost" {
+		t.Errorf("hostname = %q, want %q", meta.Hostname, "testhost")
+	}
+	if meta.OSDescription != "Linux test 5.15" {
+		t.Errorf("os_description = %q, want %q", meta.OSDescription, "Linux test 5.15")
+	}
+	if meta.Memory.TotalBytes == 0 {
+		t.Error("memory total_bytes should be non-zero")
+	}
+	if meta.Memory.Percent != 50.0 {
+		t.Errorf("memory percent = %.2f, want 50.0", meta.Memory.Percent)
+	}
+	if len(meta.Disks) != 2 {
+		t.Errorf("expected 2 disk entries in snmp_meta, got %d", len(meta.Disks))
 	}
 }
 

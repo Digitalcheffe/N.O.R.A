@@ -13,6 +13,9 @@ type InfrastructureComponent struct {
 	ParentID         *string `db:"parent_id"          json:"parent_id,omitempty"`
 	Credentials      *string `db:"credentials"        json:"-"` // never serialised to API response
 	SNMPConfig       *string `db:"snmp_config"        json:"snmp_config,omitempty"`
+	// SNMPMeta holds the latest SNMP system identity + resource snapshot as JSON.
+	// Written by the SNMP poller on each poll cycle; never returned directly in API responses.
+	SNMPMeta         *string `db:"snmp_meta"          json:"-"`
 	Notes            string  `db:"notes"              json:"notes"`
 	Enabled          bool    `db:"enabled"            json:"enabled"`
 	LastPolledAt     *string `db:"last_polled_at"     json:"last_polled_at,omitempty"`
