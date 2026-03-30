@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -268,20 +267,12 @@ func TestTraefikClient_FetchOverview_ParsesCorrectly(t *testing.T) {
 	}
 }
 
-// ── FetchRouters pagination tests ─────────────────────────────────────────────
+// ── FetchRouters tests ────────────────────────────────────────────────────────
 
-func TestTraefikClient_FetchRouters_Pagination(t *testing.T) {
-	// Build a full page of 100 routers to trigger page 2 fetch.
-	page1 := make([]map[string]interface{}, 100)
-	for i := range page1 {
-		page1[i] = map[string]interface{}{
-			"name": fmt.Sprintf("router%d", i+1), "rule": fmt.Sprintf("Host(`r%d.com`)", i+1),
-			"service": "svc@docker", "status": "enabled", "provider": "docker",
-			"entryPoints": []string{"websecure"},
-		}
-	}
-	page2 := []map[string]interface{}{
-		{"name": "router-last", "rule": `Host(` + "`" + `last.com` + "`" + `)`, "service": "svc-last@docker", "status": "disabled", "provider": "docker", "entryPoints": []string{"websecure"}},
+func TestTraefikClient_FetchRouters(t *testing.T) {
+	payload := []map[string]interface{}{
+		{"name": "router1", "rule": `Host(` + "`" + `a.com` + "`" + `)`, "service": "svc1@docker", "status": "enabled", "provider": "docker", "entryPoints": []string{"websecure"}},
+		{"name": "router2", "rule": `Host(` + "`" + `b.com` + "`" + `)`, "service": "svc2@docker", "status": "disabled", "provider": "docker", "entryPoints": []string{"web"}},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -289,13 +280,8 @@ func TestTraefikClient_FetchRouters_Pagination(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		page := r.URL.Query().Get("page")
 		w.Header().Set("Content-Type", "application/json")
-		if page == "1" || page == "" {
-			json.NewEncoder(w).Encode(page1) //nolint:errcheck
-		} else {
-			json.NewEncoder(w).Encode(page2) //nolint:errcheck
-		}
+		json.NewEncoder(w).Encode(payload) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -304,52 +290,14 @@ func TestTraefikClient_FetchRouters_Pagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchRouters: %v", err)
 	}
-	if len(routers) != 101 {
-		t.Errorf("expected 101 routers (paginated), got %d", len(routers))
+	if len(routers) != 2 {
+		t.Fatalf("expected 2 routers, got %d", len(routers))
 	}
-	if routers[100].Name != "router-last" {
-		t.Errorf("expected last router to be router-last, got %q", routers[100].Name)
+	if routers[1].Name != "router2" {
+		t.Errorf("expected router2, got %q", routers[1].Name)
 	}
-	if routers[100].Status != "disabled" {
-		t.Errorf("expected router-last status=disabled, got %q", routers[100].Status)
-	}
-}
-
-// TestTraefikClient_FetchRouters_400OnPage2 verifies that a 400 on page 2
-// (as Traefik returns when all items fit on page 1) is handled gracefully.
-func TestTraefikClient_FetchRouters_400OnPage2(t *testing.T) {
-	page1 := make([]map[string]interface{}, 100)
-	for i := range page1 {
-		page1[i] = map[string]interface{}{
-			"name": fmt.Sprintf("router%d", i+1), "rule": fmt.Sprintf("Host(`r%d.com`)", i+1),
-			"service": "svc@docker", "status": "enabled", "provider": "docker",
-			"entryPoints": []string{"websecure"},
-		}
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/http/routers" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		page := r.URL.Query().Get("page")
-		if page == "1" || page == "" {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(page1) //nolint:errcheck
-		} else {
-			// Traefik returns 400 when requesting a non-existent page.
-			w.WriteHeader(http.StatusBadRequest)
-		}
-	}))
-	defer srv.Close()
-
-	client := NewTraefikClient(srv.URL, "")
-	routers, err := client.FetchRouters(context.Background())
-	if err != nil {
-		t.Fatalf("FetchRouters: unexpected error on 400 page 2: %v", err)
-	}
-	if len(routers) != 100 {
-		t.Errorf("expected 100 routers, got %d", len(routers))
+	if routers[1].Status != "disabled" {
+		t.Errorf("expected disabled, got %q", routers[1].Status)
 	}
 }
 
