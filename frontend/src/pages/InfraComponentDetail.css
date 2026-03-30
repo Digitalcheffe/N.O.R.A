@@ -107,6 +107,54 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* ── Section header row (title + count) ────────────────────────────────────── */
+
+.icd-section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.icd-section-header-row .icd-section-title {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.icd-section-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.icd-events-list {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.icd-events-error {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--red);
+  padding: 8px 0;
+}
+
+.icd-retry-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
 /* ── Resource grid ────────────────────────────────────────────────────────────── */
 
 .icd-resource-grid {

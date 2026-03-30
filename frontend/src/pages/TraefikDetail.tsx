@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
+import { EventRow } from '../components/EventRow'
 import {
   infrastructure as infraApi,
   traefik as traefikApi,
 } from '../api/client'
 import type {
+  Event,
   InfrastructureComponent,
   ScanResult,
   TraefikOverview,
@@ -460,6 +462,60 @@ function ServicesSection({
   )
 }
 
+// ── Events section ────────────────────────────────────────────────────────────
+
+function ComponentEventsSection({ componentId }: { componentId: string }) {
+  const [events, setEvents] = useState<Event[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    infraApi.events(componentId, { limit: 25, sort: 'newest' })
+      .then(r => { setEvents(r.data); setTotal(r.total); setError(null) })
+      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load events'))
+      .finally(() => setLoading(false))
+  }, [componentId])
+
+  return (
+    <div className="tk-section">
+      <div className="tk-section-header-row">
+        <div className="tk-section-title" style={{ margin: 0 }}>Recent Events</div>
+        {!loading && !error && (
+          <span className="tk-count-label">{total} total</span>
+        )}
+      </div>
+      {error ? (
+        <SectionError msg={error} onRetry={() => {
+          setLoading(true)
+          infraApi.events(componentId, { limit: 25, sort: 'newest' })
+            .then(r => { setEvents(r.data); setTotal(r.total); setError(null) })
+            .catch(err => setError(err instanceof Error ? err.message : 'Failed to load events'))
+            .finally(() => setLoading(false))
+        }} />
+      ) : loading ? (
+        <table className="tk-table"><tbody><SkeletonRows count={4} /></tbody></table>
+      ) : events.length === 0 ? (
+        <div className="tk-empty">No events recorded for this component.</div>
+      ) : (
+        <>
+          <div className="event-row events-col-header">
+            <span>Time</span>
+            <span />
+            <span>Source</span>
+            <span>Event</span>
+            <span>Severity</span>
+          </div>
+          {events.map(ev => (
+            <EventRow key={ev.id} event={ev} />
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function TraefikDetail() {
@@ -660,6 +716,9 @@ export function TraefikDetail() {
           error={servicesError}
           onRetry={loadServices}
         />
+
+        {/* Events */}
+        {componentId && <ComponentEventsSection componentId={componentId} />}
 
       </div>
     </>

@@ -109,9 +109,18 @@ func parseFilter(r *http.Request) (repo.ListFilter, error) {
 	q := r.URL.Query()
 
 	f := repo.ListFilter{
-		AppID:  q.Get("app_id"),
-		Limit:  50,
-		Offset: 0,
+		AppID:       q.Get("app_id"),
+		ComponentID: q.Get("component_id"),
+		Limit:       50,
+		Offset:      0,
+	}
+
+	if st := q.Get("source_type"); st == "app" || st == "infra" || st == "check" {
+		f.SourceType = st
+	}
+
+	if s := q.Get("search"); s != "" {
+		f.Search = s
 	}
 
 	if sv := q.Get("severity"); sv != "" {

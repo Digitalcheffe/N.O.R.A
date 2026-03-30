@@ -3,9 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
+import { EventRow } from '../components/EventRow'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
+  Event,
   InfrastructureComponent,
   ResourceSummary,
   ResourceHistory,
@@ -261,6 +263,58 @@ function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
   )
 }
 
+// ── Component events section ──────────────────────────────────────────────────
+
+function ComponentEventsSection({ componentId }: { componentId: string }) {
+  const [events, setEvents] = useState<Event[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  function load() {
+    setLoading(true)
+    infraApi.events(componentId, { limit: 25, sort: 'newest' })
+      .then(r => { setEvents(r.data); setTotal(r.total); setError(null) })
+      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load events'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [componentId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="icd-section">
+      <div className="icd-section-header-row">
+        <div className="icd-section-title">Recent Events</div>
+        {!loading && !error && total > 0 && (
+          <span className="icd-section-count">{total} total</span>
+        )}
+      </div>
+      {error ? (
+        <div className="icd-events-error">
+          {error} — <button className="icd-retry-btn" onClick={load}>Retry</button>
+        </div>
+      ) : loading ? (
+        <div className="icd-empty">Loading…</div>
+      ) : events.length === 0 ? (
+        <div className="icd-empty">No events recorded for this component.</div>
+      ) : (
+        <div className="icd-events-list">
+          <div className="event-row events-col-header">
+            <span>Time</span>
+            <span />
+            <span>Source</span>
+            <span>Event</span>
+            <span>Severity</span>
+          </div>
+          {events.map(ev => (
+            <EventRow key={ev.id} event={ev} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function InfraComponentDetail() {
@@ -449,6 +503,9 @@ export function InfraComponentDetail() {
           onLink={() => void handleLinkApp()}
           onUnlink={(appId) => void handleUnlinkApp(appId)}
         />
+
+        {/* Recent Events */}
+        <ComponentEventsSection componentId={component.id} />
 
       </div>
     </>

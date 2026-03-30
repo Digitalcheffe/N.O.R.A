@@ -21,12 +21,13 @@ type InfraComponentHandler struct {
 	components repo.InfraComponentRepo
 	rollups    repo.ResourceRollupRepo
 	checks     repo.CheckRepo
+	events     repo.EventRepo
 	store      *repo.Store
 }
 
 // NewInfraComponentHandler returns a handler wired to the given repos.
-func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo, checks repo.CheckRepo, store *repo.Store) *InfraComponentHandler {
-	return &InfraComponentHandler{components: components, rollups: rollups, checks: checks, store: store}
+func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo, checks repo.CheckRepo, events repo.EventRepo, store *repo.Store) *InfraComponentHandler {
+	return &InfraComponentHandler{components: components, rollups: rollups, checks: checks, events: events, store: store}
 }
 
 // Routes registers all infrastructure component endpoints on r.
@@ -43,6 +44,7 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/traefik/overview", h.GetTraefikOverview)
 	r.Get("/infrastructure/{id}/traefik/routers", h.GetTraefikRouters)
 	r.Get("/infrastructure/{id}/traefik/services", h.GetTraefikServices)
+	r.Get("/infrastructure/{id}/events", h.ListEvents)
 	r.Get("/infrastructure/{id}/children", h.ListChildren)
 	r.Get("/infrastructure/{id}/apps", h.ListLinkedApps)
 	r.Post("/infrastructure/{id}/apps/{appID}", h.LinkApp)
@@ -810,6 +812,35 @@ func (h *InfraComponentHandler) UnlinkApp(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListEvents returns events whose fields.component_id matches the component.
+// Accepts the same filter params as GET /events (severity, since, until, limit, offset, sort, search).
+// GET /api/v1/infrastructure/{id}/events
+func (h *InfraComponentHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	f, err := parseFilter(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	f.ComponentID = id
+
+	evts, total, err := h.events.List(r.Context(), f)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	items := make([]eventItem, len(evts))
+	for i, e := range evts {
+		items[i] = toEventItem(e)
+	}
+	writeJSON(w, http.StatusOK, listEventsResponse{
+		Data:   items,
+		Total:  total,
+		Limit:  f.Limit,
+		Offset: f.Offset,
+	})
 }
 
 // ── Traefik expanded endpoints (Infra-10) ────────────────────────────────────

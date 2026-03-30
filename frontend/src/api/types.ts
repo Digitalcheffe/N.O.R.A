@@ -79,6 +79,9 @@ export type EventSort = 'newest' | 'oldest' | 'severity_desc' | 'severity_asc'
 
 export interface EventFilter {
   app_id?: string
+  component_id?: string
+  source_type?: 'app' | 'infra' | 'check'
+  search?: string
   severity?: Severity
   from?: string
   to?: string

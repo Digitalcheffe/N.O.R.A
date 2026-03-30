@@ -14,8 +14,14 @@ import (
 
 // ListFilter constrains an event list query. Zero values mean "no filter".
 type ListFilter struct {
-	AppID    string
-	CheckID  string   // filter by json_extract(fields, '$.check_id')
+	AppID       string
+	CheckID     string   // filter by json_extract(fields, '$.check_id')
+	ComponentID string   // filter by json_extract(fields, '$.component_id')
+	// SourceType limits results by event origin: "app", "infra", or "check".
+	// Empty string means all sources.
+	SourceType string
+	// Search filters events whose display_text contains the given substring (case-insensitive).
+	Search   string
 	Severity []string
 	Since    *time.Time
 	Until    *time.Time
@@ -129,6 +135,26 @@ func buildWhere(f ListFilter) (clause string, args []interface{}) {
 	if f.CheckID != "" {
 		parts = append(parts, "json_extract(e.fields, '$.check_id') = ?")
 		args = append(args, f.CheckID)
+	}
+
+	if f.ComponentID != "" {
+		parts = append(parts, "json_extract(e.fields, '$.component_id') = ?")
+		args = append(args, f.ComponentID)
+	}
+
+	switch f.SourceType {
+	case "app":
+		parts = append(parts, "e.app_id IS NOT NULL")
+	case "infra":
+		parts = append(parts, "e.app_id IS NULL")
+		parts = append(parts, "json_extract(e.fields, '$.component_id') IS NOT NULL")
+	case "check":
+		parts = append(parts, "json_extract(e.fields, '$.check_id') IS NOT NULL")
+	}
+
+	if f.Search != "" {
+		parts = append(parts, "e.display_text LIKE ?")
+		args = append(args, "%"+f.Search+"%")
 	}
 
 	if len(f.Severity) > 0 {

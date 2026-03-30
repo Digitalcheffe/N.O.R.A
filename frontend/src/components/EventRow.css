@@ -1,0 +1,103 @@
+/* Shared styles for EventRow component — imported by EventRow.tsx */
+
+.event-row-wrapper { }
+.event-row-wrapper:last-child .event-row { border-bottom: none; }
+.event-row-wrapper.expanded .event-row { border-bottom: 1px solid var(--border); }
+
+.event-row {
+  display: grid;
+  grid-template-columns: 80px 20px 140px 1fr 80px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  cursor: pointer;
+}
+
+.event-row:last-child { border-bottom: none; }
+.event-row:hover { background: var(--bg3); }
+
+.event-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.severity-badge {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.severity-badge.info     { background: var(--accent); }
+.severity-badge.warn     { background: var(--yellow); }
+.severity-badge.error    { background: var(--red); }
+.severity-badge.critical { background: var(--red); }
+.severity-badge.debug    { background: var(--text3); }
+
+.event-app {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-text {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-sev-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.event-sev-label.info     { color: var(--accent); }
+.event-sev-label.warn     { color: var(--yellow); }
+.event-sev-label.error    { color: var(--red); }
+.event-sev-label.critical { color: var(--red); }
+
+.event-expand {
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Column header row */
+.events-col-header {
+  cursor: default;
+  border-bottom: 1px solid var(--border);
+}
+.events-col-header:hover { background: transparent; }
+.events-col-header span {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+}
+
+/* Clickable source name in event row */
+.event-app-link {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.event-app-link:hover { color: var(--accent); text-decoration: underline; }

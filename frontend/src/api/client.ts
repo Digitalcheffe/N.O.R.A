@@ -150,6 +150,9 @@ export const events = {
   list: (filter?: EventFilter) => {
     const params = new URLSearchParams()
     if (filter?.app_id) params.set('app_id', filter.app_id)
+    if (filter?.component_id) params.set('component_id', filter.component_id)
+    if (filter?.source_type) params.set('source_type', filter.source_type)
+    if (filter?.search) params.set('search', filter.search)
     if (filter?.severity) params.set('severity', filter.severity)
     if (filter?.from) params.set('since', filter.from)
     if (filter?.to) params.set('until', filter.to)
@@ -363,6 +366,19 @@ export const infrastructure = {
 
   scan: (id: string) =>
     request<ScanResult>('POST', `/infrastructure/${id}/scan`),
+
+  events: (id: string, filter?: EventFilter) => {
+    const params = new URLSearchParams()
+    if (filter?.severity) params.set('severity', filter.severity)
+    if (filter?.from) params.set('since', filter.from)
+    if (filter?.to) params.set('until', filter.to)
+    if (filter?.limit) params.set('limit', String(filter.limit))
+    if (filter?.offset) params.set('offset', String(filter.offset))
+    if (filter?.sort) params.set('sort', filter.sort)
+    if (filter?.search) params.set('search', filter.search)
+    const qs = params.toString()
+    return request<ListResponse<Event>>('GET', `/infrastructure/${id}/events${qs ? '?' + qs : ''}`)
+  },
 
   snmpDetail: (id: string) =>
     request<SNMPDetail>('GET', `/infrastructure/${id}/snmp`),
