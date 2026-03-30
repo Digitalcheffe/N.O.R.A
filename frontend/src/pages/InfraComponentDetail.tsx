@@ -441,6 +441,12 @@ export function InfraComponentDetail() {
     return null
   }
 
+  // Synology components have their own detail page.
+  if (component.type === 'synology') {
+    navigate(`/topology/synology/${component.id}`, { replace: true })
+    return null
+  }
+
   return (
     <>
       <Topbar title={component.name} />

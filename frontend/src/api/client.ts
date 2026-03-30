@@ -40,6 +40,7 @@ import type {
   SMTPSettings,
   SNMPDetail,
   ScanResult,
+  SynologyDetail,
   SendNowResult,
   SyncResult,
   TimeseriesBucket,
@@ -394,6 +395,13 @@ export const infrastructure = {
 
   unlinkApp: (componentId: string, appId: string) =>
     request<void>('DELETE', `/infrastructure/${componentId}/apps/${appId}`),
+}
+
+// ── Synology Detail ───────────────────────────────────────────────────────────
+
+export const synology = {
+  detail: (id: string) =>
+    request<{ data: SynologyDetail; no_data?: boolean }>('GET', `/infrastructure/${id}/synology`),
 }
 
 // ── Proxmox Detail ────────────────────────────────────────────────────────────

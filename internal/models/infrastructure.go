@@ -16,6 +16,10 @@ type InfrastructureComponent struct {
 	// SNMPMeta holds the latest SNMP system identity + resource snapshot as JSON.
 	// Written by the SNMP poller on each poll cycle; never returned directly in API responses.
 	SNMPMeta         *string `db:"snmp_meta"          json:"-"`
+	// SynologyMeta holds the latest Synology DSM snapshot (model, version, CPU, memory,
+	// volumes, disks, update status) as JSON. Written by the Synology poller on each
+	// poll cycle; never returned directly in API responses.
+	SynologyMeta     *string `db:"synology_meta"      json:"-"`
 	Notes            string  `db:"notes"              json:"notes"`
 	Enabled          bool    `db:"enabled"            json:"enabled"`
 	LastPolledAt     *string `db:"last_polled_at"     json:"last_polled_at,omitempty"`

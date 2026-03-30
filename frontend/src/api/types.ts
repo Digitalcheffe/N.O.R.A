@@ -479,6 +479,49 @@ export interface ProxmoxTaskFailure {
   node: string
 }
 
+// ── Synology Detail ──────────────────────────────────────────────────────────
+
+export interface SynologyMemory {
+  used_bytes: number
+  total_bytes: number
+  percent: number
+}
+
+export interface SynologyVolume {
+  path: string
+  status: string
+  used_bytes: number
+  total_bytes: number
+  percent: number
+}
+
+export interface SynologyDisk {
+  slot: number
+  model: string
+  temperature_c: number
+  status: string
+}
+
+export interface SynologyUpdate {
+  available: boolean
+  version: string
+}
+
+export interface SynologyDetail {
+  model: string
+  dsm_version: string
+  hostname: string
+  uptime: string
+  uptime_secs: number
+  temperature_c: number
+  cpu_percent: number
+  memory: SynologyMemory
+  volumes: SynologyVolume[]
+  disks: SynologyDisk[]
+  update: SynologyUpdate
+  polled_at: string
+}
+
 // ── Docker Discovery ─────────────────────────────────────────────────────────
 
 export interface DiscoveredContainer {
