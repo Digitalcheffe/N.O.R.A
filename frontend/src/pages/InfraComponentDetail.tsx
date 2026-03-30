@@ -7,6 +7,7 @@ import { EventFeed } from '../components/EventFeed'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
+  DiscoverResult,
   InfrastructureComponent,
   ResourceSummary,
   ResourceHistory,
@@ -278,8 +279,8 @@ export function InfraComponentDetail() {
   const [allApps,       setAllApps]       = useState<App[]>([])
   const [linkingAppId,  setLinkingAppId]  = useState('')
   const [linkBusy,      setLinkBusy]      = useState(false)
-  const [scanning,      setScanning]      = useState(false)
-  const [scanError,     setScanError]     = useState<string | null>(null)
+  const [discovering,   setDiscovering]   = useState(false)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
   const [loading,       setLoading]       = useState(true)
   const [error,         setError]         = useState<string | null>(null)
 
@@ -311,13 +312,17 @@ export function InfraComponentDetail() {
       .finally(() => setLoading(false))
   }, [id, tick])
 
-  async function handleScan() {
+  async function handleDiscover() {
     if (!id || !component) return
-    setScanning(true)
-    setScanError(null)
+    setDiscovering(true)
+    setDiscoverError(null)
     try {
-      await infraApi.scan(id)
-      // Re-fetch component status + resources + SNMP detail after poll completes.
+      const result: DiscoverResult = await infraApi.discover(id)
+      if (result.error) {
+        setDiscoverError(result.error)
+        return
+      }
+      // Re-fetch component status + resources + SNMP detail after discovery.
       const [comp, res] = await Promise.all([
         infraApi.get(id),
         infraApi.resources(id, 'hour'),
@@ -329,9 +334,9 @@ export function InfraComponentDetail() {
         setSnmpDetail(det)
       }
     } catch (err: unknown) {
-      setScanError(err instanceof Error ? err.message : 'Scan failed')
+      setDiscoverError(err instanceof Error ? err.message : 'Discovery failed')
     } finally {
-      setScanning(false)
+      setDiscovering(false)
     }
   }
 
@@ -413,15 +418,15 @@ export function InfraComponentDetail() {
             {component.collection_method !== 'none' && (
               <button
                 className="icd-scan-btn"
-                onClick={() => void handleScan()}
-                disabled={scanning}
+                onClick={() => void handleDiscover()}
+                disabled={discovering}
               >
-                {scanning ? 'Scanning…' : 'Scan Now'}
+                {discovering ? 'Discovering…' : 'Discover Now'}
               </button>
             )}
           </div>
         </div>
-        {scanError && <div className="icd-scan-error">{scanError}</div>}
+        {discoverError && <div className="icd-scan-error">{discoverError}</div>}
 
         {/* SNMP hosts: three-section detail view */}
         {component.collection_method === 'snmp' && (
@@ -492,7 +497,7 @@ function ProxmoxChildrenSection({ children, onNavigate }: ProxmoxChildrenSection
     return (
       <div className="icd-section">
         <div className="icd-section-title">Virtual Machines</div>
-        <div className="icd-empty">No VMs or containers discovered yet. Run Scan Now to discover.</div>
+        <div className="icd-empty">No VMs or containers discovered yet. Run Discover Now to discover.</div>
       </div>
     )
   }

@@ -39,6 +39,7 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Put("/infrastructure/{id}", h.Update)
 	r.Delete("/infrastructure/{id}", h.Delete)
 	r.Post("/infrastructure/{id}/scan", h.Scan)
+	r.Post("/infrastructure/{id}/discover", h.Discover)
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
 	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
 	r.Get("/infrastructure/{id}/snmp", h.GetSNMPDetail)
@@ -432,6 +433,53 @@ func (h *InfraComponentHandler) Scan(w http.ResponseWriter, r *http.Request) {
 		resp.Message = "scan complete"
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// discoverResponse is the response shape for POST /infrastructure/{id}/discover.
+type discoverResponse struct {
+	Status     string `json:"status"`
+	Discovered int    `json:"discovered"`
+	Updated    int    `json:"updated"`
+	Missing    int    `json:"missing"`
+	Message    string `json:"message,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// Discover immediately runs the discovery scanner for a single infrastructure
+// component and returns found/updated/missing counts.
+// POST /api/v1/infrastructure/{id}/discover
+func (h *InfraComponentHandler) Discover(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Use a detached context with a hard timeout so the scan is not cancelled
+	// if the client disconnects before it completes.
+	discCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	result, discErr := jobs.DiscoverOneComponent(discCtx, h.store, c)
+	if discErr != nil {
+		writeJSON(w, http.StatusOK, discoverResponse{
+			Status:  "error",
+			Error:   discErr.Error(),
+			Message: "discovery failed — check credentials and connectivity",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, discoverResponse{
+		Status:     "ok",
+		Discovered: result.Found,
+		Missing:    result.Disappeared,
+		Message:    "discovery complete",
+	})
 }
 
 // VolumeResource holds per-volume disk utilisation for Synology and similar components.

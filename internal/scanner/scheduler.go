@@ -20,22 +20,30 @@ import (
 // before Start is called. Entity types with no registered scanner are skipped
 // silently, which lets REFACTOR-06/07/08 add implementations incrementally
 // without requiring changes here.
+//
+// Discovery scanners can be registered by either entity type (e.g.
+// "proxmox_node") or by collection_method (e.g. "snmp").  The scheduler
+// checks type first, then falls back to collection_method, so integrations
+// that share a generic host type but differ in collection method (SNMP) are
+// handled correctly.
 type ScanScheduler struct {
-	store      *repo.Store
-	discovery  map[string]DiscoveryScanner // keyed by entity type
-	metrics    map[string]MetricsScanner
-	snapshots  map[string]SnapshotScanner
-	mu         sync.RWMutex
+	store                    *repo.Store
+	discovery                map[string]DiscoveryScanner // keyed by entity type
+	discoveryByMethod        map[string]DiscoveryScanner // keyed by collection_method
+	metrics                  map[string]MetricsScanner
+	snapshots                map[string]SnapshotScanner
+	mu                       sync.RWMutex
 }
 
 // NewScanScheduler returns a ScanScheduler wired to store with empty scanner
 // registries. Register scanners before calling Start.
 func NewScanScheduler(store *repo.Store) *ScanScheduler {
 	return &ScanScheduler{
-		store:     store,
-		discovery: make(map[string]DiscoveryScanner),
-		metrics:   make(map[string]MetricsScanner),
-		snapshots: make(map[string]SnapshotScanner),
+		store:             store,
+		discovery:         make(map[string]DiscoveryScanner),
+		discoveryByMethod: make(map[string]DiscoveryScanner),
+		metrics:           make(map[string]MetricsScanner),
+		snapshots:         make(map[string]SnapshotScanner),
 	}
 }
 
@@ -44,6 +52,15 @@ func (s *ScanScheduler) RegisterDiscovery(entityType string, sc DiscoveryScanner
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.discovery[entityType] = sc
+}
+
+// RegisterDiscoveryByMethod registers a DiscoveryScanner keyed by
+// collection_method rather than entity type.  This is used for SNMP hosts
+// which may have any entity type but share collection_method="snmp".
+func (s *ScanScheduler) RegisterDiscoveryByMethod(collectionMethod string, sc DiscoveryScanner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.discoveryByMethod[collectionMethod] = sc
 }
 
 // RegisterMetrics registers a MetricsScanner for the given entity type.
@@ -91,6 +108,8 @@ func (s *ScanScheduler) Start(ctx context.Context) {
 
 // runDiscoveryPass iterates all enabled components and calls each registered
 // DiscoveryScanner concurrently with DiscoveryTimeout per entity.
+// Scanners are looked up by entity type first; if none is registered for the
+// type, the scheduler falls back to a lookup by collection_method.
 func (s *ScanScheduler) runDiscoveryPass(ctx context.Context) {
 	components, err := s.listEnabled(ctx)
 	if err != nil {
@@ -100,12 +119,16 @@ func (s *ScanScheduler) runDiscoveryPass(ctx context.Context) {
 
 	s.mu.RLock()
 	scanners := copyDiscovery(s.discovery)
+	methodScanners := copyDiscovery(s.discoveryByMethod)
 	s.mu.RUnlock()
 
 	var wg sync.WaitGroup
 	for i := range components {
 		c := &components[i]
 		sc, ok := scanners[c.Type]
+		if !ok {
+			sc, ok = methodScanners[c.CollectionMethod]
+		}
 		if !ok {
 			continue
 		}

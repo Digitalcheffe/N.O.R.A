@@ -177,7 +177,7 @@ function NodeOverviewSection({
           </div>
         )}
         {!hasData && !ns && (
-          <div className="px-empty">No resource data collected yet. Run Scan Now to poll.</div>
+          <div className="px-empty">No resource data collected yet. Run Discover Now to poll.</div>
         )}
       </div>
     </div>
@@ -523,6 +523,8 @@ export function ProxmoxDetail() {
   const [resources,    setResources]    = useState<ResourceSummary | null>(null)
   const [topLoading,   setTopLoading]   = useState(true)
   const [topError,     setTopError]     = useState<string | null>(null)
+  const [discovering,  setDiscovering]  = useState(false)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
 
   // Section data
   const [pools,        setPools]        = useState<ProxmoxStoragePool[]>([])
@@ -594,6 +596,24 @@ export function ProxmoxDetail() {
       .finally(() => setFailuresLoading(false))
   }, [componentId])
 
+  const handleDiscoverNow = useCallback(async () => {
+    if (!componentId || discovering) return
+    setDiscovering(true)
+    setDiscoverError(null)
+    try {
+      await infraApi.discover(componentId)
+      loadTop()
+      loadPools()
+      loadGuests()
+      loadStatus()
+      loadFailures()
+    } catch (err) {
+      setDiscoverError(err instanceof Error ? err.message : 'Discover failed')
+    } finally {
+      setDiscovering(false)
+    }
+  }, [componentId, discovering, loadTop, loadPools, loadGuests, loadStatus, loadFailures])
+
   // Initial load and auto-refresh
   useEffect(() => {
     loadTop()
@@ -655,6 +675,16 @@ export function ProxmoxDetail() {
               <span className="px-polled-at">
                 Last polled {timeAgo(component.last_polled_at)}
               </span>
+            )}
+            <button
+              className="px-scan-btn"
+              onClick={() => void handleDiscoverNow()}
+              disabled={discovering || topLoading}
+            >
+              {discovering ? 'Discovering…' : 'Discover Now'}
+            </button>
+            {discoverError && (
+              <span className="px-scan-error">{discoverError}</span>
             )}
           </div>
         </div>

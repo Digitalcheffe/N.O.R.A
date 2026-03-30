@@ -27,6 +27,12 @@ func proxmoxChildID(parentID string, vmid int) string {
 	return uuid.NewSHA1(proxmoxChildNS, []byte(fmt.Sprintf("%s/%d", parentID, vmid))).String()
 }
 
+// ProxmoxChildID is the exported form of proxmoxChildID, for use by the
+// discovery scanner package which lives outside the infra package.
+func ProxmoxChildID(parentID string, vmid int) string {
+	return proxmoxChildID(parentID, vmid)
+}
+
 // ProxmoxCredentials is the JSON shape stored in infrastructure_components.credentials.
 type ProxmoxCredentials struct {
 	BaseURL     string `json:"base_url"`
