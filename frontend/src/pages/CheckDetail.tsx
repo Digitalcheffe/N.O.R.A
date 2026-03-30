@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
-import type { MonitorCheck, Event, InfraIntegration, TraefikCert } from '../api/types'
+import { EventFeed } from '../components/EventFeed'
+import type { MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
 import {
   CheckForm,
   type FormFields,
@@ -17,10 +18,6 @@ import '../styles/Modal.css'
 import './CheckDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function severityBadge(severity: string) {
-  return <span className={`event-severity-badge ${severity}`}>{severity}</span>
-}
 
 function statusLabel(check: MonitorCheck): string {
   if (check.type === 'ssl') {
@@ -162,8 +159,6 @@ export function CheckDetail() {
 
   const [check, setCheck] = useState<MonitorCheck | null>(null)
   const [loading, setLoading] = useState(true)
-  const [events, setEvents] = useState<Event[]>([])
-  const [eventsLoading, setEventsLoading] = useState(true)
   const [running, setRunning] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
@@ -176,11 +171,6 @@ export function CheckDetail() {
       .then(setCheck)
       .catch(() => navigate('/checks'))
       .finally(() => setLoading(false))
-
-    checksApi.listEvents(id)
-      .then(res => setEvents(res.data))
-      .catch(() => {})
-      .finally(() => setEventsLoading(false))
 
     integrationsApi.list()
       .then(res => {
@@ -202,8 +192,6 @@ export function CheckDetail() {
       await checksApi.run(id)
       const updated = await checksApi.get(id)
       setCheck(updated)
-      const eventsRes = await checksApi.listEvents(id)
-      setEvents(eventsRes.data)
     } catch { /* noop */ }
     finally { setRunning(false) }
   }
@@ -340,30 +328,7 @@ export function CheckDetail() {
         </div>
 
         {/* History */}
-        <div className="check-detail-section">
-          <div className="check-detail-section-header">
-            <div className="check-detail-section-title">History</div>
-          </div>
-          <div className="check-detail-section-body">
-            {eventsLoading ? (
-              <div className="check-history-empty">Loading…</div>
-            ) : events.length === 0 ? (
-              <div className="check-history-empty">
-                No status-change events yet. Events are created on first status transition.
-              </div>
-            ) : (
-              <div className="check-history-list">
-                {events.map(ev => (
-                  <div key={ev.id} className="check-history-row">
-                    {severityBadge(ev.level)}
-                    <span className="check-history-text">{ev.title}</span>
-                    <span className="check-history-time">{formatEventTime(ev.created_at)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <EventFeed sourceType="monitor_check" sourceId={id ?? ''} title="HISTORY" />
 
       </div>
 

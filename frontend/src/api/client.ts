@@ -151,6 +151,7 @@ export const events = {
   list: (filter?: EventFilter) => {
     const params = new URLSearchParams()
     if (filter?.source_type) params.set('source_type', filter.source_type)
+    if (filter?.source_id) params.set('source_id', filter.source_id)
     if (filter?.search) params.set('search', filter.search)
     if (filter?.level) params.set('level', filter.level)
     if (filter?.from) params.set('since', filter.from)

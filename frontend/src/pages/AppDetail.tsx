@@ -2,86 +2,13 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
+import { EventFeed } from '../components/EventFeed'
 import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi } from '../api/client'
-import type { App, AppSummary, AppTemplate, Event, Severity } from '../api/types'
-import { formatEventTime } from '../utils/formatTime'
+import type { App, AppSummary, AppTemplate } from '../api/types'
 import '../styles/Modal.css'
 import './AppDetail.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
-
-// ── JSON Viewer ───────────────────────────────────────────────────────────────
-
-function JsonValue({ value, depth }: { value: unknown; depth: number }) {
-  const [open, setOpen] = useState(depth < 2)
-  const indent = '  '.repeat(depth)
-
-  if (value === null) return <span className="json-null">null</span>
-  if (typeof value === 'boolean') return <span className="json-bool">{String(value)}</span>
-  if (typeof value === 'number') return <span className="json-num">{value}</span>
-  if (typeof value === 'string') return <span className="json-str">"{value}"</span>
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="json-punct">[]</span>
-    return (
-      <span>
-        <span className="json-punct">[</span>
-        {open ? (
-          <>
-            {value.map((item, i) => (
-              <div key={i} style={{ paddingLeft: '16px' }}>
-                <JsonValue value={item} depth={depth + 1} />
-                {i < value.length - 1 && <span className="json-punct">,</span>}
-              </div>
-            ))}
-            <div>{indent}<span className="json-punct">]</span></div>
-          </>
-        ) : (
-          <span className="json-collapse" onClick={e => { e.stopPropagation(); setOpen(true) }}>
-            {value.length} items…
-          </span>
-        )}
-      </span>
-    )
-  }
-
-  if (typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-    if (entries.length === 0) return <span className="json-punct">{'{}'}</span>
-    return (
-      <span>
-        <span className="json-punct">{'{'}</span>
-        {open ? (
-          <>
-            {entries.map(([k, v], i) => (
-              <div key={k} style={{ paddingLeft: '16px' }}>
-                <span className="json-key">"{k}"</span>
-                <span className="json-punct">: </span>
-                <JsonValue value={v} depth={depth + 1} />
-                {i < entries.length - 1 && <span className="json-punct">,</span>}
-              </div>
-            ))}
-            <div>{indent}<span className="json-punct">{'}'}</span></div>
-          </>
-        ) : (
-          <span className="json-collapse" onClick={e => { e.stopPropagation(); setOpen(true) }}>
-            {entries.length} keys…
-          </span>
-        )}
-      </span>
-    )
-  }
-
-  return <span>{String(value)}</span>
-}
-
-function JsonViewer({ data }: { data: Record<string, unknown> }) {
-  return (
-    <div className="json-viewer">
-      <JsonValue value={data} depth={0} />
-    </div>
-  )
-}
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
 
@@ -100,65 +27,6 @@ function Sparkline({ data, color = 'var(--accent)' }: { data: number[]; color?: 
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" opacity="0.8" />
       <polyline points={closed} fill={color} stroke="none" opacity="0.08" />
     </svg>
-  )
-}
-
-// ── Expanded event detail ─────────────────────────────────────────────────────
-
-function EventDetail({ event, appName }: { event: Event; appName: string }) {
-  const createdDate = event.created_at ? new Date(event.created_at) : null
-  const received = createdDate && !isNaN(createdDate.getTime())
-    ? createdDate.toLocaleString('en-US', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: false,
-      })
-    : '—'
-  return (
-    <div className="detail-event-expand">
-      <div className="detail-expand-meta">
-        <div className="detail-meta-row">
-          <span className="detail-meta-label">Severity</span>
-          <span className={`detail-meta-val sev-${event.level}`}>{event.level}</span>
-        </div>
-        <div className="detail-meta-row">
-          <span className="detail-meta-label">App</span>
-          <span className="detail-meta-val">{appName}</span>
-        </div>
-        <div className="detail-meta-row">
-          <span className="detail-meta-label">Received</span>
-          <span className="detail-meta-val">{received}</span>
-        </div>
-      </div>
-      <div className="detail-expand-payload-label">Raw Payload</div>
-      {event.payload && Object.keys(event.payload).length > 0 ? (
-        <JsonViewer data={event.payload} />
-      ) : (
-        <div className="json-viewer json-empty">No payload</div>
-      )}
-      <div className="detail-expand-actions">
-        <button className="detail-rule-btn" disabled title="Coming in v2">
-          Save as notification rule
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── Event row ─────────────────────────────────────────────────────────────────
-
-function DetailEventRow({ event, appName, expanded, onToggle }: {
-  event: Event; appName: string; expanded: boolean; onToggle: () => void
-}) {
-  return (
-    <div className={`event-row-wrapper${expanded ? ' expanded' : ''}`}>
-      <div className="event-row" onClick={onToggle}>
-        <div className="event-time">{formatEventTime(event.created_at)}</div>
-        <div className={`severity-badge ${event.level}`} />
-        <div className="event-text">{event.title}</div>
-        <div className={`event-sev-label ${event.level}`}>{event.level}</div>
-      </div>
-      {expanded && <EventDetail event={event} appName={appName} />}
-    </div>
   )
 }
 
@@ -444,25 +312,15 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
 
 // ── AppDetail ─────────────────────────────────────────────────────────────────
 
-const SEVERITIES: Array<Severity | 'all'> = ['all', 'info', 'warn', 'error', 'critical']
-const PAGE_SIZE = 50
-
 export function AppDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { tick } = useAutoRefresh()
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
-  const [severityFilter, setSeverityFilter] = useState<Severity | 'all'>('all')
 
   const [app, setApp] = useState<App | null>(null)
   const [appSummary, setAppSummary] = useState<AppSummary | null>(null)
-  const [events, setEvents] = useState<Event[]>([])
-  const [total, setTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
   const appId = id ?? ''
@@ -482,30 +340,10 @@ export function AppDetail() {
   }, [appId, timeFilter, tick])
 
   useEffect(() => {
-    if (!appId) return
-    setLoading(true); setOffset(0); setEvents([]); setExpandedId(null)
-    const filter = { limit: PAGE_SIZE, offset: 0, ...(severityFilter !== 'all' ? { level: severityFilter } : {}) }
-    appsApi.events(appId, filter)
-      .then(res => { setEvents(res.data); setTotal(res.total) })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [appId, severityFilter, tick])
-
-  useEffect(() => {
     if (!id) navigate('/apps')
   }, [id, navigate])
 
   if (!id) return null
-
-  function handleLoadMore() {
-    const nextOffset = offset + PAGE_SIZE
-    setLoadingMore(true)
-    const filter = { limit: PAGE_SIZE, offset: nextOffset, ...(severityFilter !== 'all' ? { level: severityFilter } : {}) }
-    appsApi.events(appId, filter)
-      .then(res => { setEvents(prev => [...prev, ...res.data]); setOffset(nextOffset) })
-      .catch(console.error)
-      .finally(() => setLoadingMore(false))
-  }
 
   const appName = app?.name ?? appId
   const baseUrl = app?.config?.base_url as string | undefined
@@ -516,8 +354,6 @@ export function AppDetail() {
         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
       })
     : null
-  const hasMore = events.length < total
-
   return (
     <>
       <Topbar title={appName} status={topbarStatus} timeFilter={timeFilter} onTimeFilter={setTimeFilter} />
@@ -578,50 +414,7 @@ export function AppDetail() {
         )}
 
         {/* ── Events section ── */}
-        <div className="detail-events-section">
-          <div className="section-header">
-            <div className="section-title">Events</div>
-            <div className="detail-sev-pills">
-              {SEVERITIES.map(s => (
-                <button
-                  key={s}
-                  className={`detail-sev-pill sev-pill-${s}${severityFilter === s ? ' active' : ''}`}
-                  onClick={() => setSeverityFilter(s)}
-                >
-                  {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="detail-events-loading">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className="skeleton" style={{ height: 40, marginBottom: 4 }} />
-              ))}
-            </div>
-          ) : events.length === 0 ? (
-            <div className="detail-events-empty">No events found</div>
-          ) : (
-            <div className="events-panel">
-              {events.map(event => (
-                <DetailEventRow
-                  key={event.id}
-                  event={event}
-                  appName={appName}
-                  expanded={expandedId === event.id}
-                  onToggle={() => setExpandedId(prev => prev === event.id ? null : event.id)}
-                />
-              ))}
-            </div>
-          )}
-
-          {!loading && hasMore && (
-            <button className="detail-load-more" onClick={handleLoadMore} disabled={loadingMore}>
-              {loadingMore ? 'Loading…' : `Load more (${total - events.length} remaining)`}
-            </button>
-          )}
-        </div>
+        <EventFeed sourceType="app" sourceId={appId} />
 
       </div>
 

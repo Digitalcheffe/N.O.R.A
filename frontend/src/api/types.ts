@@ -78,7 +78,8 @@ export interface Event {
 export type EventSort = 'newest' | 'oldest' | 'level_desc' | 'level_asc'
 
 export interface EventFilter {
-  source_type?: 'app' | 'infra' | 'check'
+  source_type?: string
+  source_id?: string
   search?: string
   level?: Severity
   from?: string
