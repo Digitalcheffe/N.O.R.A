@@ -21,6 +21,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/monitor"
+	"github.com/digitalcheffe/nora/internal/scanner"
 	"github.com/digitalcheffe/nora/internal/push"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/migrations"
@@ -106,6 +107,12 @@ func main() {
 	schedCtx, schedCancel := context.WithCancel(context.Background())
 	defer schedCancel()
 	go monitor.NewScheduler(store).Start(schedCtx)
+
+	// Scan scheduler — Discovery (1h), Metrics (2m), Snapshots (30m).
+	// Concrete scanners are registered here as REFACTOR-06/07/08 add them.
+	scanCtx, scanCancel := context.WithCancel(context.Background())
+	defer scanCancel()
+	go scanner.NewScanScheduler(store).Start(scanCtx)
 
 	// Resource rollup jobs — hourly aggregation and daily rollup + retention purge.
 	rollupCtx, rollupCancel := context.WithCancel(context.Background())
