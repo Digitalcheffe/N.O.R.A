@@ -12,6 +12,7 @@ import {
   validateForm,
   formToInput,
 } from '../components/CheckForm'
+import { formatEventTime } from '../utils/formatTime'
 import '../styles/Modal.css'
 import './Checks.css'
 
@@ -44,17 +45,6 @@ function statusClass(status: string | null): string {
   if (status === 'warn') return 'monitor-status-block warn'
   if (status === 'down' || status === 'critical') return 'monitor-status-block down'
   return 'monitor-status-block unknown'
-}
-
-function formatTimeAgo(iso?: string | null): string {
-  if (!iso) return '—'
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
 }
 
 function extractSSLCerts(checkList: MonitorCheck[]): SSLCert[] {
@@ -133,7 +123,7 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
       {/* Footer: interval + last checked + pause toggle */}
       <div className="check-card-footer">
         <span className="check-card-interval">every {check.interval_secs}s</span>
-        <span className="check-card-last">{formatTimeAgo(check.last_checked_at)}</span>
+        <span className="check-card-last">{formatEventTime(check.last_checked_at)}</span>
         <button
           className={`check-toggle-btn${check.enabled ? ' enabled' : ' paused'}`}
           title={check.enabled ? 'Pause check' : 'Resume check'}

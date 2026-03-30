@@ -4,6 +4,7 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi } from '../api/client'
 import type { App, AppSummary, AppTemplate, Event, Severity } from '../api/types'
+import { formatEventTime } from '../utils/formatTime'
 import '../styles/Modal.css'
 import './AppDetail.css'
 
@@ -146,19 +147,6 @@ function EventDetail({ event, appName }: { event: Event; appName: string }) {
 }
 
 // ── Event row ─────────────────────────────────────────────────────────────────
-
-function formatEventTime(iso: string): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
-  const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
-  if (d >= startOfToday) return timePart
-  if (d >= startOfYesterday) return `Yesterday ${timePart}`
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${timePart}`
-}
 
 function DetailEventRow({ event, appName, expanded, onToggle }: {
   event: Event; appName: string; expanded: boolean; onToggle: () => void

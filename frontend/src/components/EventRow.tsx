@@ -1,20 +1,8 @@
 import { useState } from 'react'
 import { events as eventsApi } from '../api/client'
 import type { Event } from '../api/types'
+import { formatEventTime } from '../utils/formatTime'
 import './EventRow.css'
-
-function formatEventTime(iso: string): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
-  const timePart = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
-  if (d >= startOfToday) return timePart
-  if (d >= startOfYesterday) return `Yesterday ${timePart}`
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${timePart}`
-}
 
 /**
  * Derive the display name for the event source.
@@ -28,7 +16,7 @@ export function getSourceName(event: Event, appName?: string): string {
   if (f?.component_name && typeof f.component_name === 'string') return f.component_name
   if (f?.check_name && typeof f.check_name === 'string') return f.check_name
   if (f?.source && typeof f.source === 'string') return f.source
-  return '—'
+  return 'NORA System'
 }
 
 interface Props {

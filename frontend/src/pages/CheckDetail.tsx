@@ -12,21 +12,11 @@ import {
   formToInput,
   renderCheckResult,
 } from '../components/CheckForm'
+import { formatEventTime } from '../utils/formatTime'
 import '../styles/Modal.css'
 import './CheckDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatTimeAgo(iso?: string | null): string {
-  if (!iso) return '—'
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diffMs / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
 
 function severityBadge(severity: string) {
   return <span className={`event-severity-badge ${severity}`}>{severity}</span>
@@ -338,7 +328,7 @@ export function CheckDetail() {
             <div className="check-detail-section-title">Last Result</div>
             {check.last_checked_at && (
               <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text3)' }}>
-                {formatTimeAgo(check.last_checked_at)}
+                {formatEventTime(check.last_checked_at)}
               </span>
             )}
           </div>
@@ -367,7 +357,7 @@ export function CheckDetail() {
                   <div key={ev.id} className="check-history-row">
                     {severityBadge(ev.severity)}
                     <span className="check-history-text">{ev.display_text}</span>
-                    <span className="check-history-time">{formatTimeAgo(ev.received_at)}</span>
+                    <span className="check-history-time">{formatEventTime(ev.received_at)}</span>
                   </div>
                 ))}
               </div>
