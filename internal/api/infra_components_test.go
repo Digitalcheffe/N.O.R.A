@@ -19,9 +19,10 @@ func newInfraComponentRouter(t *testing.T) http.Handler {
 	ic := repo.NewInfraComponentRepo(db)
 	rollups := repo.NewResourceRollupRepo(db)
 	checks := repo.NewCheckRepo(db)
+	events := repo.NewEventRepo(db)
 	tc := repo.NewTraefikComponentRepo(db)
 	store := repo.NewStore(
-		repo.NewAppRepo(db), repo.NewEventRepo(db), checks,
+		repo.NewAppRepo(db), events, checks,
 		repo.NewRollupRepo(db), repo.NewResourceReadingRepo(db), rollups,
 		ic, repo.NewDockerEngineRepo(db),
 		repo.NewInfraRepo(db), repo.NewSettingsRepo(db), repo.NewMetricsRepo(db),
@@ -29,7 +30,7 @@ func newInfraComponentRouter(t *testing.T) http.Handler {
 		repo.NewTraefikOverviewRepo(db), repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db), repo.NewDiscoveredRouteRepo(db), nil,
 	)
-	h := api.NewInfraComponentHandler(ic, rollups, checks, tc, store)
+	h := api.NewInfraComponentHandler(ic, rollups, checks, events, store)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r

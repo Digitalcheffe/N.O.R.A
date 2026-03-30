@@ -4,11 +4,12 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { EventRow } from '../components/EventRow'
 import { events as eventsApi } from '../api/client'
-import type { Event, EventSort, Severity, TimeseriesBucket } from '../api/types'
+import type { Event, EventFilter, EventSort, Severity, TimeseriesBucket } from '../api/types'
 import './Events.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
 type ChartRange = 'day' | 'week' | 'month' | '3m'
+type SourceType = '' | 'app' | 'infra' | 'check'
 
 const SEVERITIES: Severity[] = ['debug', 'info', 'warn', 'error', 'critical']
 const PAGE_SIZES = [25, 50, 100, 500]
@@ -205,6 +206,12 @@ export function Events() {
   const { tick } = useAutoRefresh()
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [severity, setSeverity] = useState<Severity | ''>('')
+  const [sourceType, setSourceType] = useState<SourceType>('')
+  const [search, setSearch] = useState('')
+  const [searchDraft, setSearchDraft] = useState('')
+  const [searchTrigger, setSearchTrigger] = useState(0)
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [sort, setSort] = useState<EventSort>('newest')
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(0)
@@ -225,21 +232,32 @@ export function Events() {
   useEffect(() => {
     setLoading(true)
     setError(null)
+    const filter: EventFilter = {
+      sort,
+      limit: pageSize,
+      offset: page * pageSize,
+    }
+    // Date range: custom dates take priority over timeFilter tabs
+    if (fromDate) {
+      filter.from = new Date(fromDate).toISOString()
+    } else {
+      filter.from = sinceFromTimeFilter(timeFilter)
+    }
+    if (toDate) {
+      filter.to = new Date(toDate + 'T23:59:59').toISOString()
+    }
+    if (severity) filter.severity = severity
+    if (sourceType) filter.source_type = sourceType as 'app' | 'infra' | 'check'
+    if (search) filter.search = search
     eventsApi
-      .list({
-        from: sinceFromTimeFilter(timeFilter),
-        ...(severity ? { severity } : {}),
-        sort,
-        limit: pageSize,
-        offset: page * pageSize,
-      })
+      .list(filter)
       .then(res => {
         setEventList(res.data)
         setTotal(res.total)
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [timeFilter, severity, sort, pageSize, page, tick])
+  }, [timeFilter, severity, sourceType, search, searchTrigger, fromDate, toDate, sort, pageSize, page, tick])
 
   // Fetch chart data
   useEffect(() => {
@@ -334,6 +352,74 @@ export function Events() {
           </div>
         </div>
 
+        {/* ── Advanced filters row ── */}
+        <div className="events-adv-filter-row">
+          <select
+            className="events-select"
+            value={sourceType}
+            onChange={e => { setSourceType(e.target.value as SourceType); setPage(0) }}
+          >
+            <option value="">All sources</option>
+            <option value="app">Apps</option>
+            <option value="infra">Infrastructure</option>
+            <option value="check">Checks</option>
+          </select>
+          <div className="events-date-range">
+            <input
+              type="date"
+              className="events-date-input"
+              value={fromDate}
+              onChange={e => { setFromDate(e.target.value); setPage(0) }}
+              title="From date"
+            />
+            <span className="events-date-sep">–</span>
+            <input
+              type="date"
+              className="events-date-input"
+              value={toDate}
+              onChange={e => { setToDate(e.target.value); setPage(0) }}
+              title="To date"
+            />
+            {(fromDate || toDate) && (
+              <button
+                className="events-date-clear"
+                onClick={() => { setFromDate(''); setToDate(''); setPage(0) }}
+                title="Clear date range"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <div className="events-search-wrap">
+            <input
+              type="text"
+              className="events-search-input"
+              placeholder="Search events…"
+              value={searchDraft}
+              onChange={e => setSearchDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { setSearch(searchDraft); setSearchTrigger(t => t + 1); setPage(0) }
+                if (e.key === 'Escape') { setSearchDraft(''); setSearch(''); setSearchTrigger(t => t + 1); setPage(0) }
+              }}
+            />
+            <button
+              className="events-search-btn"
+              onClick={() => { setSearch(searchDraft); setSearchTrigger(t => t + 1); setPage(0) }}
+            >
+              Search
+            </button>
+            {search && (
+              <button
+                className="events-date-clear"
+                onClick={() => { setSearchDraft(''); setSearch(''); setSearchTrigger(t => t + 1); setPage(0) }}
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* ── Event list panel ── */}
         <div className="events-panel" ref={listRef}>
           <div className="events-header">
@@ -350,7 +436,7 @@ export function Events() {
             <div className="event-row events-col-header">
               <span>Time</span>
               <span />
-              <span>App</span>
+              <span>Source</span>
               <span>Event</span>
               <span>Severity</span>
             </div>
@@ -366,7 +452,6 @@ export function Events() {
             <EventRow
               key={ev.id}
               event={ev}
-              appName={ev.app_name}
               onAppClick={ev.app_id ? id => navigate(`/apps/${id}`) : undefined}
             />
           ))}

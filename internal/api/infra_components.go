@@ -21,13 +21,13 @@ type InfraComponentHandler struct {
 	components repo.InfraComponentRepo
 	rollups    repo.ResourceRollupRepo
 	checks     repo.CheckRepo
-	traefik    repo.TraefikComponentRepo
+	events     repo.EventRepo
 	store      *repo.Store
 }
 
 // NewInfraComponentHandler returns a handler wired to the given repos.
-func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo, checks repo.CheckRepo, traefik repo.TraefikComponentRepo, store *repo.Store) *InfraComponentHandler {
-	return &InfraComponentHandler{components: components, rollups: rollups, checks: checks, traefik: traefik, store: store}
+func NewInfraComponentHandler(components repo.InfraComponentRepo, rollups repo.ResourceRollupRepo, checks repo.CheckRepo, events repo.EventRepo, store *repo.Store) *InfraComponentHandler {
+	return &InfraComponentHandler{components: components, rollups: rollups, checks: checks, events: events, store: store}
 }
 
 // Routes registers all infrastructure component endpoints on r.
@@ -41,10 +41,10 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
 	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
 	r.Get("/infrastructure/{id}/snmp", h.GetSNMPDetail)
-	r.Get("/infrastructure/{id}/traefik", h.GetTraefikDetail)
 	r.Get("/infrastructure/{id}/traefik/overview", h.GetTraefikOverview)
 	r.Get("/infrastructure/{id}/traefik/routers", h.GetTraefikRouters)
 	r.Get("/infrastructure/{id}/traefik/services", h.GetTraefikServices)
+	r.Get("/infrastructure/{id}/events", h.ListEvents)
 	r.Get("/infrastructure/{id}/children", h.ListChildren)
 	r.Get("/infrastructure/{id}/apps", h.ListLinkedApps)
 	r.Post("/infrastructure/{id}/apps/{appID}", h.LinkApp)
@@ -727,112 +727,6 @@ func (h *InfraComponentHandler) GetSNMPDetail(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// ── Traefik detail ────────────────────────────────────────────────────────────
-
-// traefikCertWithCheck extends TraefikComponentCert with the matching SSL check status.
-type traefikCertWithCheck struct {
-	ID          string  `json:"id"`
-	Domain      string  `json:"domain"`
-	Issuer      *string `json:"issuer,omitempty"`
-	ExpiresAt   *string `json:"expires_at,omitempty"`
-	SANs        []string `json:"sans"`
-	LastSeenAt  string  `json:"last_seen_at"`
-	CheckStatus string  `json:"check_status"` // "", "up", "warn", "down", "critical"
-	CheckID     string  `json:"check_id,omitempty"`
-}
-
-type traefikDetailResponse struct {
-	ComponentID string                 `json:"component_id"`
-	CertCount   int                    `json:"cert_count"`
-	WarnCount   int                    `json:"warn_count"`
-	CritCount   int                    `json:"crit_count"`
-	Certs       []traefikCertWithCheck `json:"certs"`
-	Routes      []models.TraefikRoute  `json:"routes"`
-}
-
-// GetTraefikDetail returns certs, routes, and SSL check status for a Traefik component.
-// GET /api/v1/infrastructure/{id}/traefik
-func (h *InfraComponentHandler) GetTraefikDetail(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-
-	comp, err := h.components.Get(r.Context(), id)
-	if errors.Is(err, repo.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "component not found")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if comp.Type != "traefik" {
-		writeError(w, http.StatusBadRequest, "component is not a traefik type")
-		return
-	}
-
-	certs, err := h.traefik.ListCerts(r.Context(), id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	routes, err := h.traefik.ListRoutes(r.Context(), id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	// Build a map of SSL checks owned by this component, keyed by target (domain).
-	ownedChecks, err := h.checks.ListBySourceComponent(r.Context(), id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	checkByDomain := make(map[string]models.MonitorCheck, len(ownedChecks))
-	for _, ch := range ownedChecks {
-		checkByDomain[ch.Target] = ch
-	}
-
-	now := time.Now().UTC()
-	warnDays := 30
-	critDays := 7
-
-	certItems := make([]traefikCertWithCheck, len(certs))
-	warnCount, critCount := 0, 0
-	for i, c := range certs {
-		item := traefikCertWithCheck{
-			ID:         c.ID,
-			Domain:     c.Domain,
-			Issuer:     c.Issuer,
-			SANs:       c.SANs,
-			LastSeenAt: c.LastSeenAt.UTC().Format(time.RFC3339),
-		}
-		if c.ExpiresAt != nil {
-			s := c.ExpiresAt.UTC().Format(time.RFC3339)
-			item.ExpiresAt = &s
-			days := int(c.ExpiresAt.Sub(now).Hours() / 24)
-			if days <= critDays {
-				critCount++
-			} else if days <= warnDays {
-				warnCount++
-			}
-		}
-		if ch, ok := checkByDomain[c.Domain]; ok {
-			item.CheckStatus = ch.LastStatus
-			item.CheckID = ch.ID
-		}
-		certItems[i] = item
-	}
-
-	writeJSON(w, http.StatusOK, traefikDetailResponse{
-		ComponentID: id,
-		CertCount:   len(certs),
-		WarnCount:   warnCount,
-		CritCount:   critCount,
-		Certs:       certItems,
-		Routes:      routes,
-	})
-}
-
 // ── Children & linked-app endpoints ──────────────────────────────────────────
 
 // ListChildren returns all infrastructure components whose parent_id matches id.
@@ -918,6 +812,35 @@ func (h *InfraComponentHandler) UnlinkApp(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListEvents returns events whose fields.component_id matches the component.
+// Accepts the same filter params as GET /events (severity, since, until, limit, offset, sort, search).
+// GET /api/v1/infrastructure/{id}/events
+func (h *InfraComponentHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	f, err := parseFilter(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	f.ComponentID = id
+
+	evts, total, err := h.events.List(r.Context(), f)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	items := make([]eventItem, len(evts))
+	for i, e := range evts {
+		items[i] = toEventItem(e)
+	}
+	writeJSON(w, http.StatusOK, listEventsResponse{
+		Data:   items,
+		Total:  total,
+		Limit:  f.Limit,
+		Offset: f.Offset,
+	})
 }
 
 // ── Traefik expanded endpoints (Infra-10) ────────────────────────────────────

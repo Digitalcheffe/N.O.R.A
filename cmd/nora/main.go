@@ -210,7 +210,7 @@ func main() {
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
-		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, traefikComponentRepo, store).Routes(r)
+		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, eventRepo, store).Routes(r)
 		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDockerDiscoveryHandler(store, registry).Routes(r)

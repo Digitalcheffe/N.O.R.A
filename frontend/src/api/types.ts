@@ -79,6 +79,9 @@ export type EventSort = 'newest' | 'oldest' | 'severity_desc' | 'severity_asc'
 
 export interface EventFilter {
   app_id?: string
+  component_id?: string
+  source_type?: 'app' | 'infra' | 'check'
+  search?: string
   severity?: Severity
   from?: string
   to?: string
@@ -401,37 +404,6 @@ export interface ScanResult {
   error?: string
 }
 
-// ── Traefik Component ─────────────────────────────────────────────────────────
-
-export interface TraefikRoute {
-  id: string
-  component_id: string
-  name: string
-  rule: string
-  service: string
-  status: string
-  updated_at: string
-}
-
-export interface TraefikCertWithCheck {
-  id: string
-  domain: string
-  issuer?: string | null
-  expires_at?: string | null
-  sans: string[]
-  last_seen_at: string
-  check_status: string
-  check_id?: string
-}
-
-export interface TraefikComponentDetail {
-  component_id: string
-  cert_count: number
-  warn_count: number
-  crit_count: number
-  certs: TraefikCertWithCheck[]
-  routes: TraefikRoute[]
-}
 
 export interface ResourceSummary {
   component_id: string
