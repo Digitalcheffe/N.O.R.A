@@ -127,16 +127,11 @@ func (fs *synologyFakeServer) apiError(w http.ResponseWriter, code int) {
 func (fs *synologyFakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	if r.URL.Path != "/webapi/entry.cgi" {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
 	apiName := q.Get("api")
 	method := q.Get("method")
 
-	// Auth calls (login/logout) go to entry.cgi.
-	if apiName == "SYNO.API.Auth" {
+	// Auth calls (login/logout) go to auth.cgi.
+	if r.URL.Path == "/webapi/auth.cgi" {
 		switch method {
 		case "login":
 			if fs.loginShouldFail {
@@ -152,7 +147,12 @@ func (fs *synologyFakeServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simulate session expiry on the first N non-auth entry.cgi calls.
+	if r.URL.Path != "/webapi/entry.cgi" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	// Simulate session expiry on the first N entry.cgi calls.
 	if fs.expireFirstN > 0 && fs.callCount < fs.expireFirstN {
 		fs.callCount++
 		fs.apiError(w, 119)
@@ -463,22 +463,28 @@ func TestSynologyPoller_Poll_SessionReusedAcrossCycles(t *testing.T) {
 		q := r.URL.Query()
 		w.Header().Set("Content-Type", "application/json")
 
+		if r.URL.Path == "/webapi/auth.cgi" {
+			if q.Get("method") == "login" {
+				loginCount++
+				b, _ := json.Marshal(map[string]interface{}{
+					"success": true,
+					"data":    map[string]string{"sid": "reused-sid"},
+				})
+				w.Write(b) //nolint:errcheck
+			} else {
+				// logout and any other auth calls
+				b, _ := json.Marshal(map[string]interface{}{"success": true, "data": nil})
+				w.Write(b) //nolint:errcheck
+			}
+			return
+		}
+
 		if r.URL.Path != "/webapi/entry.cgi" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		if q.Get("api") == "SYNO.API.Auth" && q.Get("method") == "login" {
-			loginCount++
-			b, _ := json.Marshal(map[string]interface{}{
-				"success": true,
-				"data":    map[string]string{"sid": "reused-sid"},
-			})
-			w.Write(b) //nolint:errcheck
-			return
-		}
-
-		// All other calls succeed with minimal data.
+		// All other calls (entry.cgi) succeed with minimal data.
 		var data interface{}
 		switch q.Get("api") {
 		case "SYNO.Core.System":
