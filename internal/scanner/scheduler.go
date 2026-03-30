@@ -1,0 +1,280 @@
+package scanner
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"sync"
+	"time"
+
+	"github.com/digitalcheffe/nora/internal/models"
+	"github.com/digitalcheffe/nora/internal/repo"
+	"github.com/google/uuid"
+)
+
+// ScanScheduler runs the three scan buckets — Discovery, Metrics, and
+// Snapshots — on their canonical intervals. Each tick fans out to all enabled
+// infrastructure components concurrently with a per-entity timeout.
+//
+// Concrete scanner implementations are registered via the Register* methods
+// before Start is called. Entity types with no registered scanner are skipped
+// silently, which lets REFACTOR-06/07/08 add implementations incrementally
+// without requiring changes here.
+type ScanScheduler struct {
+	store      *repo.Store
+	discovery  map[string]DiscoveryScanner // keyed by entity type
+	metrics    map[string]MetricsScanner
+	snapshots  map[string]SnapshotScanner
+	mu         sync.RWMutex
+}
+
+// NewScanScheduler returns a ScanScheduler wired to store with empty scanner
+// registries. Register scanners before calling Start.
+func NewScanScheduler(store *repo.Store) *ScanScheduler {
+	return &ScanScheduler{
+		store:     store,
+		discovery: make(map[string]DiscoveryScanner),
+		metrics:   make(map[string]MetricsScanner),
+		snapshots: make(map[string]SnapshotScanner),
+	}
+}
+
+// RegisterDiscovery registers a DiscoveryScanner for the given entity type.
+func (s *ScanScheduler) RegisterDiscovery(entityType string, sc DiscoveryScanner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.discovery[entityType] = sc
+}
+
+// RegisterMetrics registers a MetricsScanner for the given entity type.
+func (s *ScanScheduler) RegisterMetrics(entityType string, sc MetricsScanner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.metrics[entityType] = sc
+}
+
+// RegisterSnapshot registers a SnapshotScanner for the given entity type.
+func (s *ScanScheduler) RegisterSnapshot(entityType string, sc SnapshotScanner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.snapshots[entityType] = sc
+}
+
+// Start launches the three ticker loops and blocks until ctx is cancelled.
+// Each ticker fires independently; slow discovery scans will not delay metrics
+// collection.
+func (s *ScanScheduler) Start(ctx context.Context) {
+	log.Printf("scan scheduler: starting (discovery=%s, metrics=%s, snapshots=%s)",
+		DiscoveryInterval, MetricsInterval, SnapshotInterval)
+
+	discoveryTicker := time.NewTicker(DiscoveryInterval)
+	metricsTicker := time.NewTicker(MetricsInterval)
+	snapshotTicker := time.NewTicker(SnapshotInterval)
+	defer discoveryTicker.Stop()
+	defer metricsTicker.Stop()
+	defer snapshotTicker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("scan scheduler: context cancelled — stopping")
+			return
+		case <-discoveryTicker.C:
+			go s.runDiscoveryPass(ctx)
+		case <-metricsTicker.C:
+			go s.runMetricsPass(ctx)
+		case <-snapshotTicker.C:
+			go s.runSnapshotPass(ctx)
+		}
+	}
+}
+
+// runDiscoveryPass iterates all enabled components and calls each registered
+// DiscoveryScanner concurrently with DiscoveryTimeout per entity.
+func (s *ScanScheduler) runDiscoveryPass(ctx context.Context) {
+	components, err := s.listEnabled(ctx)
+	if err != nil {
+		log.Printf("scan scheduler: discovery: list components: %v", err)
+		return
+	}
+
+	s.mu.RLock()
+	scanners := copyDiscovery(s.discovery)
+	s.mu.RUnlock()
+
+	var wg sync.WaitGroup
+	for i := range components {
+		c := &components[i]
+		sc, ok := scanners[c.Type]
+		if !ok {
+			continue
+		}
+		wg.Add(1)
+		go func(c *models.InfrastructureComponent, sc DiscoveryScanner) {
+			defer wg.Done()
+			tctx, cancel := context.WithTimeout(ctx, DiscoveryTimeout)
+			defer cancel()
+			result, err := sc.Discover(tctx, c.ID, c.Type)
+			if err != nil {
+				log.Printf("scan scheduler: discovery: %s (%s): %v", c.Name, c.ID, err)
+				s.writeErrorEvent(ctx, c, "discovery", err)
+				return
+			}
+			logDiscovery(c, result)
+		}(c, sc)
+	}
+	wg.Wait()
+}
+
+// runMetricsPass iterates all enabled components and calls each registered
+// MetricsScanner concurrently with MetricsTimeout per entity.
+func (s *ScanScheduler) runMetricsPass(ctx context.Context) {
+	components, err := s.listEnabled(ctx)
+	if err != nil {
+		log.Printf("scan scheduler: metrics: list components: %v", err)
+		return
+	}
+
+	s.mu.RLock()
+	scanners := copyMetrics(s.metrics)
+	s.mu.RUnlock()
+
+	var wg sync.WaitGroup
+	for i := range components {
+		c := &components[i]
+		sc, ok := scanners[c.Type]
+		if !ok {
+			continue
+		}
+		wg.Add(1)
+		go func(c *models.InfrastructureComponent, sc MetricsScanner) {
+			defer wg.Done()
+			tctx, cancel := context.WithTimeout(ctx, MetricsTimeout)
+			defer cancel()
+			_, err := sc.CollectMetrics(tctx, c.ID, c.Type)
+			if err != nil {
+				log.Printf("scan scheduler: metrics: %s (%s): %v", c.Name, c.ID, err)
+				s.writeErrorEvent(ctx, c, "metrics", err)
+			}
+		}(c, sc)
+	}
+	wg.Wait()
+}
+
+// runSnapshotPass iterates all enabled components and calls each registered
+// SnapshotScanner concurrently with SnapshotTimeout per entity.
+func (s *ScanScheduler) runSnapshotPass(ctx context.Context) {
+	components, err := s.listEnabled(ctx)
+	if err != nil {
+		log.Printf("scan scheduler: snapshot: list components: %v", err)
+		return
+	}
+
+	s.mu.RLock()
+	scanners := copySnapshots(s.snapshots)
+	s.mu.RUnlock()
+
+	var wg sync.WaitGroup
+	for i := range components {
+		c := &components[i]
+		sc, ok := scanners[c.Type]
+		if !ok {
+			continue
+		}
+		wg.Add(1)
+		go func(c *models.InfrastructureComponent, sc SnapshotScanner) {
+			defer wg.Done()
+			tctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
+			defer cancel()
+			_, err := sc.TakeSnapshot(tctx, c.ID, c.Type)
+			if err != nil {
+				log.Printf("scan scheduler: snapshot: %s (%s): %v", c.Name, c.ID, err)
+				s.writeErrorEvent(ctx, c, "snapshot", err)
+			}
+		}(c, sc)
+	}
+	wg.Wait()
+}
+
+// listEnabled returns all enabled infrastructure components from the store.
+func (s *ScanScheduler) listEnabled(ctx context.Context) ([]models.InfrastructureComponent, error) {
+	all, err := s.store.InfraComponents.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0]
+	for _, c := range all {
+		if c.Enabled {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+// writeErrorEvent writes an error-level event to the event log for a scan
+// failure. The scheduler continues running after a failed scan.
+func (s *ScanScheduler) writeErrorEvent(
+	ctx context.Context,
+	c *models.InfrastructureComponent,
+	bucket string,
+	scanErr error,
+) {
+	ev := &models.Event{
+		ID:         uuid.New().String(),
+		Level:      "error",
+		SourceName: c.Name,
+		SourceType: "physical_host",
+		SourceID:   c.ID,
+		Title:      fmt.Sprintf("%s scan failed — %s: %v", bucket, c.Name, scanErr),
+		Payload: fmt.Sprintf(
+			`{"bucket":%q,"entity_id":%q,"entity_type":%q,"error":%q}`,
+			bucket, c.ID, c.Type, scanErr.Error(),
+		),
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.store.Events.Create(ctx, ev); err != nil {
+		log.Printf("scan scheduler: write error event for %s (%s): %v", c.Name, c.ID, err)
+	}
+}
+
+// logDiscovery emits structured log lines based on what the discovery pass found.
+func logDiscovery(c *models.InfrastructureComponent, r *DiscoveryResult) {
+	if r.Found == 0 && r.Disappeared == 0 {
+		log.Printf("scan scheduler: discovery: %s (%s): no changes", c.Name, c.ID)
+		return
+	}
+	if r.Found > 0 {
+		log.Printf("scan scheduler: discovery: %s (%s): %d new/updated entities",
+			c.Name, c.ID, r.Found)
+	}
+	if r.Disappeared > 0 {
+		log.Printf("scan scheduler: discovery: %s (%s): %d entities disappeared",
+			c.Name, c.ID, r.Disappeared)
+	}
+}
+
+// copyDiscovery returns a shallow copy of the scanner map so it can be
+// iterated without holding the lock.
+func copyDiscovery(m map[string]DiscoveryScanner) map[string]DiscoveryScanner {
+	out := make(map[string]DiscoveryScanner, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+func copyMetrics(m map[string]MetricsScanner) map[string]MetricsScanner {
+	out := make(map[string]MetricsScanner, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
+func copySnapshots(m map[string]SnapshotScanner) map[string]SnapshotScanner {
+	out := make(map[string]SnapshotScanner, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
