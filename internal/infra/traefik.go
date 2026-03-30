@@ -160,10 +160,11 @@ type traefikRouterRaw struct {
 
 // FetchRouters calls GET /api/http/routers, handling pagination, and returns all routers.
 func (c *TraefikClient) FetchRouters(ctx context.Context) ([]TraefikRouter, error) {
+	const perPage = 100
 	var all []TraefikRouter
 	page := 1
 	for {
-		path := fmt.Sprintf("/api/http/routers?page=%d&per_page=100", page)
+		path := fmt.Sprintf("/api/http/routers?page=%d&per_page=%d", page, perPage)
 		req, err := c.newRequest(ctx, "GET", path)
 		if err != nil {
 			return nil, err
@@ -174,14 +175,17 @@ func (c *TraefikClient) FetchRouters(ctx context.Context) ([]TraefikRouter, erro
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			return nil, fmt.Errorf("traefik fetch routers page %d: unexpected status %d", page, resp.StatusCode)
+			// On page 2+, a non-OK response means no more data — return what we have.
+			if page > 1 {
+				break
+			}
+			return nil, fmt.Errorf("traefik fetch routers: unexpected status %d", resp.StatusCode)
 		}
 		var raw []traefikRouterRaw
 		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 			resp.Body.Close()
 			return nil, fmt.Errorf("traefik fetch routers page %d: decode: %w", page, err)
 		}
-		nextPage := resp.Header.Get("X-Next-Page")
 		resp.Body.Close()
 
 		for _, r := range raw {
@@ -198,7 +202,8 @@ func (c *TraefikClient) FetchRouters(ctx context.Context) ([]TraefikRouter, erro
 			}
 			all = append(all, tr)
 		}
-		if nextPage == "" || len(raw) == 0 {
+		// Only continue if the page was full — otherwise we have everything.
+		if len(raw) < perPage {
 			break
 		}
 		page++
@@ -226,10 +231,11 @@ type TraefikServiceStatus struct {
 
 // FetchServices calls GET /api/http/services, handling pagination, and returns all services.
 func (c *TraefikClient) FetchServices(ctx context.Context) ([]TraefikServiceStatus, error) {
+	const perPage = 100
 	var all []TraefikServiceStatus
 	page := 1
 	for {
-		path := fmt.Sprintf("/api/http/services?page=%d&per_page=100", page)
+		path := fmt.Sprintf("/api/http/services?page=%d&per_page=%d", page, perPage)
 		req, err := c.newRequest(ctx, "GET", path)
 		if err != nil {
 			return nil, err
@@ -240,14 +246,17 @@ func (c *TraefikClient) FetchServices(ctx context.Context) ([]TraefikServiceStat
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			return nil, fmt.Errorf("traefik fetch services page %d: unexpected status %d", page, resp.StatusCode)
+			// On page 2+, a non-OK response means no more data — return what we have.
+			if page > 1 {
+				break
+			}
+			return nil, fmt.Errorf("traefik fetch services: unexpected status %d", resp.StatusCode)
 		}
 		var raw []traefikServiceRaw
 		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 			resp.Body.Close()
 			return nil, fmt.Errorf("traefik fetch services page %d: decode: %w", page, err)
 		}
-		nextPage := resp.Header.Get("X-Next-Page")
 		resp.Body.Close()
 
 		for _, r := range raw {
@@ -263,7 +272,8 @@ func (c *TraefikClient) FetchServices(ctx context.Context) ([]TraefikServiceStat
 				ServerStatus: ss,
 			})
 		}
-		if nextPage == "" || len(raw) == 0 {
+		// Only continue if the page was full — otherwise we have everything.
+		if len(raw) < perPage {
 			break
 		}
 		page++
