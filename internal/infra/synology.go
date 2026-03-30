@@ -189,22 +189,25 @@ type synoUpgradeData struct {
 
 // ── Authentication ────────────────────────────────────────────────────────────
 
-// login authenticates with DSM via entry.cgi and caches the returned SID.
+// login authenticates with DSM via auth.cgi and caches the returned SID.
+// auth.cgi is the dedicated auth endpoint supported by DSM 6.x and 7.x alike;
+// entry.cgi auth requires DSM 7+ and returns error 101 on older firmware.
 func (p *SynologyPoller) login(ctx context.Context) error {
-	u, err := url.Parse(p.creds.BaseURL + "/webapi/entry.cgi")
+	u, err := url.Parse(p.creds.BaseURL + "/webapi/auth.cgi")
 	if err != nil {
 		return fmt.Errorf("parse base URL: %w", err)
 	}
 	q := url.Values{}
 	q.Set("api", "SYNO.API.Auth")
-	q.Set("version", "6")
+	q.Set("version", "3")
 	q.Set("method", "login")
 	q.Set("account", p.creds.Username)
 	q.Set("passwd", p.creds.Password)
+	q.Set("session", "NORA")
 	q.Set("format", "sid")
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("build login request: %w", err)
 	}
@@ -252,19 +255,20 @@ func (p *SynologyPoller) Shutdown(ctx context.Context) {
 		return
 	}
 
-	u, err := url.Parse(p.creds.BaseURL + "/webapi/entry.cgi")
+	u, err := url.Parse(p.creds.BaseURL + "/webapi/auth.cgi")
 	if err != nil {
 		log.Printf("synology poller %s: logout: parse URL: %v", p.componentID, err)
 		return
 	}
 	q := url.Values{}
 	q.Set("api", "SYNO.API.Auth")
-	q.Set("version", "6")
+	q.Set("version", "3")
 	q.Set("method", "logout")
+	q.Set("session", "NORA")
 	q.Set("_sid", sid)
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		log.Printf("synology poller %s: logout: build request: %v", p.componentID, err)
 		return
