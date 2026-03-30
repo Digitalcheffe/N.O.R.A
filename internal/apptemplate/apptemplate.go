@@ -28,17 +28,41 @@ type AppTemplateMeta struct {
 	Capability  string `yaml:"capability"`
 }
 
+// EventTypeKeyRule synthesizes an event_type field from payload structure.
+// Used for apps (like Ghost) that do not include the event type in the payload body.
+// Rules are evaluated in order; the first matching top-level key wins.
+type EventTypeKeyRule struct {
+	// Key is the top-level JSON key whose presence triggers this rule (e.g. "post").
+	Key string `yaml:"key"`
+	// StatusPath is a JSONPath to extract a status value (e.g. "$.post.current.status").
+	// When set, event_type is synthesized as Prefix + status_value.
+	// If the path resolves to empty, falls through to Default.
+	StatusPath string `yaml:"status_path"`
+	// Prefix is prepended to the StatusPath value (e.g. "post.").
+	Prefix string `yaml:"prefix"`
+	// PresentPath is a JSONPath checked for presence.
+	// If non-empty → IfPresent is used; if empty/missing → IfAbsent.
+	PresentPath string `yaml:"present_path"`
+	// IfPresent is the event_type when PresentPath resolves to a non-empty value.
+	IfPresent string `yaml:"if_present"`
+	// IfAbsent is the event_type when PresentPath is empty or missing.
+	IfAbsent string `yaml:"if_absent"`
+	// Default is used when StatusPath yields an empty value and no PresentPath is set.
+	Default string `yaml:"default"`
+}
+
 // Webhook holds ingest processing configuration for the template.
 type Webhook struct {
-	SetupInstructions    string            `yaml:"setup_instructions"`
-	RecommendedEvents    []string          `yaml:"recommended_events"`
-	NotRecommended       []string          `yaml:"not_recommended"`
-	FieldMappings        map[string]string `yaml:"field_mappings"`
-	DisplayTemplate      string            `yaml:"display_template"`
-	DisplayTemplates     map[string]string `yaml:"display_templates"`
-	SeverityField        string            `yaml:"severity_field"`
-	SeverityCompoundField string           `yaml:"severity_compound_field"`
-	SeverityMapping      map[string]string `yaml:"severity_mapping"`
+	SetupInstructions     string             `yaml:"setup_instructions"`
+	RecommendedEvents     []string           `yaml:"recommended_events"`
+	NotRecommended        []string           `yaml:"not_recommended"`
+	FieldMappings         map[string]string  `yaml:"field_mappings"`
+	EventTypeKeys         []EventTypeKeyRule `yaml:"event_type_keys"`
+	DisplayTemplate       string             `yaml:"display_template"`
+	DisplayTemplates      map[string]string  `yaml:"display_templates"`
+	SeverityField         string             `yaml:"severity_field"`
+	SeverityCompoundField string             `yaml:"severity_compound_field"`
+	SeverityMapping       map[string]string  `yaml:"severity_mapping"`
 }
 
 // Monitor holds active check configuration for the template.
@@ -128,11 +152,48 @@ func (r *Registry) List() map[string]*AppTemplate {
 	return out
 }
 
+// InferEventTypeFromKeys inspects a decoded JSON payload for the first matching
+// EventTypeKeyRule and returns a synthesized event_type string.
+// Returns "" if no rule matches.
+func InferEventTypeFromKeys(payload interface{}, keys []EventTypeKeyRule) string {
+	obj, ok := payload.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	for _, rule := range keys {
+		if _, ok := obj[rule.Key]; !ok {
+			continue
+		}
+		// Top-level key found — apply rule.
+		if rule.StatusPath != "" {
+			if v, ok := jsonPathGet(payload, rule.StatusPath); ok && v != "" {
+				return rule.Prefix + v
+			}
+			if rule.Default != "" {
+				return rule.Default
+			}
+		}
+		if rule.PresentPath != "" {
+			v, _ := jsonPathGet(payload, rule.PresentPath)
+			if v != "" {
+				return rule.IfPresent
+			}
+			return rule.IfAbsent
+		}
+		if rule.Default != "" {
+			return rule.Default
+		}
+	}
+	return ""
+}
+
 // ExtractFields evaluates each JSONPath in the template's field_mappings against payload
 // and returns a flat tag→value map. Returns an error only on JSON decode failure.
+// If the template has event_type_keys configured and event_type is not already extracted,
+// it synthesizes event_type from the payload structure.
 func (r *Registry) ExtractFields(templateID string, payload []byte) (map[string]string, error) {
 	t, ok := r.templates[templateID]
-	if !ok || len(t.Webhook.FieldMappings) == 0 {
+	if !ok {
 		return map[string]string{}, nil
 	}
 
@@ -147,6 +208,14 @@ func (r *Registry) ExtractFields(templateID string, payload []byte) (map[string]
 			out[tag] = v
 		}
 	}
+
+	// Synthesize event_type from payload structure when not already extracted.
+	if _, hasET := out["event_type"]; !hasET && len(t.Webhook.EventTypeKeys) > 0 {
+		if et := InferEventTypeFromKeys(root, t.Webhook.EventTypeKeys); et != "" {
+			out["event_type"] = et
+		}
+	}
+
 	return out, nil
 }
 

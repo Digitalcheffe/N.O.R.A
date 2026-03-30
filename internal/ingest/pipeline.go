@@ -60,6 +60,15 @@ func Process(ctx context.Context, store *repo.Store, profiler apptemplate.Loader
 		p, err := profiler.Get(app.ProfileID)
 		if err == nil && p != nil {
 			fieldsMap = extractFields(rawBody, p.Webhook.FieldMappings)
+			// Synthesize event_type from payload structure when the template uses key detection.
+			if _, hasET := fieldsMap["event_type"]; !hasET && len(p.Webhook.EventTypeKeys) > 0 {
+				var decoded interface{}
+				if jsonErr := json.Unmarshal(rawBody, &decoded); jsonErr == nil {
+					if et := apptemplate.InferEventTypeFromKeys(decoded, p.Webhook.EventTypeKeys); et != "" {
+						fieldsMap["event_type"] = et
+					}
+				}
+			}
 			severity = mapSeverity(fieldsMap, p.Webhook.SeverityField, p.Webhook.SeverityCompoundField, p.Webhook.SeverityMapping)
 			// Pick per-eventType template if available, fall back to global template.
 			tmpl := p.Webhook.DisplayTemplate
