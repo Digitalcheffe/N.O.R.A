@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -41,6 +42,7 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
 	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
 	r.Get("/infrastructure/{id}/snmp", h.GetSNMPDetail)
+	r.Get("/infrastructure/{id}/synology", h.GetSynologyDetail)
 	r.Get("/infrastructure/{id}/traefik/overview", h.GetTraefikOverview)
 	r.Get("/infrastructure/{id}/traefik/routers", h.GetTraefikRouters)
 	r.Get("/infrastructure/{id}/traefik/services", h.GetTraefikServices)
@@ -725,6 +727,50 @@ func (h *InfraComponentHandler) GetSNMPDetail(w http.ResponseWriter, r *http.Req
 		Disks: disks,
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── Synology detail ───────────────────────────────────────────────────────────
+
+// GetSynologyDetail returns the latest Synology DSM snapshot stored in synology_meta.
+// GET /api/v1/infrastructure/{id}/synology
+func (h *InfraComponentHandler) GetSynologyDetail(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if comp.Type != "synology" {
+		writeError(w, http.StatusBadRequest, "component is not a Synology NAS")
+		return
+	}
+
+	// No poll has run yet — return a zero-value no_data response so the UI renders.
+	if comp.SynologyMeta == nil || *comp.SynologyMeta == "" {
+		resp := infra.SynologyMeta{
+			Volumes: []infra.SynologyVolume{},
+			Disks:   []infra.SynologyDisk{},
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"data": resp, "no_data": true})
+		return
+	}
+
+	var meta infra.SynologyMeta
+	if jsonErr := json.Unmarshal([]byte(*comp.SynologyMeta), &meta); jsonErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse synology_meta")
+		return
+	}
+	if meta.Volumes == nil {
+		meta.Volumes = []infra.SynologyVolume{}
+	}
+	if meta.Disks == nil {
+		meta.Disks = []infra.SynologyDisk{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"data": meta})
 }
 
 // ── Children & linked-app endpoints ──────────────────────────────────────────

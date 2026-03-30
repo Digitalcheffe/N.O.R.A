@@ -31,6 +31,9 @@ type InfraComponentRepo interface {
 	// UpdateSNMPMeta stores the latest SNMP system identity + resource snapshot JSON
 	// on the component without touching any other fields.
 	UpdateSNMPMeta(ctx context.Context, id, metaJSON string) error
+	// UpdateSynologyMeta stores the latest Synology DSM snapshot JSON on the component
+	// without touching any other fields.
+	UpdateSynologyMeta(ctx context.Context, id, metaJSON string) error
 }
 
 type sqliteInfraComponentRepo struct{ db *sqlx.DB }
@@ -44,7 +47,7 @@ func (r *sqliteInfraComponentRepo) List(ctx context.Context) ([]models.Infrastru
 	var rows []models.InfrastructureComponent
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
-		       parent_id, credentials, snmp_config, snmp_meta,
+		       parent_id, credentials, snmp_config, snmp_meta, synology_meta,
 		       COALESCE(notes,'') AS notes, enabled,
 		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
 		       created_at
@@ -63,7 +66,7 @@ func (r *sqliteInfraComponentRepo) ListByParent(ctx context.Context, parentID st
 	var rows []models.InfrastructureComponent
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
-		       parent_id, credentials, snmp_config, snmp_meta,
+		       parent_id, credentials, snmp_config, snmp_meta, synology_meta,
 		       COALESCE(notes,'') AS notes, enabled,
 		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
 		       created_at
@@ -83,7 +86,7 @@ func (r *sqliteInfraComponentRepo) Get(ctx context.Context, id string) (*models.
 	var c models.InfrastructureComponent
 	err := r.db.GetContext(ctx, &c, `
 		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
-		       parent_id, credentials, snmp_config, snmp_meta,
+		       parent_id, credentials, snmp_config, snmp_meta, synology_meta,
 		       COALESCE(notes,'') AS notes, enabled,
 		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
 		       created_at
@@ -162,6 +165,19 @@ func (r *sqliteInfraComponentRepo) UpdateSNMPMeta(ctx context.Context, id, metaJ
 		metaJSON, id)
 	if err != nil {
 		return fmt.Errorf("update snmp_meta: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteInfraComponentRepo) UpdateSynologyMeta(ctx context.Context, id, metaJSON string) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE infrastructure_components SET synology_meta = ? WHERE id = ?`,
+		metaJSON, id)
+	if err != nil {
+		return fmt.Errorf("update synology_meta: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound

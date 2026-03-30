@@ -63,31 +63,45 @@ func createSynologyTestComponent(t *testing.T, store *repo.Store, id string) {
 	}
 }
 
-// synologyFakeServer handles DSM API requests.
+// synologyFakeServer handles DSM API requests matching the new API structure:
+// - Login/Logout: POST /webapi/entry.cgi with api=SYNO.API.Auth
+// - System info:  GET  /webapi/entry.cgi api=SYNO.Core.System method=info
+// - Utilization:  GET  /webapi/entry.cgi api=SYNO.Core.System.Utilization method=get
+// - Volumes:      GET  /webapi/entry.cgi api=SYNO.Core.System method=info type=storage
+// - Disks:        GET  /webapi/entry.cgi api=SYNO.Storage.CGI.Storage method=load_info
+// - Upgrade:      GET  /webapi/entry.cgi api=SYNO.Core.Upgrade method=check
 type synologyFakeServer struct {
 	sidToReturn     string
 	loginShouldFail bool
 
-	// expireFirstN causes the first N entry.cgi calls to return code 119.
+	// expireFirstN causes the first N entry.cgi non-auth calls to return code 119.
 	expireFirstN int
 	callCount    int
 
-	systemInfo synoSystemInfo
-	volumes    []synoVolume
-	disks      []synoDisk
+	systemInfo  synoCoreSystemInfo
+	utilization synoUtilization
+	volumes     []synoVolumeInfo
+	disks       []synoStorageDisk
+	upgrade     synoUpgradeData
 }
 
 func newSynologyFakeServer(t *testing.T) (*httptest.Server, *synologyFakeServer) {
 	t.Helper()
 	fs := &synologyFakeServer{
 		sidToReturn: "test-session-id",
-		systemInfo: synoSystemInfo{
-			CPUUserLoad: 25.0,
-			RAMTotal:    8192,
-			RAMUsed:     4096,
+		systemInfo: synoCoreSystemInfo{
+			Model:       "DS920+",
+			FirmwareVer: "7.2.1-69057",
+			HostName:    "synology",
+			UpTime:      86400,
+			Temperature: 38,
 		},
-		volumes: []synoVolume{
-			{VolPath: "/volume1", SizeTotalByte: "1000000000", SizeUsedByte: "500000000"},
+		utilization: synoUtilization{
+			CPU:    synoUtilCPU{UserLoad: 25.0},
+			Memory: synoUtilMemory{RealUsage: 50.0, RealTotal: 8192, AvailReal: 4096},
+		},
+		volumes: []synoVolumeInfo{
+			{VolPath: "/volume1", Status: "normal", TotalSize: "1000000000", UsedSize: "500000000"},
 		},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(fs.handle))
@@ -113,8 +127,17 @@ func (fs *synologyFakeServer) apiError(w http.ResponseWriter, code int) {
 func (fs *synologyFakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	if r.URL.Path == "/webapi/auth.cgi" {
-		switch q.Get("method") {
+	if r.URL.Path != "/webapi/entry.cgi" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	apiName := q.Get("api")
+	method := q.Get("method")
+
+	// Auth calls (login/logout) go to entry.cgi.
+	if apiName == "SYNO.API.Auth" {
+		switch method {
 		case "login":
 			if fs.loginShouldFail {
 				fs.apiError(w, 400)
@@ -129,29 +152,31 @@ func (fs *synologyFakeServer) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.URL.Path == "/webapi/entry.cgi" {
-		// Simulate session expiry on the first N calls.
-		if fs.expireFirstN > 0 && fs.callCount < fs.expireFirstN {
-			fs.callCount++
-			fs.apiError(w, 119)
-			return
-		}
+	// Simulate session expiry on the first N non-auth entry.cgi calls.
+	if fs.expireFirstN > 0 && fs.callCount < fs.expireFirstN {
 		fs.callCount++
-
-		switch q.Get("api") {
-		case "SYNO.Core.System":
-			fs.ok(w, fs.systemInfo)
-		case "SYNO.Storage.CGI.Storage":
-			fs.ok(w, map[string]interface{}{"volumes": fs.volumes})
-		case "SYNO.Storage.CGI.DiskHealth":
-			fs.ok(w, map[string]interface{}{"disks": fs.disks})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
+		fs.apiError(w, 119)
 		return
 	}
+	fs.callCount++
 
-	w.WriteHeader(http.StatusNotFound)
+	switch apiName {
+	case "SYNO.Core.System":
+		if q.Get("type") == "storage" {
+			fs.ok(w, map[string]interface{}{"vol_info": fs.volumes})
+		} else {
+			fs.ok(w, fs.systemInfo)
+		}
+	case "SYNO.Core.System.Utilization":
+		fs.ok(w, fs.utilization)
+	case "SYNO.Storage.CGI.Storage":
+		fs.ok(w, map[string]interface{}{"disks": fs.disks})
+	case "SYNO.Core.Upgrade":
+		fs.ok(w, fs.upgrade)
+	default:
+		// Unknown API — return empty success so the poller treats it as non-fatal.
+		fs.ok(w, map[string]interface{}{})
+	}
 }
 
 func makeSynologyCredentials(baseURL string) string {
@@ -221,13 +246,12 @@ func TestSynologyPoller_Poll_WritesResourceReadingsAndSetsOnline(t *testing.T) {
 
 func TestSynologyPoller_Poll_CPUMemValues(t *testing.T) {
 	srv, fs := newSynologyFakeServer(t)
-	fs.systemInfo = synoSystemInfo{
-		CPUUserLoad: 50.0,
-		RAMTotal:    8192,
-		RAMUsed:     4096, // 50%
+	fs.utilization = synoUtilization{
+		CPU:    synoUtilCPU{UserLoad: 50.0},
+		Memory: synoUtilMemory{RealUsage: 50.0, RealTotal: 8192, AvailReal: 4096},
 	}
-	fs.volumes = []synoVolume{
-		{VolPath: "/volume1", SizeTotalByte: "1000000000", SizeUsedByte: "500000000"}, // 50%
+	fs.volumes = []synoVolumeInfo{
+		{VolPath: "/volume1", Status: "normal", TotalSize: "1000000000", UsedSize: "500000000"},
 	}
 
 	ctx := context.Background()
@@ -248,17 +272,19 @@ func TestSynologyPoller_Poll_CPUMemValues(t *testing.T) {
 		if a.SourceID != compID {
 			continue
 		}
-		if a.Avg < 49 || a.Avg > 51 {
-			t.Errorf("metric %s: avg=%v, want ~50", a.Metric, a.Avg)
+		if a.Metric == "cpu_percent" || a.Metric == "mem_percent" {
+			if a.Avg < 49 || a.Avg > 51 {
+				t.Errorf("metric %s: avg=%v, want ~50", a.Metric, a.Avg)
+			}
 		}
 	}
 }
 
 func TestSynologyPoller_Poll_MultipleVolumes(t *testing.T) {
 	srv, fs := newSynologyFakeServer(t)
-	fs.volumes = []synoVolume{
-		{VolPath: "/volume1", SizeTotalByte: "1000000000", SizeUsedByte: "250000000"},  // 25%
-		{VolPath: "/volume2", SizeTotalByte: "2000000000", SizeUsedByte: "1000000000"}, // 50%
+	fs.volumes = []synoVolumeInfo{
+		{VolPath: "/volume1", Status: "normal", TotalSize: "1000000000", UsedSize: "250000000"},
+		{VolPath: "/volume2", Status: "normal", TotalSize: "2000000000", UsedSize: "1000000000"},
 	}
 
 	ctx := context.Background()
@@ -291,7 +317,7 @@ func TestSynologyPoller_Poll_MultipleVolumes(t *testing.T) {
 
 func TestSynologyPoller_Poll_DiskWarningFiresWarnEvent(t *testing.T) {
 	srv, fs := newSynologyFakeServer(t)
-	fs.disks = []synoDisk{{ID: "sda", Status: "warning"}}
+	fs.disks = []synoStorageDisk{{Slot: 1, Model: "WD Red", Status: "warning"}}
 
 	ctx := context.Background()
 	store := newSynologyTestStore(t)
@@ -317,18 +343,18 @@ func TestSynologyPoller_Poll_DiskWarningFiresWarnEvent(t *testing.T) {
 	}
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "warn" && ev.DisplayText == "Synology disk sda status: warning" {
+		if ev.Severity == "warn" && ev.DisplayText == "Disk 1 (WD Red) warning" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected warn event for sda warning; events: %v", events)
+		t.Errorf("expected warn event for disk 1 warning; events: %v", events)
 	}
 }
 
 func TestSynologyPoller_Poll_DiskCriticalFiresErrorEvent(t *testing.T) {
 	srv, fs := newSynologyFakeServer(t)
-	fs.disks = []synoDisk{{ID: "sdb", Status: "critical"}}
+	fs.disks = []synoStorageDisk{{Slot: 2, Model: "WD Red", Status: "critical"}}
 
 	ctx := context.Background()
 	store := newSynologyTestStore(t)
@@ -343,46 +369,20 @@ func TestSynologyPoller_Poll_DiskCriticalFiresErrorEvent(t *testing.T) {
 	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "error" && ev.DisplayText == "Synology disk sdb status: critical" {
+		if ev.Severity == "error" && ev.DisplayText == "Disk 2 (WD Red) critical" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected error event for sdb critical; events: %v", events)
-	}
-}
-
-func TestSynologyPoller_Poll_DiskFailingFiresErrorEvent(t *testing.T) {
-	srv, fs := newSynologyFakeServer(t)
-	fs.disks = []synoDisk{{ID: "sdc", Status: "failing"}}
-
-	ctx := context.Background()
-	store := newSynologyTestStore(t)
-	compID := "syn-disk-fail"
-	createSynologyTestComponent(t, store, compID)
-
-	poller, _ := NewSynologyPoller(compID, makeSynologyCredentials(srv.URL))
-	if err := poller.Poll(ctx, store); err != nil {
-		t.Fatalf("Poll: %v", err)
-	}
-
-	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
-	found := false
-	for _, ev := range events {
-		if ev.Severity == "error" && ev.DisplayText == "Synology disk sdc status: failing" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected error event for sdc failing; events: %v", events)
+		t.Errorf("expected error event for disk 2 critical; events: %v", events)
 	}
 }
 
 func TestSynologyPoller_Poll_AllDisksNormal_NoEvent(t *testing.T) {
 	srv, fs := newSynologyFakeServer(t)
-	fs.disks = []synoDisk{
-		{ID: "sda", Status: "normal"},
-		{ID: "sdb", Status: "normal"},
+	fs.disks = []synoStorageDisk{
+		{Slot: 1, Model: "WD Red", Status: "normal"},
+		{Slot: 2, Model: "WD Red", Status: "normal"},
 	}
 
 	ctx := context.Background()
@@ -406,9 +406,39 @@ func TestSynologyPoller_Poll_AllDisksNormal_NoEvent(t *testing.T) {
 	}
 }
 
+func TestSynologyPoller_Poll_DiskStatusOnlyOnTransition(t *testing.T) {
+	srv, fs := newSynologyFakeServer(t)
+	fs.disks = []synoStorageDisk{{Slot: 1, Model: "WD Red", Status: "warning"}}
+
+	ctx := context.Background()
+	store := newSynologyTestStore(t)
+	compID := "syn-disk-transition"
+	createSynologyTestComponent(t, store, compID)
+
+	poller, _ := NewSynologyPoller(compID, makeSynologyCredentials(srv.URL))
+
+	// First poll — status transition from "" to "warning" should fire one event.
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("Poll 1: %v", err)
+	}
+	_, total1, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
+	if total1 != 1 {
+		t.Errorf("after first poll: expected 1 event, got %d", total1)
+	}
+
+	// Second poll — same status, no new event.
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("Poll 2: %v", err)
+	}
+	_, total2, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
+	if total2 != 1 {
+		t.Errorf("after second poll (same status): expected still 1 event, got %d", total2)
+	}
+}
+
 func TestSynologyPoller_Poll_SessionExpiryTriggersReauth(t *testing.T) {
 	srv, fs := newSynologyFakeServer(t)
-	// First entry.cgi call returns session-expired; poller should re-auth and retry.
+	// First entry.cgi non-auth call returns session-expired; poller should re-auth and retry.
 	fs.expireFirstN = 1
 
 	ctx := context.Background()
@@ -433,7 +463,12 @@ func TestSynologyPoller_Poll_SessionReusedAcrossCycles(t *testing.T) {
 		q := r.URL.Query()
 		w.Header().Set("Content-Type", "application/json")
 
-		if r.URL.Path == "/webapi/auth.cgi" && q.Get("method") == "login" {
+		if r.URL.Path != "/webapi/entry.cgi" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		if q.Get("api") == "SYNO.API.Auth" && q.Get("method") == "login" {
 			loginCount++
 			b, _ := json.Marshal(map[string]interface{}{
 				"success": true,
@@ -443,22 +478,26 @@ func TestSynologyPoller_Poll_SessionReusedAcrossCycles(t *testing.T) {
 			return
 		}
 
-		if r.URL.Path == "/webapi/entry.cgi" {
-			var data interface{}
-			switch q.Get("api") {
-			case "SYNO.Core.System":
-				data = synoSystemInfo{CPUUserLoad: 10, RAMTotal: 1024, RAMUsed: 512}
-			case "SYNO.Storage.CGI.Storage":
-				data = map[string]interface{}{"volumes": []interface{}{}}
-			case "SYNO.Storage.CGI.DiskHealth":
-				data = map[string]interface{}{"disks": []interface{}{}}
+		// All other calls succeed with minimal data.
+		var data interface{}
+		switch q.Get("api") {
+		case "SYNO.Core.System":
+			if q.Get("type") == "storage" {
+				data = map[string]interface{}{"vol_info": []interface{}{}}
+			} else {
+				data = synoCoreSystemInfo{Model: "DS920+"}
 			}
-			b, _ := json.Marshal(map[string]interface{}{"success": true, "data": data})
-			w.Write(b) //nolint:errcheck
-			return
+		case "SYNO.Core.System.Utilization":
+			data = synoUtilization{}
+		case "SYNO.Storage.CGI.Storage":
+			data = map[string]interface{}{"disks": []interface{}{}}
+		case "SYNO.Core.Upgrade":
+			data = synoUpgradeData{}
+		default:
+			data = map[string]interface{}{}
 		}
-
-		w.WriteHeader(http.StatusNotFound)
+		b, _ := json.Marshal(map[string]interface{}{"success": true, "data": data})
+		w.Write(b) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -508,5 +547,103 @@ func TestSynologyPoller_Poll_ConnectionRefused_ReturnsError(t *testing.T) {
 	}
 	if err := poller.Poll(ctx, store); err == nil {
 		t.Error("expected error for unreachable host, got nil")
+	}
+}
+
+func TestSynologyPoller_Poll_VolumeStatusChangeFiresEvent(t *testing.T) {
+	srv, fs := newSynologyFakeServer(t)
+	fs.volumes = []synoVolumeInfo{
+		{VolPath: "/volume1", Status: "normal", TotalSize: "1000000000", UsedSize: "500000000"},
+	}
+
+	ctx := context.Background()
+	store := newSynologyTestStore(t)
+	compID := "syn-vol-event"
+	createSynologyTestComponent(t, store, compID)
+
+	poller, _ := NewSynologyPoller(compID, makeSynologyCredentials(srv.URL))
+
+	// First poll with normal status — no event.
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("Poll 1: %v", err)
+	}
+	_, total1, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
+	if total1 != 0 {
+		t.Errorf("expected 0 events after normal poll, got %d", total1)
+	}
+
+	// Transition to degraded — event should fire.
+	fs.volumes[0].Status = "degraded"
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("Poll 2: %v", err)
+	}
+	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
+	found := false
+	for _, ev := range events {
+		if ev.Severity == "warn" && ev.DisplayText == "Volume /volume1 degraded" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warn event for /volume1 degraded; events: %v", events)
+	}
+}
+
+func TestSynologyPoller_Poll_DSMUpdateFiresEvent(t *testing.T) {
+	srv, fs := newSynologyFakeServer(t)
+	fs.upgrade = synoUpgradeData{Available: true, Version: "7.3.0-69999"}
+
+	ctx := context.Background()
+	store := newSynologyTestStore(t)
+	compID := "syn-update"
+	createSynologyTestComponent(t, store, compID)
+
+	poller, _ := NewSynologyPoller(compID, makeSynologyCredentials(srv.URL))
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+
+	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
+	found := false
+	for _, ev := range events {
+		if ev.Severity == "info" && ev.DisplayText == "DSM update available: 7.3.0-69999" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected info event for DSM update; events: %v", events)
+	}
+}
+
+func TestSynologyPoller_Poll_MetaStored(t *testing.T) {
+	srv, _ := newSynologyFakeServer(t)
+
+	ctx := context.Background()
+	store := newSynologyTestStore(t)
+	compID := "syn-meta"
+	createSynologyTestComponent(t, store, compID)
+
+	poller, _ := NewSynologyPoller(compID, makeSynologyCredentials(srv.URL))
+	if err := poller.Poll(ctx, store); err != nil {
+		t.Fatalf("Poll: %v", err)
+	}
+
+	comp, _ := store.InfraComponents.Get(ctx, compID)
+	if comp.SynologyMeta == nil || *comp.SynologyMeta == "" {
+		t.Fatal("synology_meta should be non-empty after a successful poll")
+	}
+
+	var meta SynologyMeta
+	if err := json.Unmarshal([]byte(*comp.SynologyMeta), &meta); err != nil {
+		t.Fatalf("unmarshal synology_meta: %v", err)
+	}
+	if meta.Model != "DS920+" {
+		t.Errorf("model: got %q, want \"DS920+\"", meta.Model)
+	}
+	if meta.CPUPercent != 25.0 {
+		t.Errorf("cpu_percent: got %v, want 25.0", meta.CPUPercent)
+	}
+	if len(meta.Volumes) != 1 {
+		t.Errorf("volumes: got %d, want 1", len(meta.Volumes))
 	}
 }

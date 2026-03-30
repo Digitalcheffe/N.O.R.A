@@ -1,0 +1,377 @@
+/* ── Synology Detail Page ────────────────────────────────────────────────── */
+
+.syn-loading,
+.syn-error {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text2);
+  padding: 24px 0;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.syn-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.syn-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.syn-back-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.syn-back-btn:hover { color: var(--text); }
+
+.syn-title {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.syn-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.syn-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.syn-status-dot.online   { background: var(--green); }
+.syn-status-dot.degraded { background: var(--yellow, #eab308); }
+.syn-status-dot.offline  { background: var(--red); }
+.syn-status-dot.unknown  { background: var(--text3); }
+
+.syn-status-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: capitalize;
+}
+
+.syn-type-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  background: var(--surface2, rgba(255,255,255,0.05));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.syn-ip {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.syn-polled-at {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* ── Card ────────────────────────────────────────────────────────────────── */
+
+.syn-card {
+  background: var(--surface, #1a1a2e);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+/* ── Section ─────────────────────────────────────────────────────────────── */
+
+.syn-section {
+  padding: 12px 0;
+}
+
+.syn-section:first-child { padding-top: 0; }
+.syn-section:last-child  { padding-bottom: 0; }
+
+.syn-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0 -20px;
+}
+
+.syn-section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+/* ── System Info grid ────────────────────────────────────────────────────── */
+
+.syn-info-grid {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 4px 12px;
+}
+
+.syn-info-key {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  align-self: center;
+}
+
+.syn-info-val {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* ── Resource bars ───────────────────────────────────────────────────────── */
+
+.syn-res-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.syn-res-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.syn-res-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.syn-res-track {
+  flex: 1;
+  height: 6px;
+  background: var(--surface2, rgba(255,255,255,0.07));
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.syn-res-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.syn-res-pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.syn-res-extra {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+/* ── Volumes ─────────────────────────────────────────────────────────────── */
+
+.syn-vol-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.syn-vol-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 2px solid transparent;
+  padding-left: 4px;
+}
+
+.syn-vol-row.syn-row-warn { border-left-color: var(--yellow, #eab308); }
+.syn-vol-row.syn-row-crit { border-left-color: var(--red); }
+
+.syn-vol-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.syn-vol-bar {
+  flex: 1;
+}
+
+.syn-vol-size {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.syn-vol-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+/* ── Disks ───────────────────────────────────────────────────────────────── */
+
+.syn-disk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.syn-disk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-left: 2px solid transparent;
+  padding-left: 4px;
+}
+
+.syn-disk-row.syn-row-warn { border-left-color: var(--yellow, #eab308); }
+.syn-disk-row.syn-row-crit { border-left-color: var(--red); }
+
+.syn-disk-slot {
+  color: var(--text3);
+  width: 48px;
+  flex-shrink: 0;
+}
+
+.syn-disk-model {
+  color: var(--text2);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.syn-disk-temp {
+  width: 40px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.syn-disk-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text2);
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+/* ── Status dots (inline) ────────────────────────────────────────────────── */
+
+.syn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.syn-dot.normal  { background: var(--green); }
+.syn-dot.warn    { background: var(--yellow, #eab308); }
+.syn-dot.crit    { background: var(--red); }
+.syn-dot.unknown { background: var(--text3); }
+
+/* ── Updates ─────────────────────────────────────────────────────────────── */
+
+.syn-update-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.syn-update-label {
+  color: var(--text3);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.syn-update-check {
+  color: var(--green);
+}
+
+.syn-update-arrow {
+  color: var(--yellow, #eab308);
+}
+
+.syn-update-value {
+  color: var(--text);
+}
+
+.syn-update-value.available {
+  color: var(--yellow, #eab308);
+  font-weight: 600;
+}
+
+.syn-update-current {
+  color: var(--text3);
+}
+
+.syn-update-current.muted,
+.syn-update-value.muted {
+  color: var(--text3);
+}
+
+/* ── Pending / awaiting ──────────────────────────────────────────────────── */
+
+.syn-pending-row {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  font-style: italic;
+}
+
+.syn-awaiting {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  text-align: center;
+  padding-top: 16px;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}

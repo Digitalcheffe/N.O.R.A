@@ -10,6 +10,7 @@ import { AppDetail } from './pages/AppDetail'
 import { Infrastructure } from './pages/Infrastructure'
 import { InfraComponentDetail } from './pages/InfraComponentDetail'
 import { ProxmoxDetail } from './pages/ProxmoxDetail'
+import { SynologyDetail } from './pages/SynologyDetail'
 import { TraefikDetail } from './pages/TraefikDetail'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="apps/:id" element={<AppDetail />} />
           <Route path="topology" element={<Infrastructure />} />
           <Route path="topology/proxmox/:componentId" element={<ProxmoxDetail />} />
+          <Route path="topology/synology/:componentId" element={<SynologyDetail />} />
           <Route path="topology/traefik/:componentId" element={<TraefikDetail />} />
           <Route path="topology/:id" element={<InfraComponentDetail />} />
           <Route path="settings" element={<Settings />} />
