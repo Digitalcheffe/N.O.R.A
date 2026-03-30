@@ -63,8 +63,8 @@ func createSynologyTestComponent(t *testing.T, store *repo.Store, id string) {
 	}
 }
 
-// synologyFakeServer handles DSM API requests matching the new API structure:
-// - Login/Logout: POST /webapi/entry.cgi with api=SYNO.API.Auth
+// synologyFakeServer handles DSM API requests:
+// - Login/Logout: GET  /webapi/auth.cgi  api=SYNO.API.Auth
 // - System info:  GET  /webapi/entry.cgi api=SYNO.Core.System method=info
 // - Utilization:  GET  /webapi/entry.cgi api=SYNO.Core.System.Utilization method=get
 // - Volumes:      GET  /webapi/entry.cgi api=SYNO.Core.System method=info type=storage
@@ -329,9 +329,10 @@ func TestSynologyPoller_Poll_DiskWarningFiresWarnEvent(t *testing.T) {
 		t.Fatalf("Poll: %v", err)
 	}
 
+	// A "warning" disk no longer degrades the component — only "critical" does.
 	comp, _ := store.InfraComponents.Get(ctx, compID)
-	if comp.LastStatus != "degraded" {
-		t.Errorf("last_status: got %q, want \"degraded\"", comp.LastStatus)
+	if comp.LastStatus != "online" {
+		t.Errorf("last_status: got %q, want \"online\" (warning disk is advisory, not degrading)", comp.LastStatus)
 	}
 
 	events, total, err := store.Events.List(ctx, repo.ListFilter{Limit: 50})

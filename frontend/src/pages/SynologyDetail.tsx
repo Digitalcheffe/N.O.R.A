@@ -9,6 +9,7 @@ import type {
   SynologyVolume,
   SynologyDisk,
 } from '../api/types'
+import './InfraComponentDetail.css'
 import './SynologyDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -68,10 +69,6 @@ function hostStatusClass(s: string): string {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="syn-section-label">{children}</div>
-}
 
 function ResourceBar({
   label, value, color, extra,
@@ -171,7 +168,7 @@ export function SynologyDetail() {
     return (
       <>
         <Topbar title="Synology NAS" />
-        <div className="content"><div className="syn-loading">Loading…</div></div>
+        <div className="content"><div className="icd-loading">Loading…</div></div>
       </>
     )
   }
@@ -181,8 +178,8 @@ export function SynologyDetail() {
       <>
         <Topbar title="Synology NAS" />
         <div className="content">
-          <div className="syn-error">{error ?? 'Component not found'}</div>
-          <button className="syn-back-btn" onClick={() => navigate('/topology')}>← Back</button>
+          <div className="icd-error">{error ?? 'Component not found'}</div>
+          <button className="icd-back-btn" onClick={() => navigate('/topology')}>← Back</button>
         </div>
       </>
     )
@@ -197,28 +194,28 @@ export function SynologyDetail() {
       <div className="content">
 
         {/* Header */}
-        <div className="syn-header">
-          <div className="syn-header-left">
-            <button className="syn-back-btn" onClick={() => navigate('/topology')}>← Infrastructure</button>
-            <h1 className="syn-title">{component.name}</h1>
+        <div className="icd-header">
+          <div className="icd-header-left">
+            <button className="icd-back-btn" onClick={() => navigate('/topology')}>← Infrastructure</button>
+            <h1 className="icd-title">{component.name}</h1>
           </div>
-          <div className="syn-header-right">
-            <span className={`syn-status-dot ${statusCls}`} />
-            <span className="syn-status-label">{component.last_status}</span>
-            <span className="syn-type-badge">Synology NAS</span>
-            {component.ip && <span className="syn-ip">{component.ip}</span>}
+          <div className="icd-header-meta">
+            <span className={`icd-status-dot ${statusCls}`} />
+            <span className="icd-status-label">{component.last_status}</span>
+            <span className="icd-type-badge">Synology NAS</span>
+            {component.ip && <span className="icd-ip">{component.ip}</span>}
             {d?.polled_at && (
               <span className="syn-polled-at">polled {timeAgo(d.polled_at)}</span>
             )}
           </div>
         </div>
 
-        {/* Card */}
-        <div className="syn-card">
-
-          {/* Section 1 — System Info */}
-          <div className="syn-section">
-            <SectionLabel>System Info</SectionLabel>
+        {/* Section 1 — System Info */}
+        <div className="icd-section">
+          <div className="icd-section-title">System Info</div>
+          {noData ? (
+            <div className="snmp-pending">Awaiting first scan</div>
+          ) : (
             <div className="syn-info-grid">
               <span className="syn-info-key">Model</span>
               <span className="syn-info-val">{d?.model || '—'}</span>
@@ -236,99 +233,86 @@ export function SynologyDetail() {
                 {d?.temperature_c ? `${d.temperature_c}°C` : '—'}
               </span>
             </div>
-          </div>
-
-          <div className="syn-divider" />
-
-          {/* Section 2 — CPU & Memory */}
-          <div className="syn-section">
-            <SectionLabel>CPU &amp; Memory</SectionLabel>
-            <div className="syn-res-list">
-              <ResourceBar
-                label="CPU"
-                value={d?.cpu_percent ?? 0}
-                color={barFillColor(d?.cpu_percent ?? 0)}
-              />
-              <ResourceBar
-                label="MEM"
-                value={d?.memory?.percent ?? 0}
-                color={barFillColor(d?.memory?.percent ?? 0)}
-                extra={
-                  d?.memory?.total_bytes
-                    ? `${formatBytes(d.memory.used_bytes)} / ${formatBytes(d.memory.total_bytes)}`
-                    : undefined
-                }
-              />
-            </div>
-          </div>
-
-          <div className="syn-divider" />
-
-          {/* Section 3 — Volumes */}
-          <div className="syn-section">
-            <SectionLabel>Volumes</SectionLabel>
-            {!d || d.volumes.length === 0 ? (
-              <div className="syn-pending-row">Pending first scan</div>
-            ) : (
-              <div className="syn-vol-list">
-                {d.volumes.map(vol => (
-                  <VolumeRow key={vol.path} vol={vol} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="syn-divider" />
-
-          {/* Section 4 — Disks */}
-          <div className="syn-section">
-            <SectionLabel>Disks</SectionLabel>
-            {!d || d.disks.length === 0 ? (
-              <div className="syn-pending-row">Pending first scan</div>
-            ) : (
-              <div className="syn-disk-list">
-                {d.disks.map(disk => (
-                  <DiskRow key={disk.slot} disk={disk} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="syn-divider" />
-
-          {/* Section 5 — Updates */}
-          <div className="syn-section">
-            <SectionLabel>Updates</SectionLabel>
-            <div className="syn-update-row">
-              <span className="syn-update-label">DSM</span>
-              {!d ? (
-                <span className="syn-update-value muted">—</span>
-              ) : d.update?.available ? (
-                <>
-                  <span className="syn-update-arrow">↑</span>
-                  <span className="syn-update-value available">{d.update.version} available</span>
-                  {d.dsm_version && (
-                    <span className="syn-update-current">(currently {d.dsm_version})</span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="syn-update-check">✓</span>
-                  <span className="syn-update-value">Up to date</span>
-                  {d.dsm_version && (
-                    <span className="syn-update-current muted">{d.dsm_version}</span>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Pending note */}
-          {noData && (
-            <div className="syn-awaiting">Awaiting first scan</div>
           )}
-
         </div>
+
+        {/* Section 2 — CPU & Memory */}
+        <div className="icd-section">
+          <div className="icd-section-title">CPU &amp; Memory</div>
+          <div className="syn-res-list">
+            <ResourceBar
+              label="CPU"
+              value={d?.cpu_percent ?? 0}
+              color={barFillColor(d?.cpu_percent ?? 0)}
+            />
+            <ResourceBar
+              label="MEM"
+              value={d?.memory?.percent ?? 0}
+              color={barFillColor(d?.memory?.percent ?? 0)}
+              extra={
+                d?.memory?.total_bytes
+                  ? `${formatBytes(d.memory.used_bytes)} / ${formatBytes(d.memory.total_bytes)}`
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+
+        {/* Section 3 — Volumes */}
+        <div className="icd-section">
+          <div className="icd-section-title">Volumes</div>
+          {!d || d.volumes.length === 0 ? (
+            <div className="snmp-pending">Pending first scan</div>
+          ) : (
+            <div className="syn-vol-list">
+              {d.volumes.map(vol => (
+                <VolumeRow key={vol.path} vol={vol} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Section 4 — Disks */}
+        <div className="icd-section">
+          <div className="icd-section-title">Disks</div>
+          {!d || d.disks.length === 0 ? (
+            <div className="snmp-pending">Pending first scan</div>
+          ) : (
+            <div className="syn-disk-list">
+              {d.disks.map(disk => (
+                <DiskRow key={disk.slot} disk={disk} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Section 5 — Updates */}
+        <div className="icd-section">
+          <div className="icd-section-title">Updates</div>
+          <div className="syn-update-row">
+            <span className="syn-update-label">DSM</span>
+            {!d ? (
+              <span className="syn-update-value muted">—</span>
+            ) : d.update?.available ? (
+              <>
+                <span className="syn-update-arrow">↑</span>
+                <span className="syn-update-value available">{d.update.version} available</span>
+                {d.dsm_version && (
+                  <span className="syn-update-current">(currently {d.dsm_version})</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="syn-update-check">✓</span>
+                <span className="syn-update-value">Up to date</span>
+                {d.dsm_version && (
+                  <span className="syn-update-current muted">{d.dsm_version}</span>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
       </div>
     </>
   )

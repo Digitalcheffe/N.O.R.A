@@ -141,12 +141,13 @@ func (e *synoCallErr) Error() string { return fmt.Sprintf("API call failed (erro
 
 // SYNO.Core.System method=info — system identity
 // DSM returns up_time as a JSON string (e.g. "86400"), not a number.
+// Field names match actual DSM 6/7 response keys (hostname, sys_temp).
 type synoCoreSystemInfo struct {
 	Model       string `json:"model"`
 	FirmwareVer string `json:"firmware_ver"`
-	HostName    string `json:"host_name"`
+	HostName    string `json:"hostname"`   // DSM uses "hostname", not "host_name"
 	UpTime      string `json:"up_time"`    // seconds, returned as string by DSM
-	Temperature int    `json:"temperature"` // Celsius
+	Temperature int    `json:"sys_temp"`   // DSM uses "sys_temp", not "temperature"
 }
 
 // SYNO.Core.System.Utilization method=get — CPU and memory utilization
@@ -626,7 +627,8 @@ func (p *SynologyPoller) fetchDisks(ctx context.Context, store *repo.Store, meta
 			Status:       disk.Status,
 		})
 
-		if disk.Status != "normal" {
+		// Only "critical" disk status degrades the component; "warning" is advisory.
+		if disk.Status == "critical" {
 			degraded = true
 		}
 
@@ -659,10 +661,10 @@ func (p *SynologyPoller) fetchDisks(ctx context.Context, store *repo.Store, meta
 			}
 		}
 
-		// Temperature threshold events: fire once when crossing >50°C, reset on cool-down.
+		// Temperature threshold events: fire once when crossing >55°C, reset on cool-down.
 		tempFlaggedI, _ := p.diskTempFlagged.Load(slotKey)
 		wasFlagged, _ := tempFlaggedI.(bool)
-		isFlagged := disk.Temp > 50
+		isFlagged := disk.Temp > 55
 		if isFlagged && !wasFlagged {
 			p.diskTempFlagged.Store(slotKey, true)
 			rawPayload, _ := json.Marshal(disk)
