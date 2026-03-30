@@ -149,4 +149,5 @@
 .auto-refresh-select option {
   background: var(--bg3);
   color: var(--text);
+  padding: 6px 12px;
 }
