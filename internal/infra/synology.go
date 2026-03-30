@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -131,6 +132,12 @@ type synoAPIError struct {
 type synoAuthData struct {
 	SID string `json:"sid"`
 }
+
+// synoCallErr is returned when DSM reports a non-success response so callers
+// can inspect the error code with errors.As.
+type synoCallErr struct{ Code int }
+
+func (e *synoCallErr) Error() string { return fmt.Sprintf("API call failed (error code %d)", e.Code) }
 
 // SYNO.Core.System method=info — system identity
 // DSM returns up_time as a JSON string (e.g. "86400"), not a number.
@@ -336,7 +343,7 @@ func (p *SynologyPoller) get(ctx context.Context, params url.Values, out interfa
 		if env.Error != nil {
 			code = env.Error.Code
 		}
-		return fmt.Errorf("API call failed (error code %d)", code)
+		return &synoCallErr{Code: code}
 	}
 
 	return json.Unmarshal(env.Data, out)
@@ -410,7 +417,11 @@ func (p *SynologyPoller) Poll(ctx context.Context, store *repo.Store) error {
 
 	if err := p.fetchUpdates(ctx, store, meta, now); err != nil {
 		// Non-fatal — some DSM versions or permission sets restrict this API.
-		log.Printf("synology poller %s: updates: %v (non-fatal)", p.componentID, err)
+		// Code 103 = API does not exist on this firmware; log nothing.
+		var callErr *synoCallErr
+		if !errors.As(err, &callErr) || callErr.Code != 103 {
+			log.Printf("synology poller %s: updates: %v (non-fatal)", p.componentID, err)
+		}
 	}
 
 	// Persist snapshot to synology_meta column.
