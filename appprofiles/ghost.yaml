@@ -1,0 +1,85 @@
+meta:
+  name: Ghost
+  category: Content
+  logo: ghost.png
+  description: Headless CMS for blogs and newsletters
+  capability: full
+
+webhook:
+  setup_instructions: |
+    In Ghost Admin, go to Settings → Integrations → Add custom integration.
+    Create one webhook per event type you want to track.
+    Set the webhook URL to: {base_url}/ingest/{token}
+    Recommended events: Post published, Post unpublished, Member added, Member deleted.
+    Note: Ghost does not include the event type in the payload body. NORA infers it
+    from the payload structure (post/page/member key + current status).
+  recommended_events:
+    - post.published
+    - post.unpublished
+    - post.scheduled
+    - member.added
+    - member.deleted
+  not_recommended:
+    - post.deleted
+  field_mappings:
+    post_title: "$.post.current.title"
+    post_status: "$.post.current.status"
+    post_url: "$.post.current.url"
+    post_author: "$.post.current.primary_author.name"
+    page_title: "$.page.current.title"
+    page_status: "$.page.current.status"
+    member_name: "$.member.current.name"
+    member_email: "$.member.current.email"
+    member_status: "$.member.current.status"
+  event_type_keys:
+    - key: post
+      status_path: "$.post.current.status"
+      prefix: "post."
+      default: "post.deleted"
+    - key: page
+      status_path: "$.page.current.status"
+      prefix: "page."
+      default: "page.updated"
+    - key: member
+      present_path: "$.member.current.name"
+      if_present: "member.added"
+      if_absent: "member.deleted"
+  severity_field: event_type
+  display_template: "Ghost event"
+  display_templates:
+    post.published: "Published — {post_title}"
+    post.draft: "Unpublished — {post_title}"
+    post.scheduled: "Scheduled — {post_title}"
+    post.deleted: "Deleted — {post_title}"
+    page.published: "Page published — {page_title}"
+    page.draft: "Page draft — {page_title}"
+    member.added: "New member — {member_name}"
+    member.deleted: "Member removed — {member_name}"
+  severity_mapping:
+    post.published: info
+    post.draft: warn
+    post.scheduled: info
+    post.deleted: warn
+    page.published: info
+    page.draft: info
+    member.added: info
+    member.deleted: warn
+
+monitor:
+  check_type: url
+  check_url: "{base_url}/ghost/api/v4/admin/site/"
+  auth_header: "Authorization: Ghost {admin_api_key}"
+  healthy_status: 200
+  check_interval: 5m
+
+digest:
+  categories:
+    - label: Posts Published
+      match_field: event_type
+      match_value: post.published
+    - label: Member Activity
+      match_field: event_type
+      match_value: member.added
+    - label: Member Activity
+      match_field: event_type
+      match_value: member.deleted

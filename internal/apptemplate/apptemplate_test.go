@@ -780,3 +780,301 @@ func TestHomeAssistant_SeverityMapping(t *testing.T) {
 		}
 	}
 }
+
+// ---- Ghost ----
+
+const ghostYAML = `
+meta:
+  name: Ghost
+  category: Content
+  logo: ghost.png
+  description: Headless CMS for blogs and newsletters
+  capability: full
+webhook:
+  field_mappings:
+    post_title: "$.post.current.title"
+    post_status: "$.post.current.status"
+    post_url: "$.post.current.url"
+    page_title: "$.page.current.title"
+    member_name: "$.member.current.name"
+    member_email: "$.member.current.email"
+  event_type_keys:
+    - key: post
+      status_path: "$.post.current.status"
+      prefix: "post."
+      default: "post.deleted"
+    - key: page
+      status_path: "$.page.current.status"
+      prefix: "page."
+      default: "page.updated"
+    - key: member
+      present_path: "$.member.current.name"
+      if_present: "member.added"
+      if_absent: "member.deleted"
+  severity_field: event_type
+  display_template: "Ghost event"
+  display_templates:
+    post.published: "Published — {post_title}"
+    post.draft: "Unpublished — {post_title}"
+    post.scheduled: "Scheduled — {post_title}"
+    post.deleted: "Deleted — {post_title}"
+    page.published: "Page published — {page_title}"
+    member.added: "New member — {member_name}"
+    member.deleted: "Member removed — {member_name}"
+  severity_mapping:
+    post.published: info
+    post.draft: warn
+    post.scheduled: info
+    post.deleted: warn
+    page.published: info
+    member.added: info
+    member.deleted: warn
+monitor:
+  check_type: url
+  check_url: "{base_url}/ghost/api/v4/admin/site/"
+  healthy_status: 200
+  check_interval: 5m
+digest:
+  categories:
+    - label: Posts Published
+      match_field: event_type
+      match_value: post.published
+    - label: Member Activity
+      match_field: event_type
+      match_value: member.added
+`
+
+func newGhostRegistry(t *testing.T) *apptemplate.Registry {
+	t.Helper()
+	fsys := fstest.MapFS{
+		"ghost.yaml": {Data: []byte(ghostYAML)},
+	}
+	reg, err := apptemplate.NewRegistry(fsys)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return reg
+}
+
+// TestGhost_PostPublished verifies event_type inference and display text for a published post.
+func TestGhost_PostPublished(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	payload := []byte(`{
+		"post": {
+			"current": {
+				"title": "Hello World",
+				"status": "published",
+				"url": "https://example.com/hello-world/",
+				"primary_author": {"name": "Ryan"}
+			},
+			"previous": {"status": "draft"}
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("ghost", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	if fields["event_type"] != "post.published" {
+		t.Errorf("event_type = %q, want %q", fields["event_type"], "post.published")
+	}
+	if fields["post_title"] != "Hello World" {
+		t.Errorf("post_title = %q, want %q", fields["post_title"], "Hello World")
+	}
+
+	got := reg.RenderDisplayText("ghost", fields)
+	want := "Published — Hello World"
+	if got != want {
+		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}
+
+// TestGhost_PostUnpublished verifies a post moved to draft renders as "Unpublished".
+func TestGhost_PostUnpublished(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	payload := []byte(`{
+		"post": {
+			"current": {
+				"title": "My Post",
+				"status": "draft"
+			},
+			"previous": {"status": "published"}
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("ghost", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	if fields["event_type"] != "post.draft" {
+		t.Errorf("event_type = %q, want %q", fields["event_type"], "post.draft")
+	}
+
+	got := reg.RenderDisplayText("ghost", fields)
+	want := "Unpublished — My Post"
+	if got != want {
+		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}
+
+// TestGhost_PostDeleted verifies a post with empty current status resolves to post.deleted.
+func TestGhost_PostDeleted(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	// Ghost sends empty current on delete.
+	payload := []byte(`{
+		"post": {
+			"current": {},
+			"previous": {"title": "Old Post", "status": "published"}
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("ghost", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	if fields["event_type"] != "post.deleted" {
+		t.Errorf("event_type = %q, want %q", fields["event_type"], "post.deleted")
+	}
+}
+
+// TestGhost_MemberAdded verifies member.added is inferred when current.name is present.
+func TestGhost_MemberAdded(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	payload := []byte(`{
+		"member": {
+			"current": {
+				"name": "Jane Doe",
+				"email": "jane@example.com",
+				"status": "free"
+			}
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("ghost", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	if fields["event_type"] != "member.added" {
+		t.Errorf("event_type = %q, want %q", fields["event_type"], "member.added")
+	}
+	if fields["member_name"] != "Jane Doe" {
+		t.Errorf("member_name = %q, want %q", fields["member_name"], "Jane Doe")
+	}
+
+	got := reg.RenderDisplayText("ghost", fields)
+	want := "New member — Jane Doe"
+	if got != want {
+		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}
+
+// TestGhost_MemberDeleted verifies member.deleted is inferred when current.name is absent.
+func TestGhost_MemberDeleted(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	// Ghost sends empty current on member delete.
+	payload := []byte(`{
+		"member": {
+			"current": {},
+			"previous": {"name": "Jane Doe", "email": "jane@example.com", "status": "free"}
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("ghost", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	if fields["event_type"] != "member.deleted" {
+		t.Errorf("event_type = %q, want %q", fields["event_type"], "member.deleted")
+	}
+
+	// Severity for member.deleted should be warn.
+	got := reg.MapSeverity("ghost", fields)
+	if got != "warn" {
+		t.Errorf("MapSeverity = %q, want warn", got)
+	}
+}
+
+// TestGhost_SeverityMapping verifies Ghost event types map to correct severity levels.
+func TestGhost_SeverityMapping(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	cases := []struct {
+		eventType string
+		want      string
+	}{
+		{"post.published", "info"},
+		{"post.draft", "warn"},
+		{"post.scheduled", "info"},
+		{"post.deleted", "warn"},
+		{"page.published", "info"},
+		{"member.added", "info"},
+		{"member.deleted", "warn"},
+		{"unknown.event", "info"},
+	}
+
+	for _, c := range cases {
+		fields := map[string]string{"event_type": c.eventType}
+		got := reg.MapSeverity("ghost", fields)
+		if got != c.want {
+			t.Errorf("MapSeverity(event_type=%q) = %q, want %q", c.eventType, got, c.want)
+		}
+	}
+}
+
+// TestGhost_PagePublished verifies page event type is correctly inferred.
+func TestGhost_PagePublished(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	payload := []byte(`{
+		"page": {
+			"current": {
+				"title": "About Us",
+				"status": "published"
+			}
+		}
+	}`)
+
+	fields, err := reg.ExtractFields("ghost", payload)
+	if err != nil {
+		t.Fatalf("ExtractFields error: %v", err)
+	}
+
+	if fields["event_type"] != "page.published" {
+		t.Errorf("event_type = %q, want %q", fields["event_type"], "page.published")
+	}
+
+	got := reg.RenderDisplayText("ghost", fields)
+	want := "Page published — About Us"
+	if got != want {
+		t.Errorf("RenderDisplayText = %q, want %q", got, want)
+	}
+}
+
+// TestGhost_LoadsFromYAML verifies the ghost template loads correctly from the YAML constant.
+func TestGhost_LoadsFromYAML(t *testing.T) {
+	reg := newGhostRegistry(t)
+
+	tmpl, err := reg.Get("ghost")
+	if err != nil || tmpl == nil {
+		t.Fatalf("Get ghost: err=%v tmpl=%v", err, tmpl)
+	}
+	if tmpl.Meta.Name != "Ghost" {
+		t.Errorf("name = %q, want Ghost", tmpl.Meta.Name)
+	}
+	if tmpl.Meta.Category != "Content" {
+		t.Errorf("category = %q, want Content", tmpl.Meta.Category)
+	}
+	if len(tmpl.Webhook.EventTypeKeys) != 3 {
+		t.Errorf("event_type_keys len = %d, want 3", len(tmpl.Webhook.EventTypeKeys))
+	}
+}
