@@ -37,6 +37,8 @@ func newDiscoveryLinkRouter(t *testing.T, profiles apptemplate.Loader) (http.Han
 		repo.NewMetricsRepo(db),
 		repo.NewUserRepo(db),
 		repo.NewTraefikComponentRepo(db),
+		repo.NewTraefikOverviewRepo(db),
+		repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db),
 		repo.NewDiscoveredRouteRepo(db),
 		nil,

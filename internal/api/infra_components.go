@@ -41,6 +41,9 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
 	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
 	r.Get("/infrastructure/{id}/traefik", h.GetTraefikDetail)
+	r.Get("/infrastructure/{id}/traefik/overview", h.GetTraefikOverview)
+	r.Get("/infrastructure/{id}/traefik/routers", h.GetTraefikRouters)
+	r.Get("/infrastructure/{id}/traefik/services", h.GetTraefikServices)
 	r.Get("/infrastructure/{id}/children", h.ListChildren)
 	r.Get("/infrastructure/{id}/apps", h.ListLinkedApps)
 	r.Post("/infrastructure/{id}/apps/{appID}", h.LinkApp)
@@ -801,4 +804,102 @@ func (h *InfraComponentHandler) UnlinkApp(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Traefik expanded endpoints (Infra-10) ────────────────────────────────────
+
+// GetTraefikOverview returns the latest traefik_overview row for the component.
+// GET /api/v1/infrastructure/{id}/traefik/overview
+func (h *InfraComponentHandler) GetTraefikOverview(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if comp.Type != "traefik" {
+		writeError(w, http.StatusBadRequest, "component is not a traefik type")
+		return
+	}
+	ov, err := h.store.TraefikOverview.Get(r.Context(), id)
+	if err != nil {
+		// Not polled yet — return a zeroed structure so the UI can render something.
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"component_id":      id,
+			"version":           "",
+			"routers_total":     0,
+			"routers_errors":    0,
+			"routers_warnings":  0,
+			"services_total":    0,
+			"services_errors":   0,
+			"middlewares_total": 0,
+			"updated_at":        nil,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, ov)
+}
+
+// GetTraefikRouters returns all discovered_routes for the component.
+// Supports ?status=disabled filter.
+// GET /api/v1/infrastructure/{id}/traefik/routers
+func (h *InfraComponentHandler) GetTraefikRouters(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if comp.Type != "traefik" {
+		writeError(w, http.StatusBadRequest, "component is not a traefik type")
+		return
+	}
+	statusFilter := r.URL.Query().Get("status")
+	routes, err := h.store.DiscoveredRoutes.ListDiscoveredRoutesByStatus(r.Context(), id, statusFilter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data":  routes,
+		"total": len(routes),
+	})
+}
+
+// GetTraefikServices returns all traefik_services for the component.
+// Supports ?status=down filter (servers_down > 0).
+// GET /api/v1/infrastructure/{id}/traefik/services
+func (h *InfraComponentHandler) GetTraefikServices(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if comp.Type != "traefik" {
+		writeError(w, http.StatusBadRequest, "component is not a traefik type")
+		return
+	}
+	statusFilter := r.URL.Query().Get("status")
+	svcs, err := h.store.TraefikServices.ListByComponent(r.Context(), id, statusFilter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data":  svcs,
+		"total": len(svcs),
+	})
 }

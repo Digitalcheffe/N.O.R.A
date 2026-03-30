@@ -124,6 +124,9 @@ func (m *enrichMockRouteRepo) GetDiscoveredRoute(_ context.Context, id string) (
 	}
 	return r, nil
 }
+func (m *enrichMockRouteRepo) ListDiscoveredRoutesByStatus(_ context.Context, _ string, _ string) ([]*models.DiscoveredRoute, error) {
+	return nil, nil
+}
 func (m *enrichMockRouteRepo) SetDiscoveredRouteApp(_ context.Context, _, _ string) error { return nil }
 func (m *enrichMockRouteRepo) ClearDiscoveredRouteApp(_ context.Context, _ string) error  { return nil }
 
