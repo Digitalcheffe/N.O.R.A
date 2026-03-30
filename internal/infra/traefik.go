@@ -158,52 +158,40 @@ type traefikRouterRaw struct {
 	} `json:"tls"`
 }
 
-// FetchRouters calls GET /api/http/routers, handling pagination, and returns all routers.
+// FetchRouters calls GET /api/http/routers and returns all routers.
 func (c *TraefikClient) FetchRouters(ctx context.Context) ([]TraefikRouter, error) {
-	var all []TraefikRouter
-	page := 1
-	for {
-		path := fmt.Sprintf("/api/http/routers?page=%d&per_page=100", page)
-		req, err := c.newRequest(ctx, "GET", path)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("traefik fetch routers page %d: %w", page, err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return nil, fmt.Errorf("traefik fetch routers page %d: unexpected status %d", page, resp.StatusCode)
-		}
-		var raw []traefikRouterRaw
-		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-			resp.Body.Close()
-			return nil, fmt.Errorf("traefik fetch routers page %d: decode: %w", page, err)
-		}
-		nextPage := resp.Header.Get("X-Next-Page")
-		resp.Body.Close()
-
-		for _, r := range raw {
-			tr := TraefikRouter{
-				Name:        r.Name,
-				Rule:        r.Rule,
-				ServiceName: r.Service,
-				Status:      r.Status,
-				Provider:    r.Provider,
-				EntryPoints: r.EntryPoints,
-			}
-			if r.TLS != nil {
-				tr.TLSCertResolver = r.TLS.CertResolver
-			}
-			all = append(all, tr)
-		}
-		if nextPage == "" || len(raw) == 0 {
-			break
-		}
-		page++
+	req, err := c.newRequest(ctx, "GET", "/api/http/routers")
+	if err != nil {
+		return nil, err
 	}
-	return all, nil
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("traefik fetch routers: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("traefik fetch routers: unexpected status %d", resp.StatusCode)
+	}
+	var raw []traefikRouterRaw
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("traefik fetch routers: decode: %w", err)
+	}
+	out := make([]TraefikRouter, 0, len(raw))
+	for _, r := range raw {
+		tr := TraefikRouter{
+			Name:        r.Name,
+			Rule:        r.Rule,
+			ServiceName: r.Service,
+			Status:      r.Status,
+			Provider:    r.Provider,
+			EntryPoints: r.EntryPoints,
+		}
+		if r.TLS != nil {
+			tr.TLSCertResolver = r.TLS.CertResolver
+		}
+		out = append(out, tr)
+	}
+	return out, nil
 }
 
 // traefikServiceRaw is the JSON shape from /api/http/services.
@@ -224,51 +212,39 @@ type TraefikServiceStatus struct {
 	ServerStatus map[string]string // server URL → "UP" | "DOWN"
 }
 
-// FetchServices calls GET /api/http/services, handling pagination, and returns all services.
+// FetchServices calls GET /api/http/services and returns all services.
 func (c *TraefikClient) FetchServices(ctx context.Context) ([]TraefikServiceStatus, error) {
-	var all []TraefikServiceStatus
-	page := 1
-	for {
-		path := fmt.Sprintf("/api/http/services?page=%d&per_page=100", page)
-		req, err := c.newRequest(ctx, "GET", path)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("traefik fetch services page %d: %w", page, err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return nil, fmt.Errorf("traefik fetch services page %d: unexpected status %d", page, resp.StatusCode)
-		}
-		var raw []traefikServiceRaw
-		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-			resp.Body.Close()
-			return nil, fmt.Errorf("traefik fetch services page %d: decode: %w", page, err)
-		}
-		nextPage := resp.Header.Get("X-Next-Page")
-		resp.Body.Close()
-
-		for _, r := range raw {
-			ss := map[string]string{}
-			if r.ServerStatus != nil {
-				ss = r.ServerStatus
-			}
-			all = append(all, TraefikServiceStatus{
-				Name:         r.Name,
-				Type:         r.Type,
-				Status:       r.Status,
-				Provider:     r.Provider,
-				ServerStatus: ss,
-			})
-		}
-		if nextPage == "" || len(raw) == 0 {
-			break
-		}
-		page++
+	req, err := c.newRequest(ctx, "GET", "/api/http/services")
+	if err != nil {
+		return nil, err
 	}
-	return all, nil
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("traefik fetch services: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("traefik fetch services: unexpected status %d", resp.StatusCode)
+	}
+	var raw []traefikServiceRaw
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("traefik fetch services: decode: %w", err)
+	}
+	out := make([]TraefikServiceStatus, 0, len(raw))
+	for _, r := range raw {
+		ss := map[string]string{}
+		if r.ServerStatus != nil {
+			ss = r.ServerStatus
+		}
+		out = append(out, TraefikServiceStatus{
+			Name:         r.Name,
+			Type:         r.Type,
+			Status:       r.Status,
+			Provider:     r.Provider,
+			ServerStatus: ss,
+		})
+	}
+	return out, nil
 }
 
 // newRequest builds an authenticated GET/POST request.

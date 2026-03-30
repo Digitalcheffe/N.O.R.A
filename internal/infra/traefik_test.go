@@ -267,15 +267,12 @@ func TestTraefikClient_FetchOverview_ParsesCorrectly(t *testing.T) {
 	}
 }
 
-// ── FetchRouters pagination tests ─────────────────────────────────────────────
+// ── FetchRouters tests ────────────────────────────────────────────────────────
 
-func TestTraefikClient_FetchRouters_Pagination(t *testing.T) {
-	page1 := []map[string]interface{}{
+func TestTraefikClient_FetchRouters(t *testing.T) {
+	payload := []map[string]interface{}{
 		{"name": "router1", "rule": `Host(` + "`" + `a.com` + "`" + `)`, "service": "svc1@docker", "status": "enabled", "provider": "docker", "entryPoints": []string{"websecure"}},
-		{"name": "router2", "rule": `Host(` + "`" + `b.com` + "`" + `)`, "service": "svc2@docker", "status": "enabled", "provider": "docker", "entryPoints": []string{"web"}},
-	}
-	page2 := []map[string]interface{}{
-		{"name": "router3", "rule": `Host(` + "`" + `c.com` + "`" + `)`, "service": "svc3@docker", "status": "disabled", "provider": "docker", "entryPoints": []string{"websecure"}},
+		{"name": "router2", "rule": `Host(` + "`" + `b.com` + "`" + `)`, "service": "svc2@docker", "status": "disabled", "provider": "docker", "entryPoints": []string{"web"}},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -283,15 +280,8 @@ func TestTraefikClient_FetchRouters_Pagination(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		page := r.URL.Query().Get("page")
 		w.Header().Set("Content-Type", "application/json")
-		if page == "1" || page == "" {
-			w.Header().Set("X-Next-Page", "2")
-			json.NewEncoder(w).Encode(page1) //nolint:errcheck
-		} else {
-			// No X-Next-Page header on last page.
-			json.NewEncoder(w).Encode(page2) //nolint:errcheck
-		}
+		json.NewEncoder(w).Encode(payload) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -300,14 +290,14 @@ func TestTraefikClient_FetchRouters_Pagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchRouters: %v", err)
 	}
-	if len(routers) != 3 {
-		t.Errorf("expected 3 routers (paginated), got %d", len(routers))
+	if len(routers) != 2 {
+		t.Fatalf("expected 2 routers, got %d", len(routers))
 	}
-	if routers[2].Name != "router3" {
-		t.Errorf("expected last router to be router3, got %q", routers[2].Name)
+	if routers[1].Name != "router2" {
+		t.Errorf("expected router2, got %q", routers[1].Name)
 	}
-	if routers[2].Status != "disabled" {
-		t.Errorf("expected router3 status=disabled, got %q", routers[2].Status)
+	if routers[1].Status != "disabled" {
+		t.Errorf("expected disabled, got %q", routers[1].Status)
 	}
 }
 
