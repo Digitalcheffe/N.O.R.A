@@ -30,6 +30,10 @@ import type {
   LoginInput,
   MonitorCheck,
   PhysicalHost,
+  ProxmoxGuestInfo,
+  ProxmoxNodeStatusDetail,
+  ProxmoxStoragePool,
+  ProxmoxTaskFailure,
   ResourceHistory,
   ResourceSummary,
   SMTPSettings,
@@ -371,6 +375,22 @@ export const infrastructure = {
 
   unlinkApp: (componentId: string, appId: string) =>
     request<void>('DELETE', `/infrastructure/${componentId}/apps/${appId}`),
+}
+
+// ── Proxmox Detail ────────────────────────────────────────────────────────────
+
+export const proxmox = {
+  storage: (id: string) =>
+    request<ListResponse<ProxmoxStoragePool>>('GET', `/infrastructure/proxmox/${id}/storage`),
+
+  guests: (id: string) =>
+    request<ListResponse<ProxmoxGuestInfo>>('GET', `/infrastructure/proxmox/${id}/guests`),
+
+  nodeStatus: (id: string) =>
+    request<ListResponse<ProxmoxNodeStatusDetail>>('GET', `/infrastructure/proxmox/${id}/status`),
+
+  taskFailures: (id: string) =>
+    request<ListResponse<ProxmoxTaskFailure>>('GET', `/infrastructure/proxmox/${id}/tasks`),
 }
 
 // ── Docker Discovery ──────────────────────────────────────────────────────────

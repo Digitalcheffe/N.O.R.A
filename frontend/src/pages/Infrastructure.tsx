@@ -639,11 +639,20 @@ export function Infrastructure() {
     const isScanning = scanningId === c.id
     const canScan = c.collection_method !== 'none'
 
+    const detailPath = c.type === 'proxmox_node'
+      ? `/topology/proxmox/${c.id}`
+      : `/topology/${c.id}`
+
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/${c.id}`)}>
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(detailPath)}>
           <div className="infra-card-title-group">
-            <div className="infra-card-name">{c.name}</div>
+            <div className="infra-card-name">
+              {c.name}
+              {c.type === 'proxmox_node' && (
+                <span className="infra-card-nav-arrow" aria-hidden="true"> ›</span>
+              )}
+            </div>
             <div className="infra-card-meta">
               {TYPE_LABEL[c.type]} · {c.ip}
             </div>

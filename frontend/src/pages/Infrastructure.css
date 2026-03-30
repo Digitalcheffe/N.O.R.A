@@ -176,6 +176,12 @@
   text-overflow: ellipsis;
 }
 
+.infra-card-nav-arrow {
+  color: var(--text3);
+  font-size: 16px;
+  font-weight: 400;
+}
+
 .infra-card-meta {
   font-family: var(--mono);
   font-size: 11px;

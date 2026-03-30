@@ -217,6 +217,7 @@ func main() {
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
 		api.NewUsersHandler(userRepo).Routes(r)
+		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
 	})
 
