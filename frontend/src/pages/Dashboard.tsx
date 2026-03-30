@@ -9,8 +9,8 @@ import { SSLRow } from '../components/SSLRow'
 import { EventRow } from '../components/EventRow'
 import { HostWidget } from '../components/HostWidget'
 import type { HostData } from '../components/HostWidget'
-import { dashboard as dashboardApi, events as eventsApi, topology as topoApi } from '../api/client'
-import type { DashboardSummaryResponse, Event, PhysicalHost } from '../api/types'
+import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
+import type { DashboardSummaryResponse, Event, InfrastructureComponent } from '../api/types'
 import './Dashboard.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
@@ -21,7 +21,7 @@ export function Dashboard() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [data, setData] = useState<DashboardSummaryResponse | null>(null)
   const [recentEvents, setRecentEvents] = useState<Event[]>([])
-  const [physicalHosts, setPhysicalHosts] = useState<PhysicalHost[]>([])
+  const [physicalHosts, setPhysicalHosts] = useState<InfrastructureComponent[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -29,7 +29,7 @@ export function Dashboard() {
     Promise.all([
       dashboardApi.summary(timeFilter),
       eventsApi.list({ limit: 5 }),
-      topoApi.physicalHosts.list(),
+      infraApi.list().catch(() => ({ data: [], total: 0 })),
     ])
       .then(([summary, evts, hosts]) => {
         setData(summary)
@@ -78,7 +78,7 @@ export function Dashboard() {
   }
 
   // ── Empty state ───────────────────────────────────────────────────────────
-  if (!data || data.apps.length === 0) {
+  if (!data || (data.apps.length === 0 && data.checks.length === 0 && physicalHosts.length === 0)) {
     return (
       <>
         <Topbar title="Dashboard" timeFilter={timeFilter} onTimeFilter={setTimeFilter} />
