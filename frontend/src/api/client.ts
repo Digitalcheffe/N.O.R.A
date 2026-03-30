@@ -379,6 +379,9 @@ export const discovery = {
   containers: (engineId: string) =>
     request<ListResponse<DiscoveredContainer>>('GET', `/infrastructure/${engineId}/containers`),
 
+  deleteContainer: (containerId: string) =>
+    request<void>('DELETE', `/discovered-containers/${containerId}`),
+
   linkContainerApp: (containerId: string, body: LinkAppInput) =>
     request<unknown>('POST', `/discovered-containers/${containerId}/link-app`, body),
 }

@@ -251,6 +251,39 @@
   border-color: var(--accent);
 }
 
+.de-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.de-delete-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.de-delete-btn:hover {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.de-delete-btn.confirm {
+  font-size: 10px;
+  border-color: rgba(239, 68, 68, 0.5);
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.12);
+}
+
 /* ── Inline link form ── */
 
 .de-link-form {

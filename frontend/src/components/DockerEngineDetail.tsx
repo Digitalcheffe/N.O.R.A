@@ -69,11 +69,12 @@ function MiniBar({ value, label }: { value: number | null; label: string }) {
 export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
   const navigate = useNavigate()
 
-  const [containers, setContainers] = useState<DiscoveredContainer[]>([])
-  const [apps,       setApps]       = useState<App[]>([])
-  const [templates,  setTemplates]  = useState<AppTemplate[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [linkForm,   setLinkForm]   = useState<LinkFormState | null>(null)
+  const [containers,    setContainers]    = useState<DiscoveredContainer[]>([])
+  const [apps,          setApps]          = useState<App[]>([])
+  const [templates,     setTemplates]     = useState<AppTemplate[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [linkForm,      setLinkForm]      = useState<LinkFormState | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   // Keep a stable ref to onCountsLoaded so it never triggers a re-fetch
   const onCountsLoadedRef = useRef(onCountsLoaded)
@@ -122,6 +123,20 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
 
   function closeLinkForm() {
     setLinkForm(null)
+  }
+
+  async function handleDelete(id: string) {
+    if (confirmDelete !== id) {
+      setConfirmDelete(id)
+      return
+    }
+    setConfirmDelete(null)
+    try {
+      await discovery.deleteContainer(id)
+      load()
+    } catch (err) {
+      console.error('delete container:', err)
+    }
   }
 
   async function submitLink() {
@@ -229,17 +244,26 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
                 <MiniBar value={c.mem_percent} label="MEM" />
               </div>
 
-              {/* Card footer: last seen + action button */}
+              {/* Card footer: last seen + action buttons */}
               <div className="de-card-footer">
                 <span className="de-last-seen">{timeAgo(c.last_seen_at)}</span>
-                {!isLinked && (
+                <div className="de-card-actions">
+                  {!isLinked && (
+                    <button
+                      className={`de-link-btn${hasSugg ? ' accent' : ''}`}
+                      onClick={() => isFormOpen ? closeLinkForm() : openLinkForm(c)}
+                    >
+                      {isFormOpen ? 'Cancel' : hasSugg ? 'Add App' : 'Link Manually'}
+                    </button>
+                  )}
                   <button
-                    className={`de-link-btn${hasSugg ? ' accent' : ''}`}
-                    onClick={() => isFormOpen ? closeLinkForm() : openLinkForm(c)}
+                    className={`de-delete-btn${confirmDelete === c.id ? ' confirm' : ''}`}
+                    onClick={() => void handleDelete(c.id)}
+                    title="Remove container record"
                   >
-                    {isFormOpen ? 'Cancel' : hasSugg ? 'Add App' : 'Link Manually'}
+                    {confirmDelete === c.id ? 'Confirm?' : '×'}
                   </button>
-                )}
+                </div>
               </div>
             </div>
 
