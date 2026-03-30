@@ -66,6 +66,9 @@ func RunTraefikComponentPollers(ctx context.Context, store *repo.Store) {
 func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.InfrastructureComponent, creds traefikComponentCredentials) error {
 	client := infra.NewTraefikClient(creds.APIURL, creds.APIKey)
 
+	// ── Overview health (Infra-10) ────────────────────────────────────────────
+	pollTraefikOverview(ctx, store, c, client)
+
 	// ── Fetch certs ──────────────────────────────────────────────────────────
 
 	rawCerts, err := client.FetchCerts(ctx)
@@ -161,6 +164,8 @@ func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.Infra
 		if err := store.TraefikComponents.UpsertRoutes(ctx, c.ID, routes); err != nil {
 			log.Printf("traefik component scheduler: upsert routes for %s: %v", c.Name, err)
 		}
+		// Fire router status transition events (Infra-10).
+		pollTraefikRouterStatus(ctx, store, c, rawRouters)
 	}
 
 	// ── Populate discovered_routes ────────────────────────────────────────────
@@ -170,6 +175,9 @@ func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.Infra
 		// Non-critical — log but do not fail the component poll.
 		log.Printf("traefik component scheduler: discovery run for %s: %v", c.Name, err)
 	}
+
+	// ── Service health (Infra-10) ─────────────────────────────────────────────
+	pollTraefikServices(ctx, store, c, client)
 
 	// ── Update component status ───────────────────────────────────────────────
 

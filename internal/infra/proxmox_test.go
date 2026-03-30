@@ -39,6 +39,8 @@ func newProxmoxTestStore(t *testing.T) *repo.Store {
 		repo.NewMetricsRepo(db),
 		repo.NewUserRepo(db),
 		repo.NewTraefikComponentRepo(db),
+		repo.NewTraefikOverviewRepo(db),
+		repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db),
 		repo.NewDiscoveredRouteRepo(db),
 		nil,

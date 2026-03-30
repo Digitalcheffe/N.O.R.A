@@ -72,6 +72,8 @@ func main() {
 	metricsRepo := repo.NewMetricsRepo(db)
 	userRepo := repo.NewUserRepo(db)
 	traefikComponentRepo := repo.NewTraefikComponentRepo(db)
+	traefikOverviewRepo := repo.NewTraefikOverviewRepo(db)
+	traefikServiceRepo := repo.NewTraefikServiceRepo(db)
 	discoveredContainerRepo := repo.NewDiscoveredContainerRepo(db)
 	discoveredRouteRepo := repo.NewDiscoveredRouteRepo(db)
 	webPushSubscriptionRepo := repo.NewWebPushSubscriptionRepo(db)
@@ -80,7 +82,7 @@ func main() {
 		rollupRepo, resourceRepo, resourceRollupRepo,
 		infraComponentRepo, dockerEngineRepo,
 		infraRepo, settingsRepo, metricsRepo, userRepo,
-		traefikComponentRepo,
+		traefikComponentRepo, traefikOverviewRepo, traefikServiceRepo,
 		discoveredContainerRepo, discoveredRouteRepo,
 		webPushSubscriptionRepo,
 	)

@@ -130,7 +130,8 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 	for _, rr := range routers {
 		domain := ParseHostFromRule(rr.Rule)
 
-		// Strip Traefik provider suffix (e.g. "sonarr@docker" → "sonarr").
+		// Strip Traefik provider suffix (e.g. "sonarr@docker" → "sonarr") for
+		// container cross-referencing only.
 		backendService := rr.ServiceName
 		if idx := strings.Index(backendService, "@"); idx >= 0 {
 			backendService = backendService[:idx]
@@ -159,6 +160,25 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 			backendPtr = &backendService
 		}
 
+		// Entry points serialised as a JSON array.
+		var entryPointsJSON *string
+		if len(rr.EntryPoints) > 0 {
+			if b, err := json.Marshal(rr.EntryPoints); err == nil {
+				s := string(b)
+				entryPointsJSON = &s
+			}
+		}
+
+		hasTLS := 0
+		if rr.TLSCertResolver != "" {
+			hasTLS = 1
+		}
+
+		routerStatus := rr.Status
+		if routerStatus == "" {
+			routerStatus = "enabled"
+		}
+
 		route := &models.DiscoveredRoute{
 			ID:               uuid.New().String(),
 			InfrastructureID: component.ID,
@@ -171,6 +191,13 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 			SSLIssuer:        sslIssuer,
 			LastSeenAt:       now,
 			CreatedAt:        now,
+			// Enriched fields (Infra-10).
+			RouterStatus:     routerStatus,
+			Provider:         strPtr(rr.Provider),
+			EntryPoints:      entryPointsJSON,
+			HasTLSResolver:   hasTLS,
+			CertResolverName: strPtr(rr.TLSCertResolver),
+			ServiceName:      strPtr(rr.ServiceName),
 		}
 
 		if err := t.store.DiscoveredRoutes.UpsertDiscoveredRoute(ctx, route); err != nil {
@@ -181,4 +208,12 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 	log.Printf("traefik discovery: upserted %d routes for component %s (%s)",
 		len(routers), component.Name, component.ID)
 	return nil
+}
+
+// strPtr returns a pointer to s, or nil if s is empty.
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

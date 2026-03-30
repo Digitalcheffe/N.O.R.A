@@ -37,6 +37,9 @@ type DiscoveredContainerRepo interface {
 type DiscoveredRouteRepo interface {
 	UpsertDiscoveredRoute(ctx context.Context, r *models.DiscoveredRoute) error
 	ListDiscoveredRoutes(ctx context.Context, infrastructureID string) ([]*models.DiscoveredRoute, error)
+	// ListDiscoveredRoutesByStatus returns routes for a component filtered by router_status.
+	// If statusFilter is empty, all routes are returned.
+	ListDiscoveredRoutesByStatus(ctx context.Context, infrastructureID string, statusFilter string) ([]*models.DiscoveredRoute, error)
 	ListAllDiscoveredRoutes(ctx context.Context) ([]*models.DiscoveredRoute, error)
 	GetDiscoveredRoute(ctx context.Context, id string) (*models.DiscoveredRoute, error)
 	SetDiscoveredRouteApp(ctx context.Context, id string, appID string) error
@@ -237,6 +240,14 @@ func NewDiscoveredRouteRepo(db *sqlx.DB) DiscoveredRouteRepo {
 	return &sqliteDiscoveredRouteRepo{db: db}
 }
 
+// routeSelectCols is the shared column list for discovered_routes SELECT queries.
+const routeSelectCols = `id, infrastructure_id, router_name, rule,
+	domain, backend_service, container_id, app_id, ssl_expiry, ssl_issuer,
+	last_seen_at, created_at,
+	COALESCE(router_status,'enabled') AS router_status,
+	provider, entry_points, COALESCE(has_tls_resolver,0) AS has_tls_resolver,
+	cert_resolver_name, service_name`
+
 func (r *sqliteDiscoveredRouteRepo) UpsertDiscoveredRoute(ctx context.Context, ro *models.DiscoveredRoute) error {
 	if ro.ID == "" {
 		ro.ID = uuid.New().String()
@@ -244,18 +255,27 @@ func (r *sqliteDiscoveredRouteRepo) UpsertDiscoveredRoute(ctx context.Context, r
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO discovered_routes
 		  (id, infrastructure_id, router_name, rule, domain, backend_service,
-		   container_id, app_id, ssl_expiry, ssl_issuer, last_seen_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   container_id, app_id, ssl_expiry, ssl_issuer, last_seen_at, created_at,
+		   router_status, provider, entry_points, has_tls_resolver, cert_resolver_name, service_name)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(infrastructure_id, router_name) DO UPDATE SET
-		  rule            = excluded.rule,
-		  domain          = excluded.domain,
-		  backend_service = excluded.backend_service,
-		  container_id    = excluded.container_id,
-		  ssl_expiry      = excluded.ssl_expiry,
-		  ssl_issuer      = excluded.ssl_issuer,
-		  last_seen_at    = excluded.last_seen_at`,
+		  rule              = excluded.rule,
+		  domain            = excluded.domain,
+		  backend_service   = excluded.backend_service,
+		  container_id      = excluded.container_id,
+		  ssl_expiry        = excluded.ssl_expiry,
+		  ssl_issuer        = excluded.ssl_issuer,
+		  last_seen_at      = excluded.last_seen_at,
+		  router_status     = excluded.router_status,
+		  provider          = excluded.provider,
+		  entry_points      = excluded.entry_points,
+		  has_tls_resolver  = excluded.has_tls_resolver,
+		  cert_resolver_name = excluded.cert_resolver_name,
+		  service_name      = excluded.service_name`,
 		ro.ID, ro.InfrastructureID, ro.RouterName, ro.Rule, ro.Domain, ro.BackendService,
-		ro.ContainerID, ro.AppID, ro.SSLExpiry, ro.SSLIssuer, ro.LastSeenAt, ro.CreatedAt)
+		ro.ContainerID, ro.AppID, ro.SSLExpiry, ro.SSLIssuer, ro.LastSeenAt, ro.CreatedAt,
+		ro.RouterStatus, ro.Provider, ro.EntryPoints, ro.HasTLSResolver,
+		ro.CertResolverName, ro.ServiceName)
 	if err != nil {
 		return fmt.Errorf("upsert discovered route %s: %w", ro.RouterName, err)
 	}
@@ -265,8 +285,7 @@ func (r *sqliteDiscoveredRouteRepo) UpsertDiscoveredRoute(ctx context.Context, r
 func (r *sqliteDiscoveredRouteRepo) ListDiscoveredRoutes(ctx context.Context, infrastructureID string) ([]*models.DiscoveredRoute, error) {
 	var rows []*models.DiscoveredRoute
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, infrastructure_id, router_name, rule, domain, backend_service,
-		       container_id, app_id, ssl_expiry, ssl_issuer, last_seen_at, created_at
+		SELECT `+routeSelectCols+`
 		FROM discovered_routes
 		WHERE infrastructure_id = ?
 		ORDER BY router_name ASC`, infrastructureID)
@@ -279,11 +298,35 @@ func (r *sqliteDiscoveredRouteRepo) ListDiscoveredRoutes(ctx context.Context, in
 	return rows, nil
 }
 
+func (r *sqliteDiscoveredRouteRepo) ListDiscoveredRoutesByStatus(ctx context.Context, infrastructureID string, statusFilter string) ([]*models.DiscoveredRoute, error) {
+	var rows []*models.DiscoveredRoute
+	var err error
+	if statusFilter != "" {
+		err = r.db.SelectContext(ctx, &rows, `
+			SELECT `+routeSelectCols+`
+			FROM discovered_routes
+			WHERE infrastructure_id = ? AND COALESCE(router_status,'enabled') = ?
+			ORDER BY router_name ASC`, infrastructureID, statusFilter)
+	} else {
+		err = r.db.SelectContext(ctx, &rows, `
+			SELECT `+routeSelectCols+`
+			FROM discovered_routes
+			WHERE infrastructure_id = ?
+			ORDER BY router_name ASC`, infrastructureID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list discovered routes by status for infra %s: %w", infrastructureID, err)
+	}
+	if rows == nil {
+		rows = []*models.DiscoveredRoute{}
+	}
+	return rows, nil
+}
+
 func (r *sqliteDiscoveredRouteRepo) ListAllDiscoveredRoutes(ctx context.Context) ([]*models.DiscoveredRoute, error) {
 	var rows []*models.DiscoveredRoute
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, infrastructure_id, router_name, rule, domain, backend_service,
-		       container_id, app_id, ssl_expiry, ssl_issuer, last_seen_at, created_at
+		SELECT `+routeSelectCols+`
 		FROM discovered_routes
 		ORDER BY infrastructure_id ASC, router_name ASC`)
 	if err != nil {
@@ -298,8 +341,7 @@ func (r *sqliteDiscoveredRouteRepo) ListAllDiscoveredRoutes(ctx context.Context)
 func (r *sqliteDiscoveredRouteRepo) GetDiscoveredRoute(ctx context.Context, id string) (*models.DiscoveredRoute, error) {
 	var ro models.DiscoveredRoute
 	err := r.db.GetContext(ctx, &ro, `
-		SELECT id, infrastructure_id, router_name, rule, domain, backend_service,
-		       container_id, app_id, ssl_expiry, ssl_issuer, last_seen_at, created_at
+		SELECT `+routeSelectCols+`
 		FROM discovered_routes
 		WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
