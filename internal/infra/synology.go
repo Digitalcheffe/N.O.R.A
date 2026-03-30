@@ -590,12 +590,14 @@ func (p *SynologyPoller) fetchVolumes(ctx context.Context, store *repo.Store, me
 				}
 				rawPayload, _ := json.Marshal(vol)
 				event := &models.Event{
-					ID:          uuid.New().String(),
-					ReceivedAt:  now,
-					Severity:    severity,
-					DisplayText: displayText,
-					RawPayload:  string(rawPayload),
-					Fields:      fmt.Sprintf(`{"source":"synology","component_id":%q,"vol_path":%q,"status":%q}`, p.componentID, vol.VolPath, vol.Status),
+					ID:         uuid.New().String(),
+					Level:      severity,
+					SourceName: p.componentID,
+					SourceType: "physical_host",
+					SourceID:   p.componentID,
+					Title:      displayText,
+					Payload:    string(rawPayload),
+					CreatedAt:  now,
 				}
 				if err := store.Events.Create(ctx, event); err != nil {
 					log.Printf("synology poller %s: create volume event for %s: %v", p.componentID, vol.VolPath, err)
@@ -648,12 +650,14 @@ func (p *SynologyPoller) fetchDisks(ctx context.Context, store *repo.Store, meta
 				}
 				rawPayload, _ := json.Marshal(disk)
 				event := &models.Event{
-					ID:          uuid.New().String(),
-					ReceivedAt:  now,
-					Severity:    severity,
-					DisplayText: displayText,
-					RawPayload:  string(rawPayload),
-					Fields:      fmt.Sprintf(`{"source":"synology","component_id":%q,"disk_slot":%d,"model":%q,"status":%q}`, p.componentID, disk.Slot, disk.Model, disk.Status),
+					ID:         uuid.New().String(),
+					Level:      severity,
+					SourceName: p.componentID,
+					SourceType: "physical_host",
+					SourceID:   p.componentID,
+					Title:      displayText,
+					Payload:    string(rawPayload),
+					CreatedAt:  now,
 				}
 				if err := store.Events.Create(ctx, event); err != nil {
 					log.Printf("synology poller %s: create disk status event for slot %d: %v", p.componentID, disk.Slot, err)
@@ -669,12 +673,14 @@ func (p *SynologyPoller) fetchDisks(ctx context.Context, store *repo.Store, meta
 			p.diskTempFlagged.Store(slotKey, true)
 			rawPayload, _ := json.Marshal(disk)
 			event := &models.Event{
-				ID:          uuid.New().String(),
-				ReceivedAt:  now,
-				Severity:    "warn",
-				DisplayText: fmt.Sprintf("Disk %d temp %d°C", disk.Slot, disk.Temp),
-				RawPayload:  string(rawPayload),
-				Fields:      fmt.Sprintf(`{"source":"synology","component_id":%q,"disk_slot":%d,"model":%q,"temp_c":%d}`, p.componentID, disk.Slot, disk.Model, disk.Temp),
+				ID:         uuid.New().String(),
+				Level:      "warn",
+				SourceName: p.componentID,
+				SourceType: "physical_host",
+				SourceID:   p.componentID,
+				Title:      fmt.Sprintf("Disk %d temp %d°C", disk.Slot, disk.Temp),
+				Payload:    string(rawPayload),
+				CreatedAt:  now,
 			}
 			if err := store.Events.Create(ctx, event); err != nil {
 				log.Printf("synology poller %s: create disk temp event for slot %d: %v", p.componentID, disk.Slot, err)
@@ -710,12 +716,14 @@ func (p *SynologyPoller) fetchUpdates(ctx context.Context, store *repo.Store, me
 			p.lastUpdateVer.Store("ver", upgrade.Version)
 			rawPayload, _ := json.Marshal(upgrade)
 			event := &models.Event{
-				ID:          uuid.New().String(),
-				ReceivedAt:  now,
-				Severity:    "info",
-				DisplayText: fmt.Sprintf("DSM update available: %s", upgrade.Version),
-				RawPayload:  string(rawPayload),
-				Fields:      fmt.Sprintf(`{"source":"synology","component_id":%q,"update_version":%q}`, p.componentID, upgrade.Version),
+				ID:         uuid.New().String(),
+				Level:      "info",
+				SourceName: p.componentID,
+				SourceType: "physical_host",
+				SourceID:   p.componentID,
+				Title:      fmt.Sprintf("DSM update available: %s", upgrade.Version),
+				Payload:    string(rawPayload),
+				CreatedAt:  now,
 			}
 			if err := store.Events.Create(ctx, event); err != nil {
 				log.Printf("synology poller %s: create update event: %v", p.componentID, err)

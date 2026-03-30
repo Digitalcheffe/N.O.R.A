@@ -84,12 +84,12 @@ func TestHealthPoller_UnhealthyTransition(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(evRepo.created))
 	}
 	ev := evRepo.created[0]
-	if ev.Severity != "error" {
-		t.Errorf("expected severity=error, got %s", ev.Severity)
+	if ev.Level != "error" {
+		t.Errorf("expected severity=error, got %s", ev.Level)
 	}
 	prefix := "Container unhealthy"
-	if len(ev.DisplayText) < len(prefix) || ev.DisplayText[:len(prefix)] != prefix {
-		t.Errorf("unexpected display text: %q", ev.DisplayText)
+	if len(ev.Title) < len(prefix) || ev.Title[:len(prefix)] != prefix {
+		t.Errorf("unexpected display text: %q", ev.Title)
 	}
 }
 
@@ -113,8 +113,8 @@ func TestHealthPoller_RecoveryTransition(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(evRepo.created))
 	}
 	ev := evRepo.created[0]
-	if ev.Severity != "info" {
-		t.Errorf("expected severity=info for recovery, got %s", ev.Severity)
+	if ev.Level != "info" {
+		t.Errorf("expected severity=info for recovery, got %s", ev.Level)
 	}
 }
 

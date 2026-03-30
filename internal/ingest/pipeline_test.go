@@ -63,17 +63,17 @@ func TestProcess_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get persisted event: %v", err)
 	}
-	if ev.AppID != app.ID {
-		t.Errorf("app_id: want %s got %s", app.ID, ev.AppID)
+	if ev.SourceID != app.ID {
+		t.Errorf("source_id: want %s got %s", app.ID, ev.SourceID)
 	}
-	if ev.Severity != "info" {
-		t.Errorf("severity: want info got %s", ev.Severity)
+	if ev.SourceType != "app" {
+		t.Errorf("source_type: want app got %s", ev.SourceType)
 	}
-	if ev.DisplayText != "Event received" {
-		t.Errorf("display_text: want 'Event received' got %s", ev.DisplayText)
+	if ev.Level != "info" {
+		t.Errorf("level: want info got %s", ev.Level)
 	}
-	if ev.RawPayload != `{"event":"test"}` {
-		t.Errorf("raw_payload mismatch: %s", ev.RawPayload)
+	if ev.Title != "Event received" {
+		t.Errorf("title: want 'Event received' got %s", ev.Title)
 	}
 }
 
@@ -163,11 +163,11 @@ func TestProcess_ProfileFieldExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get event: %v", err)
 	}
-	if ev.Severity != "info" {
-		t.Errorf("severity: want info got %s", ev.Severity)
+	if ev.Level != "info" {
+		t.Errorf("level: want info got %s", ev.Level)
 	}
-	if ev.DisplayText != "Breaking Bad — Grabbed" {
-		t.Errorf("display_text: want 'Breaking Bad — Grabbed' got %s", ev.DisplayText)
+	if ev.Title != "Breaking Bad — Grabbed" {
+		t.Errorf("title: want 'Breaking Bad — Grabbed' got %s", ev.Title)
 	}
 }
 
@@ -216,12 +216,12 @@ func TestProcess_UnmatchedEventType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get event: %v", err)
 	}
-	// Must fall back to event_type, not leave raw {placeholders} in display_text.
-	if ev.DisplayText != "Test" {
-		t.Errorf("display_text: want 'Test' got %q", ev.DisplayText)
+	// Must fall back to event_type, not leave raw {placeholders} in title.
+	if ev.Title != "Test" {
+		t.Errorf("title: want 'Test' got %q", ev.Title)
 	}
-	if ev.Severity != "info" {
-		t.Errorf("severity: want info got %s", ev.Severity)
+	if ev.Level != "info" {
+		t.Errorf("level: want info got %s", ev.Level)
 	}
 }
 
@@ -286,8 +286,8 @@ func TestProcess_CompoundSeverity(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get event: %v", err)
 		}
-		if ev.Severity != c.wantSev {
-			t.Errorf("%s: severity = %q, want %q", c.description, ev.Severity, c.wantSev)
+		if ev.Level != c.wantSev {
+			t.Errorf("%s: level = %q, want %q", c.description, ev.Level, c.wantSev)
 		}
 	}
 }
@@ -343,8 +343,8 @@ func TestProcess_ArrayFieldExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get event: %v", err)
 	}
-	if ev.DisplayText != "Download — The Expanse S2E7" {
-		t.Errorf("display_text: want 'Download — The Expanse S2E7' got %q", ev.DisplayText)
+	if ev.Title != "Download — The Expanse S2E7" {
+		t.Errorf("title: want 'Download — The Expanse S2E7' got %q", ev.Title)
 	}
 }
 
@@ -407,11 +407,11 @@ func TestProcess_PerEventTypeTemplate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get event: %v", err)
 		}
-		if ev.DisplayText != c.wantDisplay {
-			t.Errorf("eventType=%q display_text: want %q got %q", c.eventType, c.wantDisplay, ev.DisplayText)
+		if ev.Title != c.wantDisplay {
+			t.Errorf("eventType=%q title: want %q got %q", c.eventType, c.wantDisplay, ev.Title)
 		}
-		if ev.Severity != c.wantSev {
-			t.Errorf("eventType=%q severity: want %q got %q", c.eventType, c.wantSev, ev.Severity)
+		if ev.Level != c.wantSev {
+			t.Errorf("eventType=%q level: want %q got %q", c.eventType, c.wantSev, ev.Level)
 		}
 	}
 }

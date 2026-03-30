@@ -8,7 +8,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/repo"
 )
 
-// retentionWindows maps each event severity to its retention duration.
+// retentionWindows maps each event level to its retention duration.
 var retentionWindows = map[string]time.Duration{
 	"debug":    24 * time.Hour,
 	"info":     7 * 24 * time.Hour,
@@ -17,19 +17,19 @@ var retentionWindows = map[string]time.Duration{
 	"critical": 90 * 24 * time.Hour,
 }
 
-// RunEventRetention purges events whose received_at is older than the
-// configured retention window for their severity. Rollup rows are never
+// RunEventRetention purges events whose created_at is older than the
+// configured retention window for their level. Rollup rows are never
 // touched by this function.
 func RunEventRetention(ctx context.Context, store *repo.Store) error {
 	now := time.Now().UTC()
-	for severity, window := range retentionWindows {
+	for level, window := range retentionWindows {
 		cutoff := now.Add(-window)
-		n, err := store.Events.DeleteBySeverityBefore(ctx, severity, cutoff)
+		n, err := store.Events.DeleteByLevelBefore(ctx, level, cutoff)
 		if err != nil {
 			return err
 		}
 		if n > 0 {
-			log.Printf("retention: deleted %d %s events older than %s", n, severity, window)
+			log.Printf("retention: deleted %d %s events older than %s", n, level, window)
 		}
 	}
 	return nil

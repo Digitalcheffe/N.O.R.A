@@ -150,12 +150,14 @@ func (w *SyncWorker) maybeFireExpiryEvent(ctx context.Context, cert *models.Trae
 	w.mu.Unlock()
 
 	event := &models.Event{
-		ID:          uuid.New().String(),
-		ReceivedAt:  time.Now().UTC(),
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  "{}",
-		Fields:      `{"source":"traefik_cert","domain":"` + cert.Domain + `"}`,
+		ID:         uuid.New().String(),
+		Level:      severity,
+		SourceName: cert.Domain,
+		SourceType: "system",
+		SourceID:   "",
+		Title:      displayText,
+		Payload:    `{"source":"traefik_cert","domain":"` + cert.Domain + `"}`,
+		CreatedAt:  time.Now().UTC(),
 	}
 	if err := w.store.Events.Create(ctx, event); err != nil {
 		log.Printf("infra sync: create expiry event for %s: %v", cert.Domain, err)

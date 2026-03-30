@@ -190,13 +190,14 @@ func (s *SSLChecker) createStatusEvent(
 	}
 
 	event := &models.Event{
-		ID:          uuid.New().String(),
-		AppID:       check.AppID,
-		ReceivedAt:  now,
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  "{}",
-		Fields:      `{"source":"monitor","check_id":"` + check.ID + `","type":"ssl"}`,
+		ID:         uuid.New().String(),
+		Level:      severity,
+		SourceName: check.Name,
+		SourceType: "monitor_check",
+		SourceID:   check.ID,
+		Title:      displayText,
+		Payload:    `{"type":"ssl"}`,
+		CreatedAt:  now,
 	}
 	return s.store.Events.Create(ctx, event)
 }

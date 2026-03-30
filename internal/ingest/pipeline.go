@@ -52,8 +52,10 @@ func Process(ctx context.Context, store *repo.Store, profiler apptemplate.Loader
 	}
 
 	// Step 3 — Profile processing
-	severity := "info"
-	displayText := "Event received"
+	// Severity → level mapping for profile data:
+	//   critical → critical, high → error, medium → warn, low → info, info → info, debug → debug
+	level := "info"
+	title := "Event received"
 	fieldsMap := map[string]string{}
 
 	if profiler != nil && app.ProfileID != "" {
@@ -69,7 +71,7 @@ func Process(ctx context.Context, store *repo.Store, profiler apptemplate.Loader
 					}
 				}
 			}
-			severity = mapSeverity(fieldsMap, p.Webhook.SeverityField, p.Webhook.SeverityCompoundField, p.Webhook.SeverityMapping)
+			level = mapSeverity(fieldsMap, p.Webhook.SeverityField, p.Webhook.SeverityCompoundField, p.Webhook.SeverityMapping)
 			// Pick per-eventType template if available, fall back to global template.
 			tmpl := p.Webhook.DisplayTemplate
 			if len(p.Webhook.DisplayTemplates) > 0 {
@@ -79,33 +81,50 @@ func Process(ctx context.Context, store *repo.Store, profiler apptemplate.Loader
 					}
 				}
 			}
-			displayText = renderTemplate(tmpl, fieldsMap)
+			title = renderTemplate(tmpl, fieldsMap)
 		}
 	}
 
-	// Step 4 — Encode fields as JSON
-	fieldsJSON, err := json.Marshal(fieldsMap)
-	if err != nil {
-		fieldsJSON = []byte("{}")
-	}
+	// Step 4 — Build merged payload: raw webhook JSON with extracted fields
+	// overlaid as top-level keys so event_type etc. are queryable.
+	payload := mergePayload(rawBody, fieldsMap)
 
 	// Step 5 — Persist event
 	event := &models.Event{
-		ID:          uuid.NewString(),
-		AppID:       app.ID,
-		ReceivedAt:  time.Now().UTC(),
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  string(rawBody),
-		Fields:      string(fieldsJSON),
+		ID:         uuid.NewString(),
+		Level:      level,
+		SourceName: app.Name,
+		SourceType: "app",
+		SourceID:   app.ID,
+		Title:      title,
+		Payload:    payload,
+		CreatedAt:  time.Now().UTC(),
 	}
 	if err := store.Events.Create(ctx, event); err != nil {
 		return nil, err
 	}
 
-	log.Printf("event ingested app_id=%s event_id=%s severity=%s", app.ID, event.ID, event.Severity)
+	log.Printf("event ingested source_id=%s event_id=%s level=%s", app.ID, event.ID, event.Level)
 
 	return &Result{EventID: event.ID}, nil
+}
+
+// mergePayload merges extracted fields onto the raw JSON body as top-level keys,
+// making profile-normalized fields (e.g. event_type) queryable via json_extract.
+// The raw body is returned as-is if merging fails.
+func mergePayload(rawBody []byte, fields map[string]string) string {
+	var obj map[string]interface{}
+	if err := json.Unmarshal(rawBody, &obj); err != nil || obj == nil {
+		obj = map[string]interface{}{}
+	}
+	for k, v := range fields {
+		obj[k] = v
+	}
+	merged, err := json.Marshal(obj)
+	if err != nil {
+		return string(rawBody)
+	}
+	return string(merged)
 }
 
 // extractFields evaluates each JSONPath in mappings against the decoded payload

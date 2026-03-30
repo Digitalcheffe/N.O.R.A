@@ -164,14 +164,21 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message) error {
 		)
 	}
 
+	sourceType := "docker_engine"
+	sourceID := ""
+	if appID != "" {
+		sourceType = "app"
+		sourceID = appID
+	}
 	ev := &models.Event{
-		ID:          uuid.New().String(),
-		AppID:       appID, // empty string → NULL via NULLIF in repo
-		ReceivedAt:  time.Now().UTC(),
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  "{}",
-		Fields:      fields,
+		ID:         uuid.New().String(),
+		Level:      severity,
+		SourceName: containerName,
+		SourceType: sourceType,
+		SourceID:   sourceID,
+		Title:      displayText,
+		Payload:    fields,
+		CreatedAt:  time.Now().UTC(),
 	}
 
 	if err := w.store.Events.Create(ctx, ev); err != nil {

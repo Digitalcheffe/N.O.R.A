@@ -97,8 +97,8 @@ func TestSSLChecker_WarnStatus(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(events.created))
 	}
 	ev := events.created[0]
-	if ev.Severity != "warn" {
-		t.Errorf("expected severity=warn, got %s", ev.Severity)
+	if ev.Level != "warn" {
+		t.Errorf("expected level=warn, got %s", ev.Level)
 	}
 }
 
@@ -120,12 +120,12 @@ func TestSSLChecker_CriticalStatus(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(events.created))
 	}
 	ev := events.created[0]
-	if ev.Severity != "critical" {
-		t.Errorf("expected severity=critical, got %s", ev.Severity)
+	if ev.Level != "critical" {
+		t.Errorf("expected level=critical, got %s", ev.Level)
 	}
 }
 
-// TestSSLChecker_DownOnTLSError verifies TLS dial failure results in "down" with severity "error".
+// TestSSLChecker_DownOnTLSError verifies TLS dial failure results in "down" with level "error".
 func TestSSLChecker_DownOnTLSError(t *testing.T) {
 	checks := &mockCheckRepo{}
 	events := &mockEventRepo{}
@@ -143,8 +143,8 @@ func TestSSLChecker_DownOnTLSError(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(events.created))
 	}
 	ev := events.created[0]
-	if ev.Severity != "error" {
-		t.Errorf("expected severity=error, got %s", ev.Severity)
+	if ev.Level != "error" {
+		t.Errorf("expected level=error, got %s", ev.Level)
 	}
 }
 
@@ -163,13 +163,13 @@ func TestSSLChecker_Recovery(t *testing.T) {
 		t.Fatalf("expected 1 recovery event, got %d", len(events.created))
 	}
 	ev := events.created[0]
-	if ev.Severity != "info" {
-		t.Errorf("expected severity=info for recovery, got %s", ev.Severity)
+	if ev.Level != "info" {
+		t.Errorf("expected level=info for recovery, got %s", ev.Level)
 	}
 }
 
 // TestSSLChecker_EventWithoutApp verifies a status-change event IS created for
-// checks not linked to an app (app_id nullable; events queryable by check_id).
+// checks not linked to an app (source_type=monitor_check, queryable by source_id).
 func TestSSLChecker_EventWithoutApp(t *testing.T) {
 	checks := &mockCheckRepo{}
 	events := &mockEventRepo{}
@@ -183,8 +183,8 @@ func TestSSLChecker_EventWithoutApp(t *testing.T) {
 	if len(events.created) != 1 {
 		t.Errorf("expected 1 event for check without app on status change, got %d", len(events.created))
 	}
-	if events.created[0].AppID != "" {
-		t.Errorf("expected empty app_id on event, got %s", events.created[0].AppID)
+	if events.created[0].SourceType != "monitor_check" {
+		t.Errorf("expected source_type=monitor_check on event, got %s", events.created[0].SourceType)
 	}
 }
 

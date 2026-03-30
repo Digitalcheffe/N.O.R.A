@@ -87,8 +87,8 @@ func TestURLChecker_WrongStatusDown(t *testing.T) {
 	if len(events.created) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events.created))
 	}
-	if events.created[0].Severity != "error" {
-		t.Errorf("expected severity=error, got %s", events.created[0].Severity)
+	if events.created[0].Level != "error" {
+		t.Errorf("expected level=error, got %s", events.created[0].Level)
 	}
 }
 
@@ -111,8 +111,8 @@ func TestURLChecker_Recovery(t *testing.T) {
 	if len(events.created) != 1 {
 		t.Fatalf("expected 1 recovery event, got %d", len(events.created))
 	}
-	if events.created[0].Severity != "info" {
-		t.Errorf("expected severity=info, got %s", events.created[0].Severity)
+	if events.created[0].Level != "info" {
+		t.Errorf("expected level=info, got %s", events.created[0].Level)
 	}
 }
 
@@ -253,8 +253,8 @@ func TestURLChecker_EventWithoutApp(t *testing.T) {
 	if len(events.created) != 1 {
 		t.Errorf("expected 1 event for check without app on status change, got %d", len(events.created))
 	}
-	if events.created[0].AppID != "" {
-		t.Errorf("expected empty app_id on event, got %s", events.created[0].AppID)
+	if events.created[0].SourceType != "monitor_check" {
+		t.Errorf("expected source_type=monitor_check on event, got %s", events.created[0].SourceType)
 	}
 }
 

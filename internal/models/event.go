@@ -2,14 +2,19 @@ package models
 
 import "time"
 
-// Event represents a single inbound event captured from an application webhook.
+// Event represents a unified event from any NORA source: app webhooks, infra
+// pollers, monitor checks, Docker watchers, or internal system activity.
+//
+// source_type values: app | physical_host | virtual_host | docker_engine |
+//
+//	monitor_check | system
 type Event struct {
-	ID          string    `db:"id"           json:"id"`
-	AppID       string    `db:"app_id"       json:"app_id"`
-	AppName     string    `db:"app_name"     json:"app_name"`
-	ReceivedAt  time.Time `db:"received_at"  json:"received_at"`
-	Severity    string    `db:"severity"     json:"severity"`
-	DisplayText string    `db:"display_text" json:"display_text"`
-	RawPayload  string    `db:"raw_payload"  json:"raw_payload"`
-	Fields      string    `db:"fields"       json:"fields"`
+	ID         string    `db:"id"          json:"id"`
+	Level      string    `db:"level"       json:"level"`
+	SourceName string    `db:"source_name" json:"source_name"`
+	SourceType string    `db:"source_type" json:"source_type"`
+	SourceID   string    `db:"source_id"   json:"source_id"`
+	Title      string    `db:"title"       json:"title"`
+	Payload    string    `db:"payload"     json:"payload"`
+	CreatedAt  time.Time `db:"created_at"  json:"created_at"`
 }

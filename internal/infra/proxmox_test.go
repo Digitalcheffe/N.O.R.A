@@ -271,7 +271,7 @@ func TestProxmoxPoller_Poll_VMStoppedFiresWarnEvent(t *testing.T) {
 	}
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "warn" && ev.DisplayText == "VM ubuntu is now stopped on pve" {
+		if ev.Level == "warn" && ev.Title == "VM ubuntu is now stopped on pve" {
 			found = true
 		}
 	}
@@ -305,7 +305,7 @@ func TestProxmoxPoller_Poll_VMStartedFiresInfoEvent(t *testing.T) {
 	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "info" && ev.DisplayText == "VM win11 is now running on pve" {
+		if ev.Level == "info" && ev.Title == "VM win11 is now running on pve" {
 			found = true
 		}
 	}
@@ -339,7 +339,7 @@ func TestProxmoxPoller_Poll_LXCStateChangeFiresEvent(t *testing.T) {
 	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "info" && ev.DisplayText == "LXC debian-ct is now running on pve" {
+		if ev.Level == "info" && ev.Title == "LXC debian-ct is now running on pve" {
 			found = true
 		}
 	}

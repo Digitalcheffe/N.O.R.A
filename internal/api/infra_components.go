@@ -870,7 +870,7 @@ func (h *InfraComponentHandler) ListEvents(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	f.ComponentID = id
+	f.SourceID = id
 
 	evts, total, err := h.events.List(r.Context(), f)
 	if err != nil {

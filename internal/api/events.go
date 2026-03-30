@@ -34,27 +34,27 @@ func (h *EventsHandler) Routes(r chi.Router) {
 
 // --- response types ---
 
-// eventItem is the list-response shape: fields is a JSON object; raw_payload is excluded.
+// eventItem is the list-response shape: payload is excluded.
 type eventItem struct {
-	ID          string          `json:"id"`
-	AppID       string          `json:"app_id"`
-	AppName     string          `json:"app_name"`
-	ReceivedAt  time.Time       `json:"received_at"`
-	Severity    string          `json:"severity"`
-	DisplayText string          `json:"display_text"`
-	Fields      json.RawMessage `json:"fields"`
+	ID         string    `json:"id"`
+	Level      string    `json:"level"`
+	SourceName string    `json:"source_name"`
+	SourceType string    `json:"source_type"`
+	SourceID   string    `json:"source_id"`
+	Title      string    `json:"title"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
-// eventDetail is the single-event shape: includes raw_payload as a JSON object.
+// eventDetail is the single-event shape: includes payload as a JSON object.
 type eventDetail struct {
-	ID          string          `json:"id"`
-	AppID       string          `json:"app_id"`
-	AppName     string          `json:"app_name"`
-	ReceivedAt  time.Time       `json:"received_at"`
-	Severity    string          `json:"severity"`
-	DisplayText string          `json:"display_text"`
-	Fields      json.RawMessage `json:"fields"`
-	RawPayload  json.RawMessage `json:"raw_payload"`
+	ID         string          `json:"id"`
+	Level      string          `json:"level"`
+	SourceName string          `json:"source_name"`
+	SourceType string          `json:"source_type"`
+	SourceID   string          `json:"source_id"`
+	Title      string          `json:"title"`
+	Payload    json.RawMessage `json:"payload"`
+	CreatedAt  time.Time       `json:"created_at"`
 }
 
 // listEventsResponse wraps a page of events with pagination metadata.
@@ -80,26 +80,26 @@ func rawOrEmpty(s string) json.RawMessage {
 
 func toEventItem(e models.Event) eventItem {
 	return eventItem{
-		ID:          e.ID,
-		AppID:       e.AppID,
-		AppName:     e.AppName,
-		ReceivedAt:  e.ReceivedAt,
-		Severity:    e.Severity,
-		DisplayText: e.DisplayText,
-		Fields:      rawOrEmpty(e.Fields),
+		ID:         e.ID,
+		Level:      e.Level,
+		SourceName: e.SourceName,
+		SourceType: e.SourceType,
+		SourceID:   e.SourceID,
+		Title:      e.Title,
+		CreatedAt:  e.CreatedAt,
 	}
 }
 
 func toEventDetail(e *models.Event) eventDetail {
 	return eventDetail{
-		ID:          e.ID,
-		AppID:       e.AppID,
-		AppName:     e.AppName,
-		ReceivedAt:  e.ReceivedAt,
-		Severity:    e.Severity,
-		DisplayText: e.DisplayText,
-		Fields:      rawOrEmpty(e.Fields),
-		RawPayload:  rawOrEmpty(e.RawPayload),
+		ID:         e.ID,
+		Level:      e.Level,
+		SourceName: e.SourceName,
+		SourceType: e.SourceType,
+		SourceID:   e.SourceID,
+		Title:      e.Title,
+		Payload:    rawOrEmpty(e.Payload),
+		CreatedAt:  e.CreatedAt,
 	}
 }
 
@@ -109,13 +109,14 @@ func parseFilter(r *http.Request) (repo.ListFilter, error) {
 	q := r.URL.Query()
 
 	f := repo.ListFilter{
-		AppID:       q.Get("app_id"),
-		ComponentID: q.Get("component_id"),
-		Limit:       50,
-		Offset:      0,
+		SourceID:   q.Get("source_id"),
+		SourceName: q.Get("source_name"),
+		Limit:      50,
+		Offset:     0,
 	}
 
-	if st := q.Get("source_type"); st == "app" || st == "infra" || st == "check" {
+	// Accept source_type directly.
+	if st := q.Get("source_type"); st != "" {
 		f.SourceType = st
 	}
 
@@ -123,10 +124,10 @@ func parseFilter(r *http.Request) (repo.ListFilter, error) {
 		f.Search = s
 	}
 
-	if sv := q.Get("severity"); sv != "" {
-		for _, s := range strings.Split(sv, ",") {
-			if s = strings.TrimSpace(s); s != "" {
-				f.Severity = append(f.Severity, s)
+	if lv := q.Get("level"); lv != "" {
+		for _, l := range strings.Split(lv, ",") {
+			if l = strings.TrimSpace(l); l != "" {
+				f.Level = append(f.Level, l)
 			}
 		}
 	}
@@ -165,7 +166,7 @@ func parseFilter(r *http.Request) (repo.ListFilter, error) {
 
 	if s := q.Get("sort"); s != "" {
 		switch s {
-		case "newest", "oldest", "severity_desc", "severity_asc":
+		case "newest", "oldest", "level_desc", "level_asc":
 			f.Sort = s
 		}
 	}
@@ -203,10 +204,10 @@ func (h *EventsHandler) Timeseries(w http.ResponseWriter, r *http.Request) {
 		until = time.Now().UTC()
 	}
 
-	appID := q.Get("app_id")
-	severity := q.Get("severity")
+	sourceID := q.Get("source_id")
+	level := q.Get("level")
 
-	buckets, err := h.events.Timeseries(r.Context(), since, until, granularity, appID, severity)
+	buckets, err := h.events.Timeseries(r.Context(), since, until, granularity, sourceID, level)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -219,15 +220,17 @@ func (h *EventsHandler) Timeseries(w http.ResponseWriter, r *http.Request) {
 // List returns a filtered page of events: GET /api/v1/events
 //
 // @Summary      List events
-// @Description  Returns a filtered, paginated list of events across all apps. raw_payload is excluded.
+// @Description  Returns a filtered, paginated list of events across all sources. payload is excluded.
 // @Tags         events
 // @Produce      json
-// @Param        app_id    query  string  false  "Filter by app ID"
-// @Param        severity  query  string  false  "Comma-separated severity filter: debug,info,warn,error,critical"
-// @Param        since     query  string  false  "ISO8601 lower bound (inclusive) e.g. 2026-01-01T00:00:00Z"
-// @Param        until     query  string  false  "ISO8601 upper bound (inclusive) e.g. 2026-12-31T23:59:59Z"
-// @Param        limit     query  int     false  "Page size (default 50, max 200)"
-// @Param        offset    query  int     false  "Pagination offset (default 0)"
+// @Param        source_id    query  string  false  "Filter by source ID (app ID, check ID, component ID, etc.)"
+// @Param        source_type  query  string  false  "Filter by source type: app, physical_host, virtual_host, docker_engine, monitor_check, system"
+// @Param        source_name  query  string  false  "Partial match on source name (case-insensitive)"
+// @Param        level        query  string  false  "Comma-separated level filter: debug,info,warn,error,critical"
+// @Param        since        query  string  false  "ISO8601 lower bound (inclusive) e.g. 2026-01-01T00:00:00Z"
+// @Param        until        query  string  false  "ISO8601 upper bound (inclusive) e.g. 2026-12-31T23:59:59Z"
+// @Param        limit        query  int     false  "Page size (default 50, max 500)"
+// @Param        offset       query  int     false  "Pagination offset (default 0)"
 // @Success      200  {object}  listEventsResponse
 // @Failure      400  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
@@ -258,10 +261,10 @@ func (h *EventsHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Get returns a single event with raw_payload: GET /api/v1/events/{id}
+// Get returns a single event with payload: GET /api/v1/events/{id}
 //
 // @Summary      Get an event
-// @Description  Returns a single event by ID. Includes raw_payload as a parsed JSON object.
+// @Description  Returns a single event by ID. Includes payload as a parsed JSON object.
 // @Tags         events
 // @Produce      json
 // @Param        id   path      string  true  "Event ID"
@@ -291,10 +294,10 @@ func (h *EventsHandler) Get(w http.ResponseWriter, r *http.Request) {
 // @Tags         events
 // @Produce      json
 // @Param        id        path   string  true   "App ID"
-// @Param        severity  query  string  false  "Comma-separated severity filter"
+// @Param        level     query  string  false  "Comma-separated level filter"
 // @Param        since     query  string  false  "ISO8601 lower bound"
 // @Param        until     query  string  false  "ISO8601 upper bound"
-// @Param        limit     query  int     false  "Page size (default 50, max 200)"
+// @Param        limit     query  int     false  "Page size (default 50, max 500)"
 // @Param        offset    query  int     false  "Pagination offset"
 // @Success      200  {object}  listEventsResponse
 // @Failure      400  {object}  map[string]string
@@ -308,7 +311,8 @@ func (h *EventsHandler) ListByApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	f.AppID = appID // override any app_id query param with the path param
+	f.SourceID = appID   // override with path param
+	f.SourceType = "app" // scope to app events only
 
 	events, total, err := h.events.List(r.Context(), f)
 	if err != nil {
