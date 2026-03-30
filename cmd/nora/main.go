@@ -87,6 +87,9 @@ func main() {
 		webPushSubscriptionRepo,
 	)
 
+	// Startup event — written once so users can see when NORA last started.
+	jobs.EmitStartupEvent(context.Background(), store)
+
 	// Push notification sender
 	pushSender := push.NewSender(cfg, store)
 

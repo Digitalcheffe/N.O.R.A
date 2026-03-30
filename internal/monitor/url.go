@@ -115,7 +115,7 @@ func (u *URLChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 	// check is linked to an app.
 	prevStatus := check.LastStatus
 	if prevStatus != "" && prevStatus != newStatus {
-		if evErr := u.createStatusEvent(ctx, check, newStatus, resp.StatusCode, expected, now); evErr != nil {
+		if evErr := u.createStatusEvent(ctx, check, newStatus, resp.StatusCode, expected, latencyMs, now); evErr != nil {
 			log.Printf("url checker: create event for check %s: %v", check.ID, evErr)
 		}
 	}
@@ -143,7 +143,7 @@ func (u *URLChecker) recordError(ctx context.Context, check *models.MonitorCheck
 
 	prevStatus := check.LastStatus
 	if prevStatus != "" && prevStatus != newStatus {
-		if evErr := u.createStatusEvent(ctx, check, newStatus, 0, expected, now); evErr != nil {
+		if evErr := u.createStatusEvent(ctx, check, newStatus, 0, expected, 0, now); evErr != nil {
 			log.Printf("url checker: create event for check %s: %v", check.ID, evErr)
 		}
 	}
@@ -160,6 +160,7 @@ func (u *URLChecker) createStatusEvent(
 	check *models.MonitorCheck,
 	newStatus string,
 	gotStatus, expectedStatus int,
+	latencyMs int64,
 	now time.Time,
 ) error {
 	var severity, displayText string
@@ -172,6 +173,11 @@ func (u *URLChecker) createStatusEvent(
 		displayText = fmt.Sprintf("URL check restored — %s", check.Name)
 	}
 
+	payload := fmt.Sprintf(
+		`{"type":"url","url":%q,"status_code":%d,"expected_status":%d,"latency_ms":%d}`,
+		check.Target, gotStatus, expectedStatus, latencyMs,
+	)
+
 	event := &models.Event{
 		ID:         uuid.New().String(),
 		Level:      severity,
@@ -179,7 +185,7 @@ func (u *URLChecker) createStatusEvent(
 		SourceType: "monitor_check",
 		SourceID:   check.ID,
 		Title:      displayText,
-		Payload:    `{"type":"url"}`,
+		Payload:    payload,
 		CreatedAt:  now,
 	}
 	return u.store.Events.Create(ctx, event)

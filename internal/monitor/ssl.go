@@ -77,9 +77,9 @@ func (s *SSLChecker) runTraefikSSL(ctx context.Context, check *models.MonitorChe
 
 	daysRemaining := int(time.Until(*cert.ExpiresAt).Hours() / 24)
 
-	var issuerStr, subjectStr string
+	var certIssuer, subjectStr string
 	if cert.Issuer != nil {
-		issuerStr = *cert.Issuer
+		certIssuer = *cert.Issuer
 	}
 	subjectStr = cert.Domain
 	expiresAt := *cert.ExpiresAt
@@ -87,7 +87,7 @@ func (s *SSLChecker) runTraefikSSL(ctx context.Context, check *models.MonitorChe
 	details, _ := json.Marshal(sslDetails{
 		DaysRemaining: &daysRemaining,
 		ExpiresAt:     &expiresAt,
-		Issuer:        &issuerStr,
+		Issuer:        &certIssuer,
 		Subject:       &subjectStr,
 	})
 
@@ -103,7 +103,7 @@ func (s *SSLChecker) runTraefikSSL(ctx context.Context, check *models.MonitorChe
 
 	prevStatus := check.LastStatus
 	if prevStatus != "" && prevStatus != newStatus {
-		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, daysRemaining, now); evErr != nil {
+		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, daysRemaining, &expiresAt, certIssuer, now); evErr != nil {
 			log.Printf("ssl checker (traefik): create event for check %s: %v", check.ID, evErr)
 		}
 	}
@@ -142,7 +142,7 @@ func (s *SSLChecker) runStandaloneSSL(ctx context.Context, check *models.Monitor
 	newStatus := result.Status
 
 	if prevStatus != "" && prevStatus != newStatus {
-		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, days, now); evErr != nil {
+		if evErr := s.createStatusEvent(ctx, check, newStatus, domain, days, parsed.ExpiresAt, issuerStr(parsed.Issuer), now); evErr != nil {
 			log.Printf("ssl checker: create event for check %s: %v", check.ID, evErr)
 		}
 	}
@@ -165,12 +165,22 @@ func extractDomain(target string) string {
 	return d
 }
 
+// issuerStr safely dereferences a *string, returning "" if nil.
+func issuerStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // createStatusEvent persists a status-change event for an SSL check.
 func (s *SSLChecker) createStatusEvent(
 	ctx context.Context,
 	check *models.MonitorCheck,
 	newStatus, domain string,
 	daysRemaining int,
+	expiresAt *time.Time,
+	issuer string,
 	now time.Time,
 ) error {
 	var severity, displayText string
@@ -189,6 +199,15 @@ func (s *SSLChecker) createStatusEvent(
 		displayText = fmt.Sprintf("SSL renewed — %s: %d days remaining", domain, daysRemaining)
 	}
 
+	expiresStr := ""
+	if expiresAt != nil {
+		expiresStr = expiresAt.UTC().Format(time.RFC3339)
+	}
+	payload := fmt.Sprintf(
+		`{"type":"ssl","domain":%q,"days_remaining":%d,"expires_at":%q,"issuer":%q}`,
+		domain, daysRemaining, expiresStr, issuer,
+	)
+
 	event := &models.Event{
 		ID:         uuid.New().String(),
 		Level:      severity,
@@ -196,7 +215,7 @@ func (s *SSLChecker) createStatusEvent(
 		SourceType: "monitor_check",
 		SourceID:   check.ID,
 		Title:      displayText,
-		Payload:    `{"type":"ssl"}`,
+		Payload:    payload,
 		CreatedAt:  now,
 	}
 	return s.store.Events.Create(ctx, event)
