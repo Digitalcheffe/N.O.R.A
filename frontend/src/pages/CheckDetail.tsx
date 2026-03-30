@@ -355,9 +355,9 @@ export function CheckDetail() {
               <div className="check-history-list">
                 {events.map(ev => (
                   <div key={ev.id} className="check-history-row">
-                    {severityBadge(ev.severity)}
-                    <span className="check-history-text">{ev.display_text}</span>
-                    <span className="check-history-time">{formatEventTime(ev.received_at)}</span>
+                    {severityBadge(ev.level)}
+                    <span className="check-history-text">{ev.title}</span>
+                    <span className="check-history-time">{formatEventTime(ev.created_at)}</span>
                   </div>
                 ))}
               </div>

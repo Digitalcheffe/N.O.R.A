@@ -246,7 +246,7 @@ export function Events() {
     if (toDate) {
       filter.to = new Date(toDate + 'T23:59:59').toISOString()
     }
-    if (severity) filter.severity = severity
+    if (severity) filter.level = severity
     if (sourceType) filter.source_type = sourceType as 'app' | 'infra' | 'check'
     if (search) filter.search = search
     eventsApi
@@ -337,8 +337,8 @@ export function Events() {
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
-              <option value="severity_desc">Severity ↓</option>
-              <option value="severity_asc">Severity ↑</option>
+              <option value="level_desc">Severity ↓</option>
+              <option value="level_asc">Severity ↑</option>
             </select>
             <select
               className="events-select"
@@ -452,7 +452,7 @@ export function Events() {
             <EventRow
               key={ev.id}
               event={ev}
-              onAppClick={ev.app_id ? id => navigate(`/apps/${id}`) : undefined}
+              onAppClick={ev.source_type === 'app' && ev.source_id ? id => navigate(`/apps/${id}`) : undefined}
             />
           ))}
 

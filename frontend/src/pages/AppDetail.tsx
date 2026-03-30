@@ -106,9 +106,9 @@ function Sparkline({ data, color = 'var(--accent)' }: { data: number[]; color?: 
 // ── Expanded event detail ─────────────────────────────────────────────────────
 
 function EventDetail({ event, appName }: { event: Event; appName: string }) {
-  const receivedDate = event.received_at ? new Date(event.received_at) : null
-  const received = receivedDate && !isNaN(receivedDate.getTime())
-    ? receivedDate.toLocaleString('en-US', {
+  const createdDate = event.created_at ? new Date(event.created_at) : null
+  const received = createdDate && !isNaN(createdDate.getTime())
+    ? createdDate.toLocaleString('en-US', {
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: false,
       })
@@ -118,7 +118,7 @@ function EventDetail({ event, appName }: { event: Event; appName: string }) {
       <div className="detail-expand-meta">
         <div className="detail-meta-row">
           <span className="detail-meta-label">Severity</span>
-          <span className={`detail-meta-val sev-${event.severity}`}>{event.severity}</span>
+          <span className={`detail-meta-val sev-${event.level}`}>{event.level}</span>
         </div>
         <div className="detail-meta-row">
           <span className="detail-meta-label">App</span>
@@ -130,10 +130,8 @@ function EventDetail({ event, appName }: { event: Event; appName: string }) {
         </div>
       </div>
       <div className="detail-expand-payload-label">Raw Payload</div>
-      {Object.keys(event.raw_payload ?? {}).length > 0 ? (
-        <JsonViewer data={event.raw_payload} />
-      ) : Object.keys(event.fields ?? {}).length > 0 ? (
-        <JsonViewer data={event.fields} />
+      {event.payload && Object.keys(event.payload).length > 0 ? (
+        <JsonViewer data={event.payload} />
       ) : (
         <div className="json-viewer json-empty">No payload</div>
       )}
@@ -154,10 +152,10 @@ function DetailEventRow({ event, appName, expanded, onToggle }: {
   return (
     <div className={`event-row-wrapper${expanded ? ' expanded' : ''}`}>
       <div className="event-row" onClick={onToggle}>
-        <div className="event-time">{formatEventTime(event.received_at)}</div>
-        <div className={`severity-badge ${event.severity}`} />
-        <div className="event-text">{event.display_text}</div>
-        <div className={`event-sev-label ${event.severity}`}>{event.severity}</div>
+        <div className="event-time">{formatEventTime(event.created_at)}</div>
+        <div className={`severity-badge ${event.level}`} />
+        <div className="event-text">{event.title}</div>
+        <div className={`event-sev-label ${event.level}`}>{event.level}</div>
       </div>
       {expanded && <EventDetail event={event} appName={appName} />}
     </div>
@@ -486,7 +484,7 @@ export function AppDetail() {
   useEffect(() => {
     if (!appId) return
     setLoading(true); setOffset(0); setEvents([]); setExpandedId(null)
-    const filter = { limit: PAGE_SIZE, offset: 0, ...(severityFilter !== 'all' ? { severity: severityFilter } : {}) }
+    const filter = { limit: PAGE_SIZE, offset: 0, ...(severityFilter !== 'all' ? { level: severityFilter } : {}) }
     appsApi.events(appId, filter)
       .then(res => { setEvents(res.data); setTotal(res.total) })
       .catch(console.error)
@@ -502,7 +500,7 @@ export function AppDetail() {
   function handleLoadMore() {
     const nextOffset = offset + PAGE_SIZE
     setLoadingMore(true)
-    const filter = { limit: PAGE_SIZE, offset: nextOffset, ...(severityFilter !== 'all' ? { severity: severityFilter } : {}) }
+    const filter = { limit: PAGE_SIZE, offset: nextOffset, ...(severityFilter !== 'all' ? { level: severityFilter } : {}) }
     appsApi.events(appId, filter)
       .then(res => { setEvents(prev => [...prev, ...res.data]); setOffset(nextOffset) })
       .catch(console.error)

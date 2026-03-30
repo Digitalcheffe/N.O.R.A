@@ -132,7 +132,7 @@ export const apps = {
 
   events: (id: string, filter?: EventFilter) => {
     const params = new URLSearchParams()
-    if (filter?.severity) params.set('severity', filter.severity)
+    if (filter?.level) params.set('level', filter.level)
     if (filter?.from) params.set('since', filter.from)
     if (filter?.to) params.set('until', filter.to)
     if (filter?.limit) params.set('limit', String(filter.limit))
@@ -150,11 +150,9 @@ export const apps = {
 export const events = {
   list: (filter?: EventFilter) => {
     const params = new URLSearchParams()
-    if (filter?.app_id) params.set('app_id', filter.app_id)
-    if (filter?.component_id) params.set('component_id', filter.component_id)
     if (filter?.source_type) params.set('source_type', filter.source_type)
     if (filter?.search) params.set('search', filter.search)
-    if (filter?.severity) params.set('severity', filter.severity)
+    if (filter?.level) params.set('level', filter.level)
     if (filter?.from) params.set('since', filter.from)
     if (filter?.to) params.set('until', filter.to)
     if (filter?.limit) params.set('limit', String(filter.limit))
@@ -172,8 +170,7 @@ export const events = {
     params.set('since', filter.since)
     params.set('until', filter.until)
     params.set('granularity', filter.granularity)
-    if (filter.app_id) params.set('app_id', filter.app_id)
-    if (filter.severity) params.set('severity', filter.severity)
+    if (filter.severity) params.set('level', filter.severity)
     return request<{ data: TimeseriesBucket[] }>('GET', `/events/timeseries?${params.toString()}`)
   },
 }
@@ -370,7 +367,7 @@ export const infrastructure = {
 
   events: (id: string, filter?: EventFilter) => {
     const params = new URLSearchParams()
-    if (filter?.severity) params.set('severity', filter.severity)
+    if (filter?.level) params.set('level', filter.level)
     if (filter?.from) params.set('since', filter.from)
     if (filter?.to) params.set('until', filter.to)
     if (filter?.limit) params.set('limit', String(filter.limit))

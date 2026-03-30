@@ -66,23 +66,21 @@ export type Severity = 'debug' | 'info' | 'warn' | 'error' | 'critical'
 
 export interface Event {
   id: string
-  app_id: string
-  app_name: string
-  received_at: string
-  severity: Severity
-  display_text: string
-  raw_payload: Record<string, unknown>
-  fields: Record<string, unknown>
+  level: Severity
+  source_name: string
+  source_type: string
+  source_id: string
+  title: string
+  payload?: Record<string, unknown>
+  created_at: string
 }
 
-export type EventSort = 'newest' | 'oldest' | 'severity_desc' | 'severity_asc'
+export type EventSort = 'newest' | 'oldest' | 'level_desc' | 'level_asc'
 
 export interface EventFilter {
-  app_id?: string
-  component_id?: string
   source_type?: 'app' | 'infra' | 'check'
   search?: string
-  severity?: Severity
+  level?: Severity
   from?: string
   to?: string
   limit?: number

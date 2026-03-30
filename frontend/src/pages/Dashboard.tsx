@@ -199,7 +199,7 @@ export function Dashboard() {
                     <EventRow
                       key={event.id}
                       event={event}
-                      appName={appNameMap[event.app_id] ?? event.app_id}
+                      appName={event.source_name || undefined}
                     />
                   ))}
                 </div>
