@@ -521,18 +521,11 @@ export function Infrastructure() {
 
         <div className="infra-traefik-summary">
           {detail ? (
-            <>
-              <span className="infra-traefik-cert-count">{detail.cert_count} cert{detail.cert_count !== 1 ? 's' : ''}</span>
-              {detail.crit_count > 0 && (
-                <span className="infra-traefik-badge crit">{detail.crit_count} critical</span>
-              )}
-              {detail.warn_count > 0 && detail.crit_count === 0 && (
-                <span className="infra-traefik-badge warn">{detail.warn_count} expiring</span>
-              )}
-              <span className="infra-traefik-route-count">{detail.routes.length} route{detail.routes.length !== 1 ? 's' : ''}</span>
-            </>
+            <span className="infra-traefik-route-count">
+              {detail.routes.length} route{detail.routes.length !== 1 ? 's' : ''}
+            </span>
           ) : (
-            <span className="infra-traefik-cert-count">—</span>
+            <span className="infra-traefik-route-count">—</span>
           )}
         </div>
 
@@ -596,30 +589,38 @@ export function Infrastructure() {
           <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
             <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
             <span className="infra-status-label">{statusLabel(c.last_status)}</span>
+          </div>
+        </div>
+
+        <div className="infra-card-footer">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+            {lastPolledAt && (
+              <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
+            )}
             {renderScanFeedback(c.id)}
-            <div className="infra-card-actions" style={{ marginLeft: 8 }}>
-              <button
-                className="infra-card-btn"
-                onClick={e => { e.stopPropagation(); void handleScan(c.id) }}
-                disabled={isDeleting || isScanning || scanningId !== null}
-              >
-                {isScanning ? 'Scanning…' : 'Scan Now'}
-              </button>
-              <button
-                className="infra-card-btn"
-                onClick={e => { e.stopPropagation(); openEdit(c) }}
-                disabled={isDeleting || isScanning}
-              >
-                Edit
-              </button>
-              <button
-                className="infra-card-btn danger"
-                onClick={e => { e.stopPropagation(); void handleDelete(c.id) }}
-                disabled={isDeleting || isScanning}
-              >
-                {isDeleting ? 'Deleting…' : 'Delete'}
-              </button>
-            </div>
+          </div>
+          <div className="infra-card-actions">
+            <button
+              className="infra-card-btn"
+              onClick={() => void handleScan(c.id)}
+              disabled={isDeleting || isScanning || scanningId !== null}
+            >
+              {isScanning ? 'Scanning…' : 'Scan Now'}
+            </button>
+            <button
+              className="infra-card-btn"
+              onClick={() => openEdit(c)}
+              disabled={isDeleting || isScanning}
+            >
+              Edit
+            </button>
+            <button
+              className="infra-card-btn danger"
+              onClick={() => void handleDelete(c.id)}
+              disabled={isDeleting || isScanning}
+            >
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </button>
           </div>
         </div>
       </div>

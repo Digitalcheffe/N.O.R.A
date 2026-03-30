@@ -134,7 +134,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* ── COMPONENT CARD ────────────────────────────────────────────────────────── */
@@ -276,6 +276,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: auto;
 }
 
 .infra-last-updated {

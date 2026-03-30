@@ -3,14 +3,12 @@ package jobs
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
-	"github.com/google/uuid"
 )
 
 // traefikComponentCredentials is the JSON shape stored in infrastructure_components.credentials
@@ -68,81 +66,6 @@ func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.Infra
 
 	// ── Overview health (Infra-10) ────────────────────────────────────────────
 	pollTraefikOverview(ctx, store, c, client)
-
-	// ── Fetch certs ──────────────────────────────────────────────────────────
-
-	rawCerts, err := client.FetchCerts(ctx)
-	if err != nil {
-		return fmt.Errorf("fetch certs: %w", err)
-	}
-
-	// Convert TraefikCert → TraefikComponentCert.
-	compCerts := make([]*models.TraefikComponentCert, 0, len(rawCerts))
-	for _, rc := range rawCerts {
-		cc := &models.TraefikComponentCert{
-			ComponentID: c.ID,
-			Domain:      rc.Domain,
-			Issuer:      rc.Issuer,
-			ExpiresAt:   rc.ExpiresAt,
-			SANs:        rc.SANs,
-		}
-		compCerts = append(compCerts, cc)
-	}
-
-	if err := store.TraefikComponents.UpsertCerts(ctx, c.ID, compCerts); err != nil {
-		return fmt.Errorf("upsert certs: %w", err)
-	}
-
-	// ── Sync SSL checks ───────────────────────────────────────────────────────
-
-	// Build a map of existing owned checks by target (domain).
-	existingChecks, err := store.Checks.ListBySourceComponent(ctx, c.ID)
-	if err != nil {
-		return fmt.Errorf("list existing checks: %w", err)
-	}
-	existingByDomain := make(map[string]models.MonitorCheck, len(existingChecks))
-	for _, ch := range existingChecks {
-		existingByDomain[ch.Target] = ch
-	}
-
-	// Track which domains are still present so we can delete stale checks.
-	activeDomains := make(map[string]bool, len(compCerts))
-	sslSource := "component"
-	for _, cc := range compCerts {
-		activeDomains[cc.Domain] = true
-
-		var checkID string
-		if existing, ok := existingByDomain[cc.Domain]; ok {
-			checkID = existing.ID
-		} else {
-			checkID = uuid.New().String()
-		}
-
-		check := &models.MonitorCheck{
-			ID:                checkID,
-			Name:              c.Name + " — " + cc.Domain,
-			Type:              "ssl",
-			Target:            cc.Domain,
-			IntervalSecs:      300,
-			SSLWarnDays:       30,
-			SSLCritDays:       7,
-			SSLSource:         &sslSource,
-			SourceComponentID: &c.ID,
-			Enabled:           true,
-		}
-		if err := store.Checks.UpsertForComponent(ctx, check); err != nil {
-			log.Printf("traefik component scheduler: upsert check for %s: %v", cc.Domain, err)
-		}
-	}
-
-	// Delete checks for domains no longer present.
-	for domain, ch := range existingByDomain {
-		if !activeDomains[domain] {
-			if err := store.Checks.Delete(ctx, ch.ID); err != nil {
-				log.Printf("traefik component scheduler: delete stale check %s: %v", ch.ID, err)
-			}
-		}
-	}
 
 	// ── Fetch routes ─────────────────────────────────────────────────────────
 
