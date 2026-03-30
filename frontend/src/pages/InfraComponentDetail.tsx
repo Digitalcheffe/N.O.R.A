@@ -10,6 +10,8 @@ import type {
   ResourceSummary,
   ResourceHistory,
   ResourceRollupPoint,
+  SNMPDetail,
+  SNMPDisk,
   TraefikComponentDetail,
   TraefikCertWithCheck,
   TraefikRoute,
@@ -130,6 +132,142 @@ function ResourceSection({ resources, history }: { resources: ResourceSummary | 
   )
 }
 
+// ── SNMP section ──────────────────────────────────────────────────────────────
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B'
+  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`
+  if (bytes >= 1e9)  return `${(bytes / 1e9).toFixed(1)} GB`
+  if (bytes >= 1e6)  return `${(bytes / 1e6).toFixed(1)} MB`
+  return `${(bytes / 1e3).toFixed(0)} KB`
+}
+
+function snmpBarColor(pct: number): string {
+  if (pct >= 90) return 'var(--red)'
+  if (pct >= 70) return 'var(--yellow, #eab308)'
+  return 'var(--accent)'
+}
+
+function SNMPResourceRow({
+  label,
+  pct,
+  sub,
+  noData,
+}: {
+  label: string
+  pct: number
+  sub?: string
+  noData: boolean
+}) {
+  const color = noData ? 'var(--border)' : snmpBarColor(pct)
+  return (
+    <div className="snmp-res-row">
+      <span className="snmp-res-label">{label}</span>
+      <div className="snmp-res-track">
+        <div
+          className="snmp-res-fill"
+          style={{ width: noData ? '0%' : `${Math.min(pct, 100)}%`, background: color }}
+        />
+      </div>
+      {noData ? (
+        <span className="snmp-res-pct muted">—</span>
+      ) : (
+        <span className="snmp-res-pct" style={{ color }}>{Math.round(pct)}%</span>
+      )}
+      {sub && !noData && <span className="snmp-res-sub">{sub}</span>}
+    </div>
+  )
+}
+
+function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
+  const [diskExpanded, setDiskExpanded] = useState(false)
+  const noData = !detail || !!detail.no_data
+
+  const disks: SNMPDisk[] = detail?.disks ?? []
+  const DISK_LIMIT = 6
+  const visibleDisks = diskExpanded ? disks : disks.slice(0, DISK_LIMIT)
+  const hiddenCount = disks.length - DISK_LIMIT
+
+  return (
+    <>
+      {/* ── Section 1: System Info ── */}
+      <div className="icd-section">
+        <div className="icd-section-title">System Info</div>
+        <div className="snmp-info-grid">
+          <div className="snmp-info-row">
+            <span className="snmp-info-label">Hostname</span>
+            <span className="snmp-info-value">{noData || !detail?.hostname ? '—' : detail.hostname}</span>
+          </div>
+          <div className="snmp-info-row">
+            <span className="snmp-info-label">OS</span>
+            {noData || !detail?.os_description ? (
+              <span className="snmp-info-value muted">—</span>
+            ) : (
+              <span className="snmp-info-value snmp-os-descr" title={detail.os_description}>
+                {detail.os_description.length > 60
+                  ? detail.os_description.slice(0, 60) + '…'
+                  : detail.os_description}
+              </span>
+            )}
+          </div>
+          <div className="snmp-info-row">
+            <span className="snmp-info-label">Uptime</span>
+            <span className="snmp-info-value">{noData || !detail?.uptime ? '—' : detail.uptime}</span>
+          </div>
+        </div>
+        {noData && <div className="snmp-pending">Awaiting first scan</div>}
+      </div>
+
+      {/* ── Section 2: CPU & Memory ── */}
+      <div className="icd-section">
+        <div className="icd-section-title">CPU &amp; Memory</div>
+        <div className="snmp-res-rows">
+          <SNMPResourceRow
+            label="CPU"
+            pct={detail?.cpu_percent ?? 0}
+            noData={noData}
+          />
+          <SNMPResourceRow
+            label="MEM"
+            pct={detail?.memory?.percent ?? 0}
+            sub={
+              detail?.memory
+                ? `${formatBytes(detail.memory.used_bytes)} / ${formatBytes(detail.memory.total_bytes)}`
+                : undefined
+            }
+            noData={noData}
+          />
+        </div>
+      </div>
+
+      {/* ── Section 3: Disk ── */}
+      <div className="icd-section">
+        <div className="icd-section-title">Disk</div>
+        {noData || disks.length === 0 ? (
+          <div className="snmp-pending">Pending first scan</div>
+        ) : (
+          <div className="snmp-disk-rows">
+            {visibleDisks.map(d => (
+              <SNMPResourceRow
+                key={d.label}
+                label={d.label}
+                pct={d.percent}
+                sub={`${formatBytes(d.used_bytes)} / ${formatBytes(d.total_bytes)}`}
+                noData={false}
+              />
+            ))}
+            {!diskExpanded && hiddenCount > 0 && (
+              <button className="snmp-expand-btn" onClick={() => setDiskExpanded(true)}>
+                and {hiddenCount} more…
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
 // ── Traefik section ───────────────────────────────────────────────────────────
 
 function TraefikSection({ detail }: { detail: TraefikComponentDetail }) {
@@ -204,11 +342,14 @@ export function InfraComponentDetail() {
   const [resources,     setResources]     = useState<ResourceSummary | null>(null)
   const [history,       setHistory]       = useState<ResourceHistory | null>(null)
   const [traefikDetail, setTraefikDetail] = useState<TraefikComponentDetail | null>(null)
+  const [snmpDetail,    setSnmpDetail]    = useState<SNMPDetail | null>(null)
   const [children,      setChildren]      = useState<InfrastructureComponent[]>([])
   const [linkedApps,    setLinkedApps]    = useState<App[]>([])
   const [allApps,       setAllApps]       = useState<App[]>([])
   const [linkingAppId,  setLinkingAppId]  = useState('')
   const [linkBusy,      setLinkBusy]      = useState(false)
+  const [scanning,      setScanning]      = useState(false)
+  const [scanError,     setScanError]     = useState<string | null>(null)
   const [loading,       setLoading]       = useState(true)
   const [error,         setError]         = useState<string | null>(null)
 
@@ -230,13 +371,42 @@ export function InfraComponentDetail() {
         setChildren(ch.data)
         setLinkedApps(linked.data)
         setAllApps(allA.data)
+        const extras: Promise<unknown>[] = []
         if (comp.type === 'traefik') {
-          return infraApi.traefikDetail(id).then(det => setTraefikDetail(det))
+          extras.push(infraApi.traefikDetail(id).then(det => setTraefikDetail(det)))
         }
+        if (comp.collection_method === 'snmp') {
+          extras.push(infraApi.snmpDetail(id).then(det => setSnmpDetail(det)))
+        }
+        return Promise.all(extras)
       })
       .catch(err => setError(err instanceof Error ? err.message : 'Failed to load'))
       .finally(() => setLoading(false))
   }, [id, tick])
+
+  async function handleScan() {
+    if (!id || !component) return
+    setScanning(true)
+    setScanError(null)
+    try {
+      await infraApi.scan(id)
+      // Re-fetch component status + resources + SNMP detail after poll completes.
+      const [comp, res] = await Promise.all([
+        infraApi.get(id),
+        infraApi.resources(id, 'hour'),
+      ])
+      setComponent(comp)
+      setResources(res)
+      if (component.collection_method === 'snmp') {
+        const det = await infraApi.snmpDetail(id)
+        setSnmpDetail(det)
+      }
+    } catch (err: unknown) {
+      setScanError(err instanceof Error ? err.message : 'Scan failed')
+    } finally {
+      setScanning(false)
+    }
+  }
 
   async function handleLinkApp() {
     if (!id || !linkingAppId) return
@@ -301,11 +471,26 @@ export function InfraComponentDetail() {
             <span className="icd-status-label">{component.last_status}</span>
             <span className="icd-type-badge">{TYPE_LABEL[component.type] ?? component.type}</span>
             {component.ip && <span className="icd-ip">{component.ip}</span>}
+            {component.collection_method !== 'none' && (
+              <button
+                className="icd-scan-btn"
+                onClick={() => void handleScan()}
+                disabled={scanning}
+              >
+                {scanning ? 'Scanning…' : 'Scan Now'}
+              </button>
+            )}
           </div>
         </div>
+        {scanError && <div className="icd-scan-error">{scanError}</div>}
 
-        {/* Resource metrics (shown for components that have pollers) */}
-        {component.type !== 'docker_engine' && component.type !== 'traefik' && (
+        {/* SNMP hosts: three-section detail view */}
+        {component.collection_method === 'snmp' && (
+          <SNMPSection detail={snmpDetail} />
+        )}
+
+        {/* Non-SNMP resource metrics (Proxmox, Synology, etc.) */}
+        {component.type !== 'docker_engine' && component.type !== 'traefik' && component.collection_method !== 'snmp' && (
           <ResourceSection resources={resources} history={history} />
         )}
 

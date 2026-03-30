@@ -434,4 +434,167 @@
   transition: opacity 0.15s;
 }
 
+/* ── Scan Now button (header) ────────────────────────────────────────────────── */
+
+.icd-scan-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.icd-scan-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.icd-scan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icd-scan-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  margin-bottom: 16px;
+}
+
+/* ── SNMP detail sections ─────────────────────────────────────────────────────── */
+
+/* System info rows */
+
+.snmp-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.snmp-info-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.snmp-info-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  width: 64px;
+  flex-shrink: 0;
+}
+
+.snmp-info-value {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.snmp-info-value.muted {
+  color: var(--text3);
+}
+
+.snmp-os-descr {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 480px;
+  cursor: default;
+}
+
+/* Resource bar rows (CPU, MEM, Disk) */
+
+.snmp-res-rows,
+.snmp-disk-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.snmp-res-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snmp-res-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  width: 80px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snmp-res-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.snmp-res-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.snmp-res-pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.snmp-res-pct.muted {
+  color: var(--text3);
+}
+
+.snmp-res-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Pending / no-data state */
+
+.snmp-pending {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Disk expand link */
+
+.snmp-expand-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.snmp-expand-btn:hover {
+  color: var(--text2);
+  text-decoration: underline;
+}
+
 .icd-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }

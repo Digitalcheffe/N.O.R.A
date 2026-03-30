@@ -40,6 +40,7 @@ func (h *InfraComponentHandler) Routes(r chi.Router) {
 	r.Post("/infrastructure/{id}/scan", h.Scan)
 	r.Get("/infrastructure/{id}/resources", h.GetResources)
 	r.Get("/infrastructure/{id}/resources/history", h.GetResourceHistory)
+	r.Get("/infrastructure/{id}/snmp", h.GetSNMPDetail)
 	r.Get("/infrastructure/{id}/traefik", h.GetTraefikDetail)
 	r.Get("/infrastructure/{id}/traefik/overview", h.GetTraefikOverview)
 	r.Get("/infrastructure/{id}/traefik/routers", h.GetTraefikRouters)
@@ -471,7 +472,15 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	rollups, err := h.rollups.LatestForSource(r.Context(), id, comp.Type, period)
+	// SNMP pollers write resource_readings with source_type="snmp_host" regardless
+	// of the component type (linux_host, bare_metal, etc.). Use the poller's
+	// source_type when querying rollups so the lookup matches what was stored.
+	sourceType := comp.Type
+	if comp.CollectionMethod == "snmp" {
+		sourceType = "snmp_host"
+	}
+
+	rollups, err := h.rollups.LatestForSource(r.Context(), id, sourceType, period)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -588,7 +597,11 @@ func (h *InfraComponentHandler) GetResourceHistory(w http.ResponseWriter, r *htt
 		}
 	}
 
-	rollups, err := h.rollups.HistoryForSource(r.Context(), id, comp.Type, period, limit)
+	histSourceType := comp.Type
+	if comp.CollectionMethod == "snmp" {
+		histSourceType = "snmp_host"
+	}
+	rollups, err := h.rollups.HistoryForSource(r.Context(), id, histSourceType, period, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -611,6 +624,107 @@ func (h *InfraComponentHandler) GetResourceHistory(w http.ResponseWriter, r *htt
 		Data:        points,
 		Total:       len(points),
 	})
+}
+
+// ── SNMP detail ───────────────────────────────────────────────────────────────
+
+// snmpDetailMemory is the memory sub-object in the SNMP detail response.
+type snmpDetailMemory struct {
+	UsedBytes  int64   `json:"used_bytes"`
+	TotalBytes int64   `json:"total_bytes"`
+	Percent    float64 `json:"percent"`
+}
+
+// snmpDetailDisk is one disk entry in the SNMP detail response.
+type snmpDetailDisk struct {
+	Label      string  `json:"label"`
+	UsedBytes  int64   `json:"used_bytes"`
+	TotalBytes int64   `json:"total_bytes"`
+	Percent    float64 `json:"percent"`
+}
+
+// snmpDetailResponse is returned by GET /api/v1/infrastructure/{id}/snmp.
+type snmpDetailResponse struct {
+	OSDescription string           `json:"os_description"`
+	Uptime        string           `json:"uptime"`
+	Hostname      string           `json:"hostname"`
+	CPUPercent    float64          `json:"cpu_percent"`
+	Memory        snmpDetailMemory `json:"memory"`
+	Disks         []snmpDetailDisk `json:"disks"`
+	NoData        bool             `json:"no_data,omitempty"`
+}
+
+// GetSNMPDetail returns the latest SNMP system identity and resource snapshot.
+// GET /api/v1/infrastructure/{id}/snmp
+func (h *InfraComponentHandler) GetSNMPDetail(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if comp.CollectionMethod != "snmp" {
+		writeError(w, http.StatusBadRequest, "component does not use SNMP collection")
+		return
+	}
+
+	// No poll has run yet — return a zeroed no_data response so the UI can render.
+	if comp.SNMPMeta == nil || *comp.SNMPMeta == "" {
+		resp := snmpDetailResponse{NoData: true, Disks: []snmpDetailDisk{}}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	// Parse snmp_meta snapshot written by the poller.
+	var meta struct {
+		OSDescription string  `json:"os_description"`
+		Uptime        string  `json:"uptime"`
+		Hostname      string  `json:"hostname"`
+		CPUPercent    float64 `json:"cpu_percent"`
+		Memory        struct {
+			UsedBytes  int64   `json:"used_bytes"`
+			TotalBytes int64   `json:"total_bytes"`
+			Percent    float64 `json:"percent"`
+		} `json:"memory"`
+		Disks []struct {
+			Label      string  `json:"label"`
+			UsedBytes  int64   `json:"used_bytes"`
+			TotalBytes int64   `json:"total_bytes"`
+			Percent    float64 `json:"percent"`
+		} `json:"disks"`
+	}
+	if jsonErr := json.Unmarshal([]byte(*comp.SNMPMeta), &meta); jsonErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse snmp_meta")
+		return
+	}
+
+	disks := make([]snmpDetailDisk, len(meta.Disks))
+	for i, d := range meta.Disks {
+		disks[i] = snmpDetailDisk{
+			Label:      d.Label,
+			UsedBytes:  d.UsedBytes,
+			TotalBytes: d.TotalBytes,
+			Percent:    d.Percent,
+		}
+	}
+
+	resp := snmpDetailResponse{
+		OSDescription: meta.OSDescription,
+		Uptime:        meta.Uptime,
+		Hostname:      meta.Hostname,
+		CPUPercent:    meta.CPUPercent,
+		Memory: snmpDetailMemory{
+			UsedBytes:  meta.Memory.UsedBytes,
+			TotalBytes: meta.Memory.TotalBytes,
+			Percent:    meta.Memory.Percent,
+		},
+		Disks: disks,
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // ── Traefik detail ────────────────────────────────────────────────────────────

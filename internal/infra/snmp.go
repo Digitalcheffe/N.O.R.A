@@ -38,6 +38,39 @@ type SNMPConfig struct {
 	ContextName    string `json:"context_name"`     // v3
 }
 
+// SNMPMeta is the JSON shape stored in infrastructure_components.snmp_meta.
+// It holds the latest system identity + resource snapshot written each poll cycle.
+type SNMPMeta struct {
+	OSDescription string     `json:"os_description"` // sysDescr OID
+	Uptime        string     `json:"uptime"`         // sysUpTime converted from timeticks
+	Hostname      string     `json:"hostname"`       // sysName OID
+	CPUPercent    float64    `json:"cpu_percent"`
+	Memory        SNMPMemory `json:"memory"`
+	Disks         []SNMPDisk `json:"disks"`
+}
+
+// SNMPMemory holds the latest RAM reading from hrStorageRam.
+type SNMPMemory struct {
+	UsedBytes  int64   `json:"used_bytes"`
+	TotalBytes int64   `json:"total_bytes"`
+	Percent    float64 `json:"percent"`
+}
+
+// SNMPDisk holds one fixed-disk entry from hrStorageFixedDisk.
+type SNMPDisk struct {
+	Label      string  `json:"label"`       // original hrStorageDescr (e.g. "/", "C:")
+	UsedBytes  int64   `json:"used_bytes"`
+	TotalBytes int64   `json:"total_bytes"`
+	Percent    float64 `json:"percent"`
+}
+
+// SNMPv2-MIB — system identity OIDs (RFC 3418).
+const (
+	oidSysDescr  = "1.3.6.1.2.1.1.1.0" // full OS description string
+	oidSysUpTime = "1.3.6.1.2.1.1.3.0" // timeticks since last reboot (1/100 second)
+	oidSysName   = "1.3.6.1.2.1.1.5.0" // hostname as reported by the device
+)
+
 // HOST-RESOURCES-MIB OIDs (RFC 2790) — work on Linux (net-snmp) and Windows.
 const (
 	oidHrProcessorLoad  = "1.3.6.1.2.1.25.3.3.1.2"  // hrProcessorLoad — one row per CPU core
@@ -63,8 +96,9 @@ type snmpClient interface {
 	Get(oids []string) (*gosnmp.SnmpPacket, error)
 }
 
-// SNMPPoller polls a single host via SNMP (HOST-RESOURCES-MIB), writing
-// cpu_percent, mem_percent, and per-disk disk_percent_{label} into resource_readings.
+// SNMPPoller polls a single host via SNMP (SNMPv2-MIB + HOST-RESOURCES-MIB),
+// writing cpu_percent, mem_percent, and per-disk disk_percent_{label} into
+// resource_readings, and storing the full snapshot in snmp_meta.
 type SNMPPoller struct {
 	componentID string
 	ip          string
@@ -156,10 +190,11 @@ func snmpPrivProtocol(s string) gosnmp.SnmpV3PrivProtocol {
 
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
-// Poll opens an SNMP connection, collects CPU / memory / disk metrics, writes
-// resource_readings, and updates last_status. A Connect() error is returned
-// directly so the caller can mark the component offline. Metric-level errors
-// are logged but do not abort the poll; partial success yields status="degraded".
+// Poll opens an SNMP connection, collects system identity + CPU / memory / disk
+// metrics, writes resource_readings, stores snmp_meta, and updates last_status.
+// A Connect() error is returned directly so the caller can mark the component
+// offline. Metric-level errors are logged but do not abort the poll; partial
+// success yields status="degraded".
 func (p *SNMPPoller) Poll(ctx context.Context, store *repo.Store) error {
 	client := p.newClient()
 
@@ -170,6 +205,18 @@ func (p *SNMPPoller) Poll(ctx context.Context, store *repo.Store) error {
 
 	now := time.Now().UTC()
 	degraded := false
+	meta := SNMPMeta{}
+
+	// ── System identity (sysDescr, sysUpTime, sysName) ───────────────────────
+	sysInfo, err := p.pollSystemInfo(client)
+	if err != nil {
+		log.Printf("snmp poller %s: system info: %v", p.componentID, err)
+		// Non-fatal — system info is best-effort.
+	} else {
+		meta.OSDescription = sysInfo.OSDescription
+		meta.Uptime = sysInfo.Uptime
+		meta.Hostname = sysInfo.Hostname
+	}
 
 	// ── CPU ──────────────────────────────────────────────────────────────────
 	cpuPct, err := p.pollCPU(client)
@@ -177,6 +224,7 @@ func (p *SNMPPoller) Poll(ctx context.Context, store *repo.Store) error {
 		log.Printf("snmp poller %s: cpu: %v", p.componentID, err)
 		degraded = true
 	} else {
+		meta.CPUPercent = cpuPct
 		p.writeReading(ctx, store, now, "cpu_percent", cpuPct)
 	}
 
@@ -186,14 +234,35 @@ func (p *SNMPPoller) Poll(ctx context.Context, store *repo.Store) error {
 		log.Printf("snmp poller %s: storage table: %v", p.componentID, err)
 		degraded = true
 	} else {
-		if memPct, ok := computeMemPercent(storageEntries); ok {
-			p.writeReading(ctx, store, now, "mem_percent", memPct)
+		if mem, ok := computeMemResult(storageEntries); ok {
+			meta.Memory = SNMPMemory{
+				UsedBytes:  mem.usedBytes,
+				TotalBytes: mem.totalBytes,
+				Percent:    mem.percent,
+			}
+			p.writeReading(ctx, store, now, "mem_percent", mem.percent)
 		} else {
 			log.Printf("snmp poller %s: no RAM storage entry found", p.componentID)
 			degraded = true
 		}
-		for label, pct := range computeDiskPercents(storageEntries) {
-			p.writeReading(ctx, store, now, "disk_percent_"+label, pct)
+
+		diskResults := computeDiskResults(storageEntries)
+		meta.Disks = make([]SNMPDisk, len(diskResults))
+		for i, d := range diskResults {
+			meta.Disks[i] = SNMPDisk{
+				Label:      d.label,
+				UsedBytes:  d.usedBytes,
+				TotalBytes: d.totalBytes,
+				Percent:    d.percent,
+			}
+			p.writeReading(ctx, store, now, "disk_percent_"+sanitizeDiskLabel(d.label), d.percent)
+		}
+	}
+
+	// ── Persist snmp_meta snapshot ────────────────────────────────────────────
+	if metaJSON, jsonErr := json.Marshal(meta); jsonErr == nil {
+		if updateErr := store.InfraComponents.UpdateSNMPMeta(ctx, p.componentID, string(metaJSON)); updateErr != nil {
+			log.Printf("snmp poller %s: write snmp_meta: %v", p.componentID, updateErr)
 		}
 	}
 
@@ -219,6 +288,55 @@ func (p *SNMPPoller) writeReading(ctx context.Context, store *repo.Store, now ti
 	}
 	if err := store.Resources.Create(ctx, r); err != nil {
 		log.Printf("snmp poller %s: write %s: %v", p.componentID, metric, err)
+	}
+}
+
+// ── System info collector ─────────────────────────────────────────────────────
+
+// systemInfoResult holds the parsed SNMPv2-MIB system scalars.
+type systemInfoResult struct {
+	OSDescription string
+	Uptime        string
+	Hostname      string
+}
+
+// pollSystemInfo performs scalar GETs for sysDescr, sysUpTime, and sysName.
+func (p *SNMPPoller) pollSystemInfo(client snmpClient) (systemInfoResult, error) {
+	pkt, err := client.Get([]string{oidSysDescr, oidSysUpTime, oidSysName})
+	if err != nil {
+		return systemInfoResult{}, fmt.Errorf("get system OIDs: %w", err)
+	}
+
+	var result systemInfoResult
+	for _, v := range pkt.Variables {
+		clean := strings.TrimPrefix(v.Name, ".")
+		switch clean {
+		case oidSysDescr:
+			result.OSDescription = strings.TrimSpace(snmpToString(v.Value))
+		case oidSysUpTime:
+			ticks := snmpToUint32(v.Value)
+			result.Uptime = ticksToUptime(ticks)
+		case oidSysName:
+			result.Hostname = strings.TrimSpace(snmpToString(v.Value))
+		}
+	}
+	return result, nil
+}
+
+// ticksToUptime converts SNMP timeticks (1/100 second units) to a human-readable
+// uptime string such as "14d 3h 22m" or "2h 5m".
+func ticksToUptime(ticks uint32) string {
+	total := time.Duration(ticks) * 10 * time.Millisecond
+	d := int(total.Hours() / 24)
+	h := int(total.Hours()) % 24
+	m := int(total.Minutes()) % 60
+	switch {
+	case d > 0:
+		return fmt.Sprintf("%dd %dh %dm", d, h, m)
+	case h > 0:
+		return fmt.Sprintf("%dh %dm", h, m)
+	default:
+		return fmt.Sprintf("%dm", m)
 	}
 }
 
@@ -299,23 +417,47 @@ func (p *SNMPPoller) walkStorageTable(client snmpClient) ([]storageRow, error) {
 	return rows, nil
 }
 
-// computeMemPercent finds the hrStorageRam entry and returns used/size as a percent.
-func computeMemPercent(rows []storageRow) (float64, bool) {
+// memResult holds the computed memory metrics from the hrStorageRam entry.
+type memResult struct {
+	percent    float64
+	usedBytes  int64
+	totalBytes int64
+}
+
+// computeMemResult finds the hrStorageRam entry and returns the full result.
+func computeMemResult(rows []storageRow) (memResult, bool) {
 	for _, r := range rows {
 		if !oidMatch(r.storageType, oidHrStorageRam) {
 			continue
 		}
 		if r.size == 0 {
-			return 0, false
+			return memResult{}, false
 		}
-		return float64(r.used) / float64(r.size) * 100, true
+		total := r.size * r.allocUnits
+		used := r.used * r.allocUnits
+		pct := float64(r.used) / float64(r.size) * 100
+		return memResult{percent: pct, usedBytes: used, totalBytes: total}, true
 	}
-	return 0, false
+	return memResult{}, false
 }
 
-// computeDiskPercents returns a map of sanitized label → used% for all fixed-disk entries.
-func computeDiskPercents(rows []storageRow) map[string]float64 {
-	result := make(map[string]float64)
+// computeMemPercent is kept for backward compatibility with existing tests.
+func computeMemPercent(rows []storageRow) (float64, bool) {
+	m, ok := computeMemResult(rows)
+	return m.percent, ok
+}
+
+// diskResult holds the computed disk metrics for one fixed-disk entry.
+type diskResult struct {
+	label      string  // original hrStorageDescr
+	percent    float64
+	usedBytes  int64
+	totalBytes int64
+}
+
+// computeDiskResults returns a slice of diskResult for all fixed-disk entries.
+func computeDiskResults(rows []storageRow) []diskResult {
+	var results []diskResult
 	for _, r := range rows {
 		if !oidMatch(r.storageType, oidHrStorageFixDisk) {
 			continue
@@ -324,8 +466,23 @@ func computeDiskPercents(rows []storageRow) map[string]float64 {
 			continue
 		}
 		pct := float64(r.used) / float64(r.size) * 100
-		label := sanitizeDiskLabel(r.descr)
-		result[label] = pct
+		total := r.size * r.allocUnits
+		used := r.used * r.allocUnits
+		results = append(results, diskResult{
+			label:      r.descr,
+			percent:    pct,
+			usedBytes:  used,
+			totalBytes: total,
+		})
+	}
+	return results
+}
+
+// computeDiskPercents is kept for backward compatibility with existing tests.
+func computeDiskPercents(rows []storageRow) map[string]float64 {
+	result := make(map[string]float64)
+	for _, d := range computeDiskResults(rows) {
+		result[sanitizeDiskLabel(d.label)] = d.percent
 	}
 	return result
 }
@@ -361,6 +518,21 @@ func snmpToFloat64(v interface{}) float64 {
 }
 
 func snmpToInt64(v interface{}) int64 { return int64(snmpToFloat64(v)) }
+
+// snmpToUint32 extracts a uint32 timeticks value from a gosnmp PDU.
+func snmpToUint32(v interface{}) uint32 {
+	switch val := v.(type) {
+	case uint32:
+		return val
+	case uint:
+		return uint32(val)
+	case int:
+		if val >= 0 {
+			return uint32(val)
+		}
+	}
+	return uint32(snmpToFloat64(v))
+}
 
 // snmpOIDString converts a gosnmp ObjectIdentifier value to a dotted-decimal string.
 // gosnmp returns OID values as dotted strings, potentially with a leading dot.
