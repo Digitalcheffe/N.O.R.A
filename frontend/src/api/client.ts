@@ -16,6 +16,7 @@ import type {
   DashboardSummaryResponse,
   DigestSchedule,
   DiscoveredContainer,
+  DiscoveredRoute,
   DockerEngine,
   Event,
   EventFilter,
@@ -44,6 +45,8 @@ import type {
   TimeseriesFilter,
   TraefikCert,
   TraefikComponentDetail,
+  TraefikOverview,
+  TraefikServiceDetail,
   User,
   ValidationResult,
   VirtualHost,
@@ -404,6 +407,19 @@ export const discovery = {
 
   linkContainerApp: (containerId: string, body: LinkAppInput) =>
     request<unknown>('POST', `/discovered-containers/${containerId}/link-app`, body),
+}
+
+// ── Traefik expanded (Infra-10/11) ────────────────────────────────────────────
+
+export const traefik = {
+  getOverview: (id: string) =>
+    request<TraefikOverview>('GET', `/infrastructure/${id}/traefik/overview`),
+
+  getRouters: (id: string) =>
+    request<ListResponse<DiscoveredRoute>>('GET', `/infrastructure/${id}/traefik/routers`),
+
+  getServices: (id: string) =>
+    request<ListResponse<TraefikServiceDetail>>('GET', `/infrastructure/${id}/traefik/services`),
 }
 
 // ── Metrics ───────────────────────────────────────────────────────────────────

@@ -1,0 +1,455 @@
+/* ── Traefik Detail Page ──────────────────────────────────────────────────── */
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.tk-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tk-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tk-back-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tk-back-btn:hover { color: var(--text); }
+
+.tk-title {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.tk-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.tk-status-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: capitalize;
+}
+
+.tk-version {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  background: var(--surface2, var(--card));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.tk-polled-at {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.tk-scan-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent, #6366f1);
+  background: none;
+  border: 1px solid var(--accent, #6366f1);
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+
+.tk-scan-btn:hover:not(:disabled) { opacity: 1; }
+.tk-scan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.tk-scan-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Status dots ─────────────────────────────────────────────────────────── */
+
+.tk-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.tk-status-dot.online   { background: var(--green); }
+.tk-status-dot.degraded { background: var(--yellow, #eab308); }
+.tk-status-dot.offline  { background: var(--red); }
+.tk-status-dot.unknown  { background: var(--text3); }
+
+/* ── Sections ────────────────────────────────────────────────────────────── */
+
+.tk-section {
+  margin-bottom: 28px;
+}
+
+.tk-section-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tk-section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tk-section-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--red);
+  padding: 8px 0;
+}
+
+.tk-retry-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.tk-retry-btn:hover { border-color: var(--text2); color: var(--text); }
+
+.tk-empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  padding: 8px 0;
+}
+
+.tk-empty-cell {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  padding: 16px 0;
+}
+
+/* ── Overview card ───────────────────────────────────────────────────────── */
+
+.tk-overview-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 18px;
+}
+
+.tk-overview-loading {
+  display: flex;
+  flex-direction: column;
+}
+
+.tk-overview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.tk-overview-row:last-of-type {
+  border-bottom: none;
+}
+
+.tk-overview-label {
+  width: 90px;
+  font-size: 11px;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+
+.tk-overview-value {
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+/* ── Error banner ────────────────────────────────────────────────────────── */
+
+.tk-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid var(--red);
+  border-radius: 5px;
+  padding: 8px 14px;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--red);
+  cursor: pointer;
+}
+
+.tk-error-banner:hover {
+  background: rgba(239, 68, 68, 0.14);
+}
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+
+.tk-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: 3px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.tk-badge.error {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.tk-badge.warn {
+  color: var(--yellow, #eab308);
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.tk-badge-muted {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  background: var(--surface2, var(--card));
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.tk-badge-sm {
+  font-size: 9px;
+  padding: 1px 4px;
+}
+
+/* ── Filters ─────────────────────────────────────────────────────────────── */
+
+.tk-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tk-filter-select {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--surface2, var(--card));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.tk-count-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+
+.tk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.tk-table th {
+  text-align: left;
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 10px 8px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.tk-table td {
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.tk-table tr:last-child td { border-bottom: none; }
+
+.tk-muted { color: var(--text2); }
+
+/* ── Router row ──────────────────────────────────────────────────────────── */
+
+.tk-domain {
+  font-weight: 600;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tk-arrow {
+  font-size: 12px;
+  padding-right: 6px !important;
+}
+
+.tk-service-name {
+  color: var(--accent, #6366f1);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tk-tls-icon {
+  font-size: 12px;
+  cursor: default;
+}
+
+.tk-row-disabled td {
+  opacity: 0.6;
+}
+
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
+
+.tk-tooltip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* ── Service row ─────────────────────────────────────────────────────────── */
+
+.tk-svc-name {
+  font-weight: 600;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tk-row-error {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.tk-row-error td {
+  border-bottom-color: rgba(239, 68, 68, 0.12);
+}
+
+.tk-health-up      { color: var(--green); }
+.tk-health-partial { color: var(--yellow, #eab308); }
+.tk-health-down    { color: var(--red); }
+
+.tk-endpoints-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tk-endpoint {
+  color: var(--text2);
+}
+
+.tk-endpoint-down {
+  color: var(--text3);
+  text-decoration: line-through;
+}
+
+/* ── Skeleton ────────────────────────────────────────────────────────────── */
+
+.tk-skeleton-row td { padding: 10px 0; }
+
+.tk-skeleton-bar {
+  height: 12px;
+  background: var(--border);
+  border-radius: 3px;
+  animation: tk-pulse 1.4s ease-in-out infinite;
+}
+
+.tk-skeleton-inline {
+  display: inline-block;
+  width: 140px;
+  height: 18px;
+  background: var(--border);
+  border-radius: 3px;
+  animation: tk-pulse 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+@keyframes tk-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Full-page error ─────────────────────────────────────────────────────── */
+
+.tk-fullpage-error {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--red);
+  padding: 24px 0 12px;
+}
