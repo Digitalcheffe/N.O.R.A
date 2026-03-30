@@ -459,6 +459,54 @@ export interface ResourceHistory {
   total: number
 }
 
+// ── Proxmox Detail ────────────────────────────────────────────────────────────
+
+export interface ProxmoxStoragePool {
+  name: string
+  type: string
+  used_bytes: number
+  total_bytes: number
+  used_percent: number
+  active: boolean
+  node: string
+}
+
+export interface ProxmoxGuestInfo {
+  vmid: number
+  name: string
+  guest_type: 'vm' | 'lxc'
+  status: 'running' | 'stopped' | 'paused' | string
+  cpus: number
+  max_mem_bytes: number
+  max_disk_bytes: number
+  os_type?: string
+  network_bridges?: string[]
+  tags?: string[]
+  onboot: boolean
+  uptime: number
+  node: string
+}
+
+export interface ProxmoxNodeStatusDetail {
+  node: string
+  cpu_count: number
+  total_mem_bytes: number
+  uptime: number
+  pve_version?: string
+  updates_available: number
+}
+
+export interface ProxmoxTaskFailure {
+  upid: string
+  type: string
+  object_id?: string
+  exit_status: string
+  start_time: number
+  end_time?: number
+  user: string
+  node: string
+}
+
 // ── Docker Discovery ─────────────────────────────────────────────────────────
 
 export interface DiscoveredContainer {
