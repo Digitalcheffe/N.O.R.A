@@ -110,6 +110,10 @@
 .icon-btn svg { width: 14px; height: 14px; }
 
 .auto-refresh {
+  position: relative;
+}
+
+.auto-refresh-trigger {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -118,10 +122,14 @@
   border-radius: 6px;
   padding: 0 8px;
   height: 28px;
+  cursor: pointer;
   transition: border-color 0.15s;
+  color: var(--text2);
+  width: 80px;
 }
 
-.auto-refresh:focus-within {
+.auto-refresh-trigger:hover,
+.auto-refresh.open .auto-refresh-trigger {
   border-color: var(--border2);
 }
 
@@ -132,22 +140,46 @@
   flex-shrink: 0;
 }
 
-.auto-refresh-select {
+.auto-refresh-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  min-width: 24px;
+  text-align: left;
+}
+
+.auto-refresh-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  overflow: hidden;
+  z-index: 100;
+  width: 80px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.auto-refresh-option {
+  display: block;
+  width: 100%;
+  padding: 7px 14px;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text2);
   background: transparent;
   border: none;
-  outline: none;
+  text-align: left;
   cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  padding: 0;
-  min-width: 28px;
+  transition: background 0.1s;
 }
 
-.auto-refresh-select option {
-  background: var(--bg3);
+.auto-refresh-option:hover {
+  background: var(--bg4);
   color: var(--text);
-  padding: 6px 12px;
+}
+
+.auto-refresh-option.active {
+  color: var(--accent);
+  background: var(--accent-dim);
 }

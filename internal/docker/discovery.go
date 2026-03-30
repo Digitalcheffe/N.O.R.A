@@ -91,23 +91,40 @@ func (d *Discoverer) HandleEvent(ctx context.Context, containerID, name, image, 
 }
 
 // upsert writes or updates a discovered_containers record and runs profile matching.
+// If a stale record exists for the same engine+name with a different container_id,
+// the app_id is transferred to the new record and the stale record is deleted.
 func (d *Discoverer) upsert(ctx context.Context, containerID, name, image, status string) error {
 	now := time.Now().UTC()
 
 	dc := &models.DiscoveredContainer{
 		InfraComponentID: d.engineID,
-		ContainerID:    containerID,
-		ContainerName:  name,
-		Image:          image,
-		Status:         status,
-		LastSeenAt:     now,
-		CreatedAt:      now,
+		ContainerID:      containerID,
+		ContainerName:    name,
+		Image:            image,
+		Status:           status,
+		LastSeenAt:       now,
+		CreatedAt:        now,
 	}
 
 	// Run profile matching and attach suggestion if confidence is sufficient.
 	if match := MatchContainerToProfile(name, image, d.registry); match != nil {
 		dc.ProfileSuggestion = &match.ProfileID
 		dc.SuggestionConfidence = &match.Confidence
+	}
+
+	// Consolidate: if a stale record with the same name but a different container_id
+	// exists, transfer its app_id link to the new record then delete the stale one.
+	if existing, err := d.store.DiscoveredContainers.FindByName(ctx, d.engineID, name); err == nil {
+		if existing.ContainerID != containerID {
+			if existing.AppID != nil {
+				dc.AppID = existing.AppID
+			}
+			if delErr := d.store.DiscoveredContainers.DeleteDiscoveredContainer(ctx, existing.ID); delErr != nil {
+				log.Printf("docker discovery: consolidate stale record for %s: %v", name, delErr)
+			} else {
+				log.Printf("docker discovery: consolidated stale record for container %s (old id %s → new id %s)", name, existing.ContainerID, containerID)
+			}
+		}
 	}
 
 	return d.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, dc)

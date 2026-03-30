@@ -20,6 +20,8 @@ type DiscoveredContainerRepo interface {
 	ListDiscoveredContainers(ctx context.Context, infraComponentID string) ([]*models.DiscoveredContainer, error)
 	ListAllDiscoveredContainers(ctx context.Context) ([]*models.DiscoveredContainer, error)
 	GetDiscoveredContainer(ctx context.Context, id string) (*models.DiscoveredContainer, error)
+	// FindByName returns the first discovered container matching engineID+name, or ErrNotFound.
+	FindByName(ctx context.Context, infraComponentID string, name string) (*models.DiscoveredContainer, error)
 	SetDiscoveredContainerApp(ctx context.Context, id string, appID string) error
 	ClearDiscoveredContainerApp(ctx context.Context, id string) error
 	UpdateDiscoveredContainerStatus(ctx context.Context, id string, status string, lastSeenAt time.Time) error
@@ -27,6 +29,8 @@ type DiscoveredContainerRepo interface {
 	// infraComponentID whose container_id is NOT in runningIDs.  Called after each
 	// reconcile scan so containers removed from Docker don't stay as "running".
 	MarkStoppedIfNotRunning(ctx context.Context, infraComponentID string, runningIDs []string) error
+	// DeleteDiscoveredContainer hard-deletes a discovered container record by UUID.
+	DeleteDiscoveredContainer(ctx context.Context, id string) error
 }
 
 // DiscoveredRouteRepo manages the discovered_routes table.
@@ -192,6 +196,36 @@ func (r *sqliteDiscoveredContainerRepo) MarkStoppedIfNotRunning(ctx context.Cont
 
 	_, err := r.db.ExecContext(ctx, query, args...)
 	return err
+}
+
+func (r *sqliteDiscoveredContainerRepo) FindByName(ctx context.Context, infraComponentID string, name string) (*models.DiscoveredContainer, error) {
+	var c models.DiscoveredContainer
+	err := r.db.GetContext(ctx, &c, `
+		SELECT id, infra_component_id, container_id, container_name, image, status,
+		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
+		FROM discovered_containers
+		WHERE infra_component_id = ? AND container_name = ?
+		LIMIT 1`, infraComponentID, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("discovered container name %s: %w", name, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find discovered container by name %s: %w", name, err)
+	}
+	return &c, nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) DeleteDiscoveredContainer(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM discovered_containers WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete discovered container %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
+	}
+	return nil
 }
 
 // ── DiscoveredRouteRepo implementation ───────────────────────────────────────

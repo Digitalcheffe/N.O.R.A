@@ -30,6 +30,7 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/containers", h.ListContainers)
 	r.Get("/infrastructure/{id}/routes", h.ListRoutes)
 	r.Get("/discovery/all", h.ListAll)
+	r.Delete("/discovered-containers/{id}", h.DeleteContainer)
 	r.Post("/discovered-containers/{id}/link-app", h.LinkContainerApp)
 	r.Delete("/discovered-containers/{id}/link-app", h.UnlinkContainerApp)
 	r.Post("/discovered-routes/{id}/link-app", h.LinkRouteApp)
@@ -379,6 +380,24 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 	default:
 		writeError(w, http.StatusUnprocessableEntity, "mode must be 'existing' or 'create'")
 	}
+}
+
+// DeleteContainer hard-deletes a discovered container record.
+// DELETE /api/v1/discovered-containers/{id}
+func (h *DockerDiscoveryHandler) DeleteContainer(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.store.DiscoveredContainers.GetDiscoveredContainer(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "discovered container not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.store.DiscoveredContainers.DeleteDiscoveredContainer(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // UnlinkContainerApp sets app_id back to null on a discovered container.

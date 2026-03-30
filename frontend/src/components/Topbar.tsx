@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import { useAutoRefresh, type RefreshInterval } from '../context/AutoRefreshContext'
 import './Topbar.css'
 
@@ -35,6 +36,21 @@ export function Topbar({
   onAdd,
 }: TopbarProps) {
   const { interval, setInterval } = useAutoRefresh()
+  const [dropOpen, setDropOpen] = useState(false)
+  const dropRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!dropOpen) return
+    function handleClick(e: MouseEvent) {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setDropOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [dropOpen])
+
+  const currentLabel = REFRESH_OPTIONS.find(o => o.value === interval)?.label ?? 'Off'
 
   return (
     <div className="topbar">
@@ -69,21 +85,27 @@ export function Topbar({
           </button>
         )}
 
-        <div className="auto-refresh">
-          <svg className="auto-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-          </svg>
-          <select
-            className="auto-refresh-select"
-            value={interval}
-            onChange={e => setInterval(Number(e.target.value) as RefreshInterval)}
-            title="Auto refresh interval"
-          >
-            {REFRESH_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+        <div className={`auto-refresh${dropOpen ? ' open' : ''}`} ref={dropRef}>
+          <button className="auto-refresh-trigger" onClick={() => setDropOpen(v => !v)} title="Auto refresh interval">
+            <svg className="auto-refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+            <span className="auto-refresh-label">{currentLabel}</span>
+          </button>
+          {dropOpen && (
+            <div className="auto-refresh-dropdown">
+              {REFRESH_OPTIONS.map(o => (
+                <button
+                  key={o.value}
+                  className={`auto-refresh-option${interval === o.value ? ' active' : ''}`}
+                  onClick={() => { setInterval(o.value); setDropOpen(false) }}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
