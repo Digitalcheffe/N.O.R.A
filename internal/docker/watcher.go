@@ -121,6 +121,7 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message) error {
 	}
 
 	containerName := msg.Actor.Attributes["name"]
+	image := msg.Actor.Attributes["image"]
 	exitCodeStr := msg.Actor.Attributes["exitCode"]
 
 	severity, displayText := severityAndText(action, containerName, exitCodeStr)
@@ -133,7 +134,6 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message) error {
 
 	// Notify the discovery worker so it can upsert into discovered_containers.
 	if w.discoveryHook != nil {
-		image := msg.Actor.Attributes["image"]
 		status := containerStatusFromAction(action)
 		cid := msg.Actor.ID
 		go w.discoveryHook(ctx, cid, containerName, image, status)
@@ -154,13 +154,13 @@ func (w *Watcher) handleEvent(ctx context.Context, msg events.Message) error {
 	}
 
 	fields := fmt.Sprintf(
-		`{"source_type":"docker_container","container_name":%s,"action":%s}`,
-		jsonStr(containerName), jsonStr(action),
+		`{"source_type":"docker_container","container_name":%s,"image":%s,"action":%s}`,
+		jsonStr(containerName), jsonStr(image), jsonStr(action),
 	)
 	if exitCodeStr != "" {
 		fields = fmt.Sprintf(
-			`{"source_type":"docker_container","container_name":%s,"action":%s,"exit_code":%s}`,
-			jsonStr(containerName), jsonStr(action), jsonStr(exitCodeStr),
+			`{"source_type":"docker_container","container_name":%s,"image":%s,"action":%s,"exit_code":%s}`,
+			jsonStr(containerName), jsonStr(image), jsonStr(action), jsonStr(exitCodeStr),
 		)
 	}
 

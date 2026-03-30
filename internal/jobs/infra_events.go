@@ -11,42 +11,42 @@ import (
 	"github.com/google/uuid"
 )
 
-// emitInfraEvent writes a single informational event to the event log for an
+// emitInfraEvent writes a diagnostic event to the event log for an
 // infrastructure poll cycle. source is the poller name (e.g. "proxmox"),
 // trigger is "scheduled" or "manual", status is "ok" or "failed", and detail
 // carries an optional extra message (error text on failure, "" on success).
 //
-// source_type is set to "system" for all infra poll events. Future tasks will
-// update pollers to emit more specific source_type values (e.g. "physical_host").
+// Level is "debug" on success and "error" on failure.
+// source_type is "physical_host" for all infra poll events.
 func emitInfraEvent(
 	ctx context.Context,
 	store *repo.Store,
 	componentID, componentName, source, trigger, status, detail string,
 ) {
-	level := "info"
+	level := "debug"
 	var title string
 
 	if status == "ok" {
-		title = fmt.Sprintf("[%s] %s poll completed (%s)", source, componentName, trigger)
+		title = fmt.Sprintf("%s poll completed — %s", source, componentName)
 	} else {
-		level = "warn"
+		level = "error"
 		if detail != "" {
-			title = fmt.Sprintf("[%s] %s poll failed (%s): %s", source, componentName, trigger, detail)
+			title = fmt.Sprintf("%s poll failed — %s: %s", source, componentName, detail)
 		} else {
-			title = fmt.Sprintf("[%s] %s poll failed (%s)", source, componentName, trigger)
+			title = fmt.Sprintf("%s poll failed — %s", source, componentName)
 		}
 	}
 
 	payload := fmt.Sprintf(
-		`{"source":%q,"component_id":%q,"component_name":%q,"trigger":%q,"poll_status":%q}`,
-		source, componentID, componentName, trigger, status,
+		`{"source":%q,"component_id":%q,"component_name":%q,"trigger":%q,"poll_status":%q,"error":%q}`,
+		source, componentID, componentName, trigger, status, detail,
 	)
 
 	event := &models.Event{
 		ID:         uuid.New().String(),
 		Level:      level,
 		SourceName: componentName,
-		SourceType: "system",
+		SourceType: "physical_host",
 		SourceID:   componentID,
 		Title:      title,
 		Payload:    payload,

@@ -216,7 +216,7 @@ func fireTraefikEvent(ctx context.Context, store *repo.Store, c models.Infrastru
 		ID:         uuid.New().String(),
 		Level:      severity,
 		SourceName: c.Name,
-		SourceType: "system",
+		SourceType: "physical_host",
 		SourceID:   c.ID,
 		Title:      text,
 		Payload:    fields,

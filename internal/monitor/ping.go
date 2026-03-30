@@ -62,6 +62,7 @@ func (p *PingChecker) Run(ctx context.Context, check *models.MonitorCheck) error
 	var detailsBytes []byte
 	if downCount == attempts {
 		newStatus = "down"
+		latencyMs = 0
 		detailsBytes, _ = json.Marshal(pingDetails{})
 	} else {
 		detailsBytes, _ = json.Marshal(pingDetails{LatencyMs: latencyMs})
@@ -71,7 +72,7 @@ func (p *PingChecker) Run(ctx context.Context, check *models.MonitorCheck) error
 	// checks not linked to an app still generate events queryable by check_id.
 	prevStatus := check.LastStatus
 	if prevStatus != "" && prevStatus != newStatus {
-		if err := p.createStatusEvent(ctx, check, newStatus, now); err != nil {
+		if err := p.createStatusEvent(ctx, check, newStatus, latencyMs, now); err != nil {
 			log.Printf("ping checker: create event for check %s: %v", check.ID, err)
 		}
 	}
@@ -83,7 +84,7 @@ func (p *PingChecker) Run(ctx context.Context, check *models.MonitorCheck) error
 }
 
 // createStatusEvent persists a down or recovery event for a check.
-func (p *PingChecker) createStatusEvent(ctx context.Context, check *models.MonitorCheck, newStatus string, now time.Time) error {
+func (p *PingChecker) createStatusEvent(ctx context.Context, check *models.MonitorCheck, newStatus string, latencyMs int64, now time.Time) error {
 	var severity, displayText string
 	if newStatus == "down" {
 		severity = "error"
@@ -93,6 +94,9 @@ func (p *PingChecker) createStatusEvent(ctx context.Context, check *models.Monit
 		displayText = fmt.Sprintf("Ping restored — %s (%s)", check.Name, check.Target)
 	}
 
+	payload := fmt.Sprintf(`{"type":"ping","target":%q,"latency_ms":%d}`,
+		check.Target, latencyMs)
+
 	event := &models.Event{
 		ID:         uuid.New().String(),
 		Level:      severity,
@@ -100,7 +104,7 @@ func (p *PingChecker) createStatusEvent(ctx context.Context, check *models.Monit
 		SourceType: "monitor_check",
 		SourceID:   check.ID,
 		Title:      displayText,
-		Payload:    `{"type":"ping"}`,
+		Payload:    payload,
 		CreatedAt:  now,
 	}
 	return p.store.Events.Create(ctx, event)
