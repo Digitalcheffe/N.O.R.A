@@ -44,10 +44,10 @@ func (f *fakeEventCapture) SparklineBuckets(_ context.Context, _ repo.CategoryFi
 func (f *fakeEventCapture) LatestPerApp(_ context.Context, _ []string) (map[string]*models.Event, error) {
 	return nil, nil
 }
-func (f *fakeEventCapture) DeleteBySeverityBefore(_ context.Context, _ string, _ time.Time) (int64, error) {
+func (f *fakeEventCapture) DeleteByLevelBefore(_ context.Context, _ string, _ time.Time) (int64, error) {
 	return 0, nil
 }
-func (f *fakeEventCapture) GroupByTypeAndSeverity(_ context.Context, _ string, _, _ time.Time) ([]repo.EventTypeCount, error) {
+func (f *fakeEventCapture) GroupByTypeAndLevel(_ context.Context, _ string, _, _ time.Time) ([]repo.EventTypeCount, error) {
 	return nil, nil
 }
 func (f *fakeEventCapture) MetricsForApp(_ context.Context, _ string, _, _ time.Time) (repo.EventMetrics, error) {
@@ -95,11 +95,11 @@ func TestRouterStatusTransition_EnabledToDisabled(t *testing.T) {
 	if len(cap.events) != 1 {
 		t.Fatalf("expected 1 event after disable, got %d", len(cap.events))
 	}
-	if cap.events[0].Severity != "error" {
-		t.Errorf("expected severity=error, got %q", cap.events[0].Severity)
+	if cap.events[0].Level != "error" {
+		t.Errorf("expected severity=error, got %q", cap.events[0].Level)
 	}
-	if !strings.Contains(cap.events[0].DisplayText, "disabled") {
-		t.Errorf("expected 'disabled' in event text, got %q", cap.events[0].DisplayText)
+	if !strings.Contains(cap.events[0].Title, "disabled") {
+		t.Errorf("expected 'disabled' in event text, got %q", cap.events[0].Title)
 	}
 
 	// Third poll — same status again → no new event.
@@ -131,11 +131,11 @@ func TestRouterStatusTransition_DisabledToEnabled(t *testing.T) {
 	if len(cap.events) != 1 {
 		t.Fatalf("expected 1 event after restore, got %d", len(cap.events))
 	}
-	if cap.events[0].Severity != "info" {
-		t.Errorf("expected severity=info, got %q", cap.events[0].Severity)
+	if cap.events[0].Level != "info" {
+		t.Errorf("expected severity=info, got %q", cap.events[0].Level)
 	}
-	if !strings.Contains(cap.events[0].DisplayText, "restored") {
-		t.Errorf("expected 'restored' in event text, got %q", cap.events[0].DisplayText)
+	if !strings.Contains(cap.events[0].Title, "restored") {
+		t.Errorf("expected 'restored' in event text, got %q", cap.events[0].Title)
 	}
 }
 
@@ -205,11 +205,11 @@ func TestServiceServerDown_Transition(t *testing.T) {
 	if len(cap.events) != 1 {
 		t.Fatalf("DOWN transition: expected 1 event, got %d", len(cap.events))
 	}
-	if cap.events[0].Severity != "error" {
-		t.Errorf("expected severity=error, got %q", cap.events[0].Severity)
+	if cap.events[0].Level != "error" {
+		t.Errorf("expected severity=error, got %q", cap.events[0].Level)
 	}
-	if !strings.Contains(cap.events[0].DisplayText, "down") {
-		t.Errorf("expected 'down' in event text, got %q", cap.events[0].DisplayText)
+	if !strings.Contains(cap.events[0].Title, "down") {
+		t.Errorf("expected 'down' in event text, got %q", cap.events[0].Title)
 	}
 
 	// Third observation — same state, no new event.
@@ -231,8 +231,8 @@ func TestServiceServerDown_Transition(t *testing.T) {
 	if len(cap.events) != 2 {
 		t.Fatalf("UP recovery: expected 2 total events, got %d", len(cap.events))
 	}
-	if cap.events[1].Severity != "info" {
-		t.Errorf("expected severity=info for recovery, got %q", cap.events[1].Severity)
+	if cap.events[1].Level != "info" {
+		t.Errorf("expected severity=info for recovery, got %q", cap.events[1].Level)
 	}
 }
 

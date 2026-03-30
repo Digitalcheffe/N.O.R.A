@@ -12,44 +12,45 @@ import (
 )
 
 // emitInfraEvent writes a single informational event to the event log for an
-// infrastructure poll cycle.  source is the poller name (e.g. "proxmox"),
+// infrastructure poll cycle. source is the poller name (e.g. "proxmox"),
 // trigger is "scheduled" or "manual", status is "ok" or "failed", and detail
 // carries an optional extra message (error text on failure, "" on success).
 //
-// The event is written with AppID="" so it is not associated with any
-// application — it appears in the global event stream as an infra event.
+// source_type is set to "system" for all infra poll events. Future tasks will
+// update pollers to emit more specific source_type values (e.g. "physical_host").
 func emitInfraEvent(
 	ctx context.Context,
 	store *repo.Store,
 	componentID, componentName, source, trigger, status, detail string,
 ) {
-	severity := "info"
-	var displayText string
+	level := "info"
+	var title string
 
 	if status == "ok" {
-		displayText = fmt.Sprintf("[%s] %s poll completed (%s)", source, componentName, trigger)
+		title = fmt.Sprintf("[%s] %s poll completed (%s)", source, componentName, trigger)
 	} else {
-		severity = "warn"
+		level = "warn"
 		if detail != "" {
-			displayText = fmt.Sprintf("[%s] %s poll failed (%s): %s", source, componentName, trigger, detail)
+			title = fmt.Sprintf("[%s] %s poll failed (%s): %s", source, componentName, trigger, detail)
 		} else {
-			displayText = fmt.Sprintf("[%s] %s poll failed (%s)", source, componentName, trigger)
+			title = fmt.Sprintf("[%s] %s poll failed (%s)", source, componentName, trigger)
 		}
 	}
 
-	fields := fmt.Sprintf(
+	payload := fmt.Sprintf(
 		`{"source":%q,"component_id":%q,"component_name":%q,"trigger":%q,"poll_status":%q}`,
 		source, componentID, componentName, trigger, status,
 	)
 
 	event := &models.Event{
-		ID:          uuid.New().String(),
-		AppID:       "",
-		ReceivedAt:  time.Now().UTC(),
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  "{}",
-		Fields:      fields,
+		ID:         uuid.New().String(),
+		Level:      level,
+		SourceName: componentName,
+		SourceType: "system",
+		SourceID:   componentID,
+		Title:      title,
+		Payload:    payload,
+		CreatedAt:  time.Now().UTC(),
 	}
 
 	if err := store.Events.Create(ctx, event); err != nil {

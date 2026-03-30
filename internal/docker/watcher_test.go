@@ -54,6 +54,7 @@ func (r *mockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error   
 func (r *mockAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error      { return nil }
 
 type mockEventRepo struct {
+	repo.EventRepo
 	created []*models.Event
 }
 
@@ -155,11 +156,11 @@ func TestHandleEvent_MatchingApp(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(evRepo.created))
 	}
 	ev := evRepo.created[0]
-	if ev.AppID != "app-1" {
-		t.Errorf("AppID: got %q, want %q", ev.AppID, "app-1")
+	if ev.SourceID != "app-1" {
+		t.Errorf("SourceID: got %q, want %q", ev.SourceID, "app-1")
 	}
-	if ev.Severity != "info" {
-		t.Errorf("Severity: got %q, want %q", ev.Severity, "info")
+	if ev.Level != "info" {
+		t.Errorf("Level: got %q, want %q", ev.Level, "info")
 	}
 }
 
@@ -178,11 +179,11 @@ func TestHandleEvent_NoMatchingApp_NullAppID(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(evRepo.created))
 	}
 	ev := evRepo.created[0]
-	if ev.AppID != "" {
-		t.Errorf("AppID should be empty (null) for unmatched container, got %q", ev.AppID)
+	if ev.SourceType != "docker_engine" {
+		t.Errorf("SourceType should be docker_engine for unmatched container, got %q", ev.SourceType)
 	}
-	if ev.Severity != "warn" {
-		t.Errorf("Severity: got %q, want %q", ev.Severity, "warn")
+	if ev.Level != "warn" {
+		t.Errorf("Level: got %q, want %q", ev.Level, "warn")
 	}
 }
 
@@ -198,8 +199,8 @@ func TestHandleEvent_CaseInsensitiveMatch(t *testing.T) {
 		t.Fatalf("handleEvent: %v", err)
 	}
 
-	if evRepo.created[0].AppID != "app-2" {
-		t.Errorf("expected case-insensitive match, AppID=%q", evRepo.created[0].AppID)
+	if evRepo.created[0].SourceID != "app-2" {
+		t.Errorf("expected case-insensitive match, SourceID=%q", evRepo.created[0].SourceID)
 	}
 }
 
@@ -215,8 +216,8 @@ func TestHandleEvent_DieNonZeroExit(t *testing.T) {
 	}
 
 	ev := evRepo.created[0]
-	if ev.Severity != "error" {
-		t.Errorf("Severity: got %q, want error", ev.Severity)
+	if ev.Level != "error" {
+		t.Errorf("Level: got %q, want error", ev.Level)
 	}
 }
 
@@ -232,8 +233,8 @@ func TestHandleEvent_DieZeroExit(t *testing.T) {
 	}
 
 	ev := evRepo.created[0]
-	if ev.Severity != "info" {
-		t.Errorf("Severity: got %q, want info", ev.Severity)
+	if ev.Level != "info" {
+		t.Errorf("Level: got %q, want info", ev.Level)
 	}
 }
 

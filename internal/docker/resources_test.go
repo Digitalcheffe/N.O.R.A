@@ -257,11 +257,11 @@ func TestThreshold_NormalToWarnCreatesOneEvent(t *testing.T) {
 		t.Fatalf("expected 1 threshold event, got %d", len(evRepo.created))
 	}
 	ev := evRepo.created[0]
-	if ev.Severity != "warn" {
-		t.Errorf("Severity: got %q, want %q", ev.Severity, "warn")
+	if ev.Level != "warn" {
+		t.Errorf("Severity: got %q, want %q", ev.Level, "warn")
 	}
-	if !strings.Contains(ev.DisplayText, "CPU") {
-		t.Errorf("DisplayText should mention CPU, got %q", ev.DisplayText)
+	if !strings.Contains(ev.Title, "CPU") {
+		t.Errorf("DisplayText should mention CPU, got %q", ev.Title)
 	}
 }
 
@@ -301,8 +301,8 @@ func TestThreshold_WarnToErrorCreatesEvent(t *testing.T) {
 	if len(evRepo.created) != 2 {
 		t.Fatalf("expected 2 events (warn + error transition), got %d", len(evRepo.created))
 	}
-	if evRepo.created[1].Severity != "error" {
-		t.Errorf("second event Severity: got %q, want error", evRepo.created[1].Severity)
+	if evRepo.created[1].Level != "error" {
+		t.Errorf("second event Severity: got %q, want error", evRepo.created[1].Level)
 	}
 }
 
@@ -325,11 +325,11 @@ func TestThreshold_RecoveryCreatesInfoEvent(t *testing.T) {
 		t.Fatalf("expected 2 events (warn + recovery), got %d", len(evRepo.created))
 	}
 	recovery := evRepo.created[1]
-	if recovery.Severity != "info" {
-		t.Errorf("recovery event Severity: got %q, want info", recovery.Severity)
+	if recovery.Level != "info" {
+		t.Errorf("recovery event Severity: got %q, want info", recovery.Level)
 	}
-	if !strings.Contains(recovery.DisplayText, "recovered") {
-		t.Errorf("recovery DisplayText should contain 'recovered', got %q", recovery.DisplayText)
+	if !strings.Contains(recovery.Title, "recovered") {
+		t.Errorf("recovery DisplayText should contain 'recovered', got %q", recovery.Title)
 	}
 }
 

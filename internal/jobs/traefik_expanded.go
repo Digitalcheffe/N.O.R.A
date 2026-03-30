@@ -213,13 +213,14 @@ func fireTraefikEvent(ctx context.Context, store *repo.Store, c models.Infrastru
 	fields := fmt.Sprintf(`{"source":"traefik","component_id":%q,"component_name":%q}`,
 		c.ID, c.Name)
 	ev := &models.Event{
-		ID:          uuid.New().String(),
-		AppID:       "",
-		ReceivedAt:  time.Now().UTC(),
-		Severity:    severity,
-		DisplayText: text,
-		RawPayload:  "{}",
-		Fields:      fields,
+		ID:         uuid.New().String(),
+		Level:      severity,
+		SourceName: c.Name,
+		SourceType: "system",
+		SourceID:   c.ID,
+		Title:      text,
+		Payload:    fields,
+		CreatedAt:  time.Now().UTC(),
 	}
 	if err := store.Events.Create(ctx, ev); err != nil {
 		log.Printf("traefik expanded: write event for %s: %v", c.Name, err)

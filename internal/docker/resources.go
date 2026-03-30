@@ -314,17 +314,24 @@ func (p *ResourcePoller) emitThresholdEvent(
 		text = fmt.Sprintf("%s recovered — %s: %.1f%% (was %s)", metric, containerName, pct, prevSev)
 	}
 
+	srcType := "docker_engine"
+	srcID := ""
+	if appID != "" {
+		srcType = "app"
+		srcID = appID
+	}
 	ev := &models.Event{
-		ID:          uuid.New().String(),
-		AppID:       appID,
-		ReceivedAt:  now,
-		Severity:    severity,
-		DisplayText: text,
-		RawPayload:  "{}",
-		Fields: fmt.Sprintf(
+		ID:         uuid.New().String(),
+		Level:      severity,
+		SourceName: containerName,
+		SourceType: srcType,
+		SourceID:   srcID,
+		Title:      text,
+		Payload: fmt.Sprintf(
 			`{"source_type":"docker_container","metric":"%s","value":%.2f}`,
 			strings.ToLower(metric), pct,
 		),
+		CreatedAt: now,
 	}
 
 	if err := p.store.Events.Create(ctx, ev); err != nil {

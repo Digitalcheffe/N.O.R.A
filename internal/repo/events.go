@@ -14,42 +14,44 @@ import (
 
 // ListFilter constrains an event list query. Zero values mean "no filter".
 type ListFilter struct {
-	AppID       string
-	CheckID     string   // filter by json_extract(fields, '$.check_id')
-	ComponentID string   // filter by json_extract(fields, '$.component_id')
-	// SourceType limits results by event origin: "app", "infra", or "check".
-	// Empty string means all sources.
+	// SourceID filters by the source_id column (app ID, check ID, component ID, etc.).
+	SourceID string
+	// SourceType filters by the source_type column: "app", "physical_host",
+	// "virtual_host", "docker_engine", "monitor_check", "system".
 	SourceType string
-	// Search filters events whose display_text contains the given substring (case-insensitive).
-	Search   string
-	Severity []string
-	Since    *time.Time
-	Until    *time.Time
-	Limit    int
-	Offset   int
-	// Sort controls ordering: "newest" (default), "oldest", "severity_desc", "severity_asc"
+	// SourceName filters events whose source_name contains this substring (case-insensitive).
+	SourceName string
+	// Search filters events whose title contains the given substring (case-insensitive).
+	Search string
+	// Level filters by one or more level values: debug, info, warn, error, critical.
+	Level  []string
+	Since  *time.Time
+	Until  *time.Time
+	Limit  int
+	Offset int
+	// Sort controls ordering: "newest" (default), "oldest", "level_desc", "level_asc"
 	Sort string
 }
 
 // CategoryFilter defines criteria for matching events to a digest category.
 // Empty strings are ignored (not applied to the query).
 type CategoryFilter struct {
-	AppIDs        []string  // empty = all apps
-	MatchField    string    // json_extract(fields, '$.{MatchField}') = MatchValue
-	MatchValue    string
-	MatchSeverity string    // severity = MatchSeverity
-	Since         time.Time // inclusive lower bound
-	Until         time.Time // inclusive upper bound
+	SourceIDs  []string  // empty = all sources
+	MatchField string    // json_extract(payload, '$.{MatchField}') = MatchValue
+	MatchValue string
+	MatchLevel string    // level = MatchLevel
+	Since      time.Time // inclusive lower bound
+	Until      time.Time // inclusive upper bound
 }
 
-// EventTypeCount is a grouped count row returned by GroupByTypeAndSeverity.
+// EventTypeCount is a grouped count row returned by GroupByTypeAndLevel.
 type EventTypeCount struct {
 	EventType string `db:"event_type"`
-	Severity  string `db:"severity"`
+	Level     string `db:"level"`
 	Count     int    `db:"count"`
 }
 
-// EventMetrics holds per-app event statistics for a time window.
+// EventMetrics holds per-source event statistics for a time window.
 type EventMetrics struct {
 	EventsPerHour   int
 	AvgPayloadBytes int
@@ -58,8 +60,8 @@ type EventMetrics struct {
 
 // AppEventCount is a per-app event count row returned by CountPerApp.
 type AppEventCount struct {
-	AppID   string `db:"app_id"`
-	AppName string `db:"app_name"`
+	AppID   string `db:"source_id"`
+	AppName string `db:"source_name"`
 	Count   int    `db:"count"`
 }
 
@@ -75,28 +77,28 @@ type EventRepo interface {
 	Create(ctx context.Context, event *models.Event) error
 	// List returns a page of events matching f plus the total matching count.
 	List(ctx context.Context, f ListFilter) (events []models.Event, total int, err error)
-	// Get returns a single event by ID, including raw_payload.
+	// Get returns a single event by ID, including payload.
 	Get(ctx context.Context, id string) (*models.Event, error)
 	// Timeseries returns event counts grouped by time bucket over [since, until].
-	// granularity is "hour" or "day". appID and severity may be empty to include all.
-	Timeseries(ctx context.Context, since, until time.Time, granularity, appID, severity string) ([]TimeseriesBucket, error)
+	// granularity is "hour" or "day". sourceID and level may be empty to include all.
+	Timeseries(ctx context.Context, since, until time.Time, granularity, sourceID, level string) ([]TimeseriesBucket, error)
 	// CountForCategory returns the number of events matching f.
 	CountForCategory(ctx context.Context, f CategoryFilter) (int, error)
 	// SparklineBuckets returns exactly 7 event counts, one per time bucket.
 	// The window starts at startTime and each bucket covers bucketDur.
 	SparklineBuckets(ctx context.Context, f CategoryFilter, startTime time.Time, bucketDur time.Duration) ([7]int, error)
-	// LatestPerApp returns the most recent event per app, keyed by app ID.
+	// LatestPerApp returns the most recent event per app source, keyed by source_id.
 	LatestPerApp(ctx context.Context, appIDs []string) (map[string]*models.Event, error)
-	// DeleteBySeverityBefore deletes events with the given severity older than
-	// before and returns the number of rows deleted.
-	DeleteBySeverityBefore(ctx context.Context, severity string, before time.Time) (int64, error)
-	// GroupByTypeAndSeverity returns event counts grouped by event_type (from
-	// the fields JSON column) and severity for a specific app and time range.
-	GroupByTypeAndSeverity(ctx context.Context, appID string, since, until time.Time) ([]EventTypeCount, error)
+	// DeleteByLevelBefore deletes events with the given level older than before
+	// and returns the number of rows deleted.
+	DeleteByLevelBefore(ctx context.Context, level string, before time.Time) (int64, error)
+	// GroupByTypeAndLevel returns event counts grouped by event_type (from the
+	// payload JSON column) and level for a specific source and time range.
+	GroupByTypeAndLevel(ctx context.Context, sourceID string, since, until time.Time) ([]EventTypeCount, error)
 	// MetricsForApp computes event count, average payload size, and peak
-	// per-minute rate for a single app over [since, until).
+	// per-minute rate for a single app source over [since, until).
 	MetricsForApp(ctx context.Context, appID string, since, until time.Time) (EventMetrics, error)
-	// CountPerApp returns the event count grouped by app for the window [since, now].
+	// CountPerApp returns the event count grouped by app source for the window [since, now].
 	// Results are ordered by count descending.
 	CountPerApp(ctx context.Context, since time.Time) ([]AppEventCount, error)
 }
@@ -112,10 +114,10 @@ func NewEventRepo(db *sqlx.DB) EventRepo {
 
 func (r *sqliteEventRepo) Create(ctx context.Context, event *models.Event) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO events (id, app_id, received_at, severity, display_text, raw_payload, fields)
-		VALUES (?, NULLIF(?, ''), ?, ?, ?, ?, ?)`,
-		event.ID, event.AppID, event.ReceivedAt, event.Severity,
-		event.DisplayText, event.RawPayload, event.Fields)
+		INSERT INTO events (id, level, source_name, source_type, source_id, title, payload, created_at)
+		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, NULLIF(?, ''), ?)`,
+		event.ID, event.Level, event.SourceName, event.SourceType,
+		event.SourceID, event.Title, event.Payload, event.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create event: %w", err)
 	}
@@ -127,51 +129,41 @@ func (r *sqliteEventRepo) Create(ctx context.Context, event *models.Event) error
 func buildWhere(f ListFilter) (clause string, args []interface{}) {
 	var parts []string
 
-	if f.AppID != "" {
-		parts = append(parts, "e.app_id = ?")
-		args = append(args, f.AppID)
+	if f.SourceID != "" {
+		parts = append(parts, "e.source_id = ?")
+		args = append(args, f.SourceID)
 	}
 
-	if f.CheckID != "" {
-		parts = append(parts, "json_extract(e.fields, '$.check_id') = ?")
-		args = append(args, f.CheckID)
+	if f.SourceType != "" {
+		parts = append(parts, "e.source_type = ?")
+		args = append(args, f.SourceType)
 	}
 
-	if f.ComponentID != "" {
-		parts = append(parts, "json_extract(e.fields, '$.component_id') = ?")
-		args = append(args, f.ComponentID)
-	}
-
-	switch f.SourceType {
-	case "app":
-		parts = append(parts, "e.app_id IS NOT NULL")
-	case "infra":
-		parts = append(parts, "e.app_id IS NULL")
-		parts = append(parts, "json_extract(e.fields, '$.component_id') IS NOT NULL")
-	case "check":
-		parts = append(parts, "json_extract(e.fields, '$.check_id') IS NOT NULL")
+	if f.SourceName != "" {
+		parts = append(parts, "e.source_name LIKE ?")
+		args = append(args, "%"+f.SourceName+"%")
 	}
 
 	if f.Search != "" {
-		parts = append(parts, "e.display_text LIKE ?")
+		parts = append(parts, "e.title LIKE ?")
 		args = append(args, "%"+f.Search+"%")
 	}
 
-	if len(f.Severity) > 0 {
-		ph := strings.TrimRight(strings.Repeat("?,", len(f.Severity)), ",")
-		parts = append(parts, "e.severity IN ("+ph+")")
-		for _, s := range f.Severity {
-			args = append(args, s)
+	if len(f.Level) > 0 {
+		ph := strings.TrimRight(strings.Repeat("?,", len(f.Level)), ",")
+		parts = append(parts, "e.level IN ("+ph+")")
+		for _, l := range f.Level {
+			args = append(args, l)
 		}
 	}
 
 	if f.Since != nil {
-		parts = append(parts, "datetime(e.received_at) >= datetime(?)")
+		parts = append(parts, "datetime(e.created_at) >= datetime(?)")
 		args = append(args, f.Since.UTC().Format(time.RFC3339))
 	}
 
 	if f.Until != nil {
-		parts = append(parts, "datetime(e.received_at) <= datetime(?)")
+		parts = append(parts, "datetime(e.created_at) <= datetime(?)")
 		args = append(args, f.Until.UTC().Format(time.RFC3339))
 	}
 
@@ -202,23 +194,23 @@ func (r *sqliteEventRepo) List(ctx context.Context, f ListFilter) ([]models.Even
 	}
 
 	// Dynamic ORDER BY based on Sort field.
-	const sevOrder = `CASE e.severity WHEN 'critical' THEN 5 WHEN 'error' THEN 4 WHEN 'warn' THEN 3 WHEN 'info' THEN 2 WHEN 'debug' THEN 1 ELSE 0 END`
-	orderBy := " ORDER BY e.received_at DESC"
+	const levOrder = `CASE e.level WHEN 'critical' THEN 5 WHEN 'error' THEN 4 WHEN 'warn' THEN 3 WHEN 'info' THEN 2 WHEN 'debug' THEN 1 ELSE 0 END`
+	orderBy := " ORDER BY e.created_at DESC"
 	switch f.Sort {
 	case "oldest":
-		orderBy = " ORDER BY e.received_at ASC"
-	case "severity_desc":
-		orderBy = " ORDER BY " + sevOrder + " DESC, e.received_at DESC"
-	case "severity_asc":
-		orderBy = " ORDER BY " + sevOrder + " ASC, e.received_at DESC"
+		orderBy = " ORDER BY e.created_at ASC"
+	case "level_desc":
+		orderBy = " ORDER BY " + levOrder + " DESC, e.created_at DESC"
+	case "level_asc":
+		orderBy = " ORDER BY " + levOrder + " ASC, e.created_at DESC"
 	}
 
-	// Fetch the page. raw_payload is excluded from list results.
+	// Fetch the page. payload is excluded from list results.
 	pageQ := `
-		SELECT e.id, COALESCE(e.app_id, '') AS app_id, COALESCE(a.name, '') AS app_name,
-		       e.received_at, e.severity, e.display_text, e.fields
-		FROM events e
-		LEFT JOIN apps a ON a.id = e.app_id` +
+		SELECT e.id, e.level, e.source_name, e.source_type,
+		       COALESCE(e.source_id, '') AS source_id, e.title,
+		       '' AS payload, e.created_at
+		FROM events e` +
 		where + orderBy +
 		` LIMIT ? OFFSET ?`
 
@@ -235,10 +227,10 @@ func (r *sqliteEventRepo) List(ctx context.Context, f ListFilter) ([]models.Even
 
 func (r *sqliteEventRepo) Get(ctx context.Context, id string) (*models.Event, error) {
 	const q = `
-		SELECT e.id, COALESCE(e.app_id, '') AS app_id, COALESCE(a.name, '') AS app_name,
-		       e.received_at, e.severity, e.display_text, e.raw_payload, e.fields
+		SELECT e.id, e.level, e.source_name, e.source_type,
+		       COALESCE(e.source_id, '') AS source_id, e.title,
+		       COALESCE(e.payload, '') AS payload, e.created_at
 		FROM events e
-		LEFT JOIN apps a ON a.id = e.app_id
 		WHERE e.id = ?`
 
 	var ev models.Event
@@ -256,31 +248,31 @@ func buildCategoryWhere(f CategoryFilter) (string, []interface{}) {
 	var parts []string
 	var args []interface{}
 
-	if len(f.AppIDs) > 0 {
-		ph := strings.TrimRight(strings.Repeat("?,", len(f.AppIDs)), ",")
-		parts = append(parts, "app_id IN ("+ph+")")
-		for _, id := range f.AppIDs {
+	if len(f.SourceIDs) > 0 {
+		ph := strings.TrimRight(strings.Repeat("?,", len(f.SourceIDs)), ",")
+		parts = append(parts, "source_id IN ("+ph+")")
+		for _, id := range f.SourceIDs {
 			args = append(args, id)
 		}
 	}
 
 	if f.MatchField != "" && f.MatchValue != "" {
-		parts = append(parts, "json_extract(fields, '$."+f.MatchField+"') = ?")
+		parts = append(parts, "json_extract(payload, '$."+f.MatchField+"') = ?")
 		args = append(args, f.MatchValue)
 	}
 
-	if f.MatchSeverity != "" {
-		parts = append(parts, "severity = ?")
-		args = append(args, f.MatchSeverity)
+	if f.MatchLevel != "" {
+		parts = append(parts, "level = ?")
+		args = append(args, f.MatchLevel)
 	}
 
 	if !f.Since.IsZero() {
-		parts = append(parts, "datetime(received_at) >= datetime(?)")
+		parts = append(parts, "datetime(created_at) >= datetime(?)")
 		args = append(args, f.Since.UTC().Format(time.RFC3339))
 	}
 
 	if !f.Until.IsZero() {
-		parts = append(parts, "datetime(received_at) <= datetime(?)")
+		parts = append(parts, "datetime(created_at) <= datetime(?)")
 		args = append(args, f.Until.UTC().Format(time.RFC3339))
 	}
 
@@ -317,35 +309,36 @@ func (r *sqliteEventRepo) SparklineBuckets(ctx context.Context, f CategoryFilter
 	return counts, nil
 }
 
-func (r *sqliteEventRepo) DeleteBySeverityBefore(ctx context.Context, severity string, before time.Time) (int64, error) {
+func (r *sqliteEventRepo) DeleteByLevelBefore(ctx context.Context, level string, before time.Time) (int64, error) {
 	res, err := r.db.ExecContext(ctx,
-		`DELETE FROM events WHERE severity = ? AND datetime(received_at) < datetime(?)`,
-		severity, before.UTC().Format(time.RFC3339))
+		`DELETE FROM events WHERE level = ? AND datetime(created_at) < datetime(?)`,
+		level, before.UTC().Format(time.RFC3339))
 	if err != nil {
-		return 0, fmt.Errorf("delete events by severity: %w", err)
+		return 0, fmt.Errorf("delete events by level: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
 }
 
-func (r *sqliteEventRepo) GroupByTypeAndSeverity(ctx context.Context, appID string, since, until time.Time) ([]EventTypeCount, error) {
+func (r *sqliteEventRepo) GroupByTypeAndLevel(ctx context.Context, sourceID string, since, until time.Time) ([]EventTypeCount, error) {
 	var rows []EventTypeCount
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT
-			COALESCE(json_extract(fields, '$.event_type'), '') AS event_type,
-			severity,
+			COALESCE(json_extract(payload, '$.event_type'), '') AS event_type,
+			level,
 			COUNT(*) AS count
 		FROM events
-		WHERE app_id = ?
-		  AND datetime(received_at) >= datetime(?)
-		  AND datetime(received_at) < datetime(?)
-		GROUP BY event_type, severity`,
-		appID,
+		WHERE source_id = ?
+		  AND source_type = 'app'
+		  AND datetime(created_at) >= datetime(?)
+		  AND datetime(created_at) < datetime(?)
+		GROUP BY event_type, level`,
+		sourceID,
 		since.UTC().Format(time.RFC3339),
 		until.UTC().Format(time.RFC3339),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("group events by type and severity: %w", err)
+		return nil, fmt.Errorf("group events by type and level: %w", err)
 	}
 	if rows == nil {
 		rows = []EventTypeCount{}
@@ -360,11 +353,12 @@ func (r *sqliteEventRepo) MetricsForApp(ctx context.Context, appID string, since
 	var count int
 	var avgBytes float64
 	err := r.db.QueryRowContext(ctx, `
-		SELECT COUNT(*), COALESCE(AVG(LENGTH(raw_payload)), 0)
+		SELECT COUNT(*), COALESCE(AVG(LENGTH(payload)), 0)
 		FROM events
-		WHERE app_id = ?
-		  AND datetime(received_at) >= datetime(?)
-		  AND datetime(received_at) < datetime(?)`,
+		WHERE source_id = ?
+		  AND source_type = 'app'
+		  AND datetime(created_at) >= datetime(?)
+		  AND datetime(created_at) < datetime(?)`,
 		appID, sinceStr, untilStr,
 	).Scan(&count, &avgBytes)
 	if err != nil {
@@ -377,10 +371,11 @@ func (r *sqliteEventRepo) MetricsForApp(ctx context.Context, appID string, since
 		FROM (
 			SELECT COUNT(*) AS cnt
 			FROM events
-			WHERE app_id = ?
-			  AND datetime(received_at) >= datetime(?)
-			  AND datetime(received_at) < datetime(?)
-			GROUP BY strftime('%Y-%m-%dT%H:%M', received_at)
+			WHERE source_id = ?
+			  AND source_type = 'app'
+			  AND datetime(created_at) >= datetime(?)
+			  AND datetime(created_at) < datetime(?)
+			GROUP BY strftime('%Y-%m-%dT%H:%M', created_at)
 		)`,
 		appID, sinceStr, untilStr,
 	).Scan(&peak)
@@ -407,13 +402,15 @@ func (r *sqliteEventRepo) LatestPerApp(ctx context.Context, appIDs []string) (ma
 	}
 
 	q := `
-		SELECT e.id, COALESCE(e.app_id, '') AS app_id, COALESCE(a.name, '') AS app_name,
-		       e.received_at, e.severity, e.display_text, e.fields
+		SELECT e.id, e.level, e.source_name, e.source_type,
+		       COALESCE(e.source_id, '') AS source_id, e.title,
+		       '' AS payload, e.created_at
 		FROM events e
-		LEFT JOIN apps a ON a.id = e.app_id
-		WHERE e.app_id IN (` + ph + `)
-		  AND e.received_at = (
-		        SELECT MAX(e2.received_at) FROM events e2 WHERE e2.app_id = e.app_id
+		WHERE e.source_id IN (` + ph + `)
+		  AND e.source_type = 'app'
+		  AND e.created_at = (
+		        SELECT MAX(e2.created_at) FROM events e2
+		        WHERE e2.source_id = e.source_id AND e2.source_type = 'app'
 		      )`
 
 	var events []models.Event
@@ -423,12 +420,12 @@ func (r *sqliteEventRepo) LatestPerApp(ctx context.Context, appIDs []string) (ma
 
 	result := make(map[string]*models.Event, len(events))
 	for i := range events {
-		result[events[i].AppID] = &events[i]
+		result[events[i].SourceID] = &events[i]
 	}
 	return result, nil
 }
 
-func (r *sqliteEventRepo) Timeseries(ctx context.Context, since, until time.Time, granularity, appID, severity string) ([]TimeseriesBucket, error) {
+func (r *sqliteEventRepo) Timeseries(ctx context.Context, since, until time.Time, granularity, sourceID, level string) ([]TimeseriesBucket, error) {
 	// fmtStr is controlled, not user-provided — safe to interpolate.
 	fmtStr := "%Y-%m-%d"
 	if granularity == "hour" {
@@ -437,22 +434,22 @@ func (r *sqliteEventRepo) Timeseries(ctx context.Context, since, until time.Time
 
 	var parts []string
 	var args []interface{}
-	parts = append(parts, "datetime(received_at) >= datetime(?)")
+	parts = append(parts, "datetime(created_at) >= datetime(?)")
 	args = append(args, since.UTC().Format(time.RFC3339))
-	parts = append(parts, "datetime(received_at) <= datetime(?)")
+	parts = append(parts, "datetime(created_at) <= datetime(?)")
 	args = append(args, until.UTC().Format(time.RFC3339))
-	if appID != "" {
-		parts = append(parts, "app_id = ?")
-		args = append(args, appID)
+	if sourceID != "" {
+		parts = append(parts, "source_id = ?")
+		args = append(args, sourceID)
 	}
-	if severity != "" {
-		parts = append(parts, "severity = ?")
-		args = append(args, severity)
+	if level != "" {
+		parts = append(parts, "level = ?")
+		args = append(args, level)
 	}
 	where := " WHERE " + strings.Join(parts, " AND ")
 
 	q := fmt.Sprintf(
-		"SELECT strftime('%s', received_at) AS time, COUNT(*) AS count FROM events%s GROUP BY strftime('%s', received_at) ORDER BY time",
+		"SELECT strftime('%s', created_at) AS time, COUNT(*) AS count FROM events%s GROUP BY strftime('%s', created_at) ORDER BY time",
 		fmtStr, where, fmtStr,
 	)
 
@@ -469,12 +466,12 @@ func (r *sqliteEventRepo) Timeseries(ctx context.Context, since, until time.Time
 func (r *sqliteEventRepo) CountPerApp(ctx context.Context, since time.Time) ([]AppEventCount, error) {
 	var rows []AppEventCount
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT e.app_id, COALESCE(a.name, e.app_id) AS app_name, COUNT(*) AS count
+		SELECT e.source_id, COALESCE(e.source_name, e.source_id) AS source_name, COUNT(*) AS count
 		FROM events e
-		LEFT JOIN apps a ON a.id = e.app_id
-		WHERE e.app_id IS NOT NULL
-		  AND datetime(e.received_at) >= datetime(?)
-		GROUP BY e.app_id
+		WHERE e.source_type = 'app'
+		  AND e.source_id IS NOT NULL
+		  AND datetime(e.created_at) >= datetime(?)
+		GROUP BY e.source_id
 		ORDER BY count DESC`,
 		since.UTC().Format(time.RFC3339),
 	)

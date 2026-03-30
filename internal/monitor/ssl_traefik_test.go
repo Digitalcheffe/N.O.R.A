@@ -97,8 +97,8 @@ func TestSSLChecker_Traefik_WarnTransition(t *testing.T) {
 	if len(events.created) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events.created))
 	}
-	if events.created[0].Severity != "warn" {
-		t.Errorf("expected warn severity, got %s", events.created[0].Severity)
+	if events.created[0].Level != "warn" {
+		t.Errorf("expected warn level, got %s", events.created[0].Level)
 	}
 }
 

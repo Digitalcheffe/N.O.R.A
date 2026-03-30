@@ -325,13 +325,14 @@ func (p *ProxmoxPoller) checkStateChanges(ctx context.Context, store *repo.Store
 		rawPayload, _ := json.Marshal(vm)
 
 		event := &models.Event{
-			ID:          uuid.New().String(),
-			AppID:       "",
-			ReceivedAt:  time.Now().UTC(),
-			Severity:    severity,
-			DisplayText: fmt.Sprintf("%s %s is now %s on %s", kind, vm.Name, vm.Status, node),
-			RawPayload:  string(rawPayload),
-			Fields:      fmt.Sprintf(`{"source":"proxmox","node":%q,"vmid":%d,"kind":%q}`, node, vm.VMID, kind),
+			ID:         uuid.New().String(),
+			Level:      severity,
+			SourceName: vm.Name,
+			SourceType: "virtual_host",
+			SourceID:   p.componentID,
+			Title:      fmt.Sprintf("%s %s is now %s on %s", kind, vm.Name, vm.Status, node),
+			Payload:    string(rawPayload),
+			CreatedAt:  time.Now().UTC(),
 		}
 		if err := store.Events.Create(ctx, event); err != nil {
 			log.Printf("proxmox poller %s: create state-change event for %s %s: %v",

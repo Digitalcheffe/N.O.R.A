@@ -50,22 +50,27 @@ func insertApp(t *testing.T, db *sqlx.DB, name, profileID string) models.App {
 	return app
 }
 
-// insertEventWithFields inserts an event with the given fields JSON.
-func insertEventWithFields(t *testing.T, db *sqlx.DB, appID, severity, displayText, fieldsJSON string, at time.Time) models.Event {
+// insertEventWithFields inserts an event with the given payload JSON.
+// The fieldsJSON argument is used as the event payload (contains extracted fields).
+func insertEventWithFields(t *testing.T, db *sqlx.DB, appID, level, title, fieldsJSON string, at time.Time) models.Event {
 	t.Helper()
+	appName := "test-app"
+	_ = db.QueryRowContext(context.Background(), "SELECT name FROM apps WHERE id = ?", appID).Scan(&appName)
 	ev := models.Event{
-		ID:          uuid.New().String(),
-		AppID:       appID,
-		ReceivedAt:  at.UTC().Truncate(time.Second),
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  `{}`,
-		Fields:      fieldsJSON,
+		ID:         uuid.New().String(),
+		Level:      level,
+		SourceName: appName,
+		SourceType: "app",
+		SourceID:   appID,
+		Title:      title,
+		Payload:    fieldsJSON,
+		CreatedAt:  at.UTC().Truncate(time.Second),
 	}
 	_, err := db.ExecContext(context.Background(),
-		`INSERT INTO events (id, app_id, received_at, severity, display_text, raw_payload, fields)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		ev.ID, ev.AppID, ev.ReceivedAt, ev.Severity, ev.DisplayText, ev.RawPayload, ev.Fields)
+		`INSERT INTO events (id, level, source_name, source_type, source_id, title, payload, created_at)
+		 VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
+		ev.ID, ev.Level, ev.SourceName, ev.SourceType, ev.SourceID,
+		ev.Title, ev.Payload, ev.CreatedAt)
 	if err != nil {
 		t.Fatalf("insertEventWithFields: %v", err)
 	}

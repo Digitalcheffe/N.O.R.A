@@ -11,18 +11,19 @@ import (
 	"github.com/google/uuid"
 )
 
-// insertEvent creates an event with the given severity at the specified time.
-// app_id is empty so it is stored as NULL (the column is nullable).
-func insertEvent(t *testing.T, store *repo.Store, severity string, at time.Time) {
+// insertEvent creates an event with the given level at the specified time.
+// source_id is empty so it is stored as NULL (the column is nullable).
+func insertEvent(t *testing.T, store *repo.Store, level string, at time.Time) {
 	t.Helper()
 	ev := &models.Event{
-		ID:          uuid.NewString(),
-		AppID:       "",
-		ReceivedAt:  at,
-		Severity:    severity,
-		DisplayText: "test",
-		RawPayload:  "{}",
-		Fields:      "{}",
+		ID:         uuid.NewString(),
+		Level:      level,
+		SourceName: "NORA System",
+		SourceType: "system",
+		SourceID:   "",
+		Title:      "test",
+		Payload:    "{}",
+		CreatedAt:  at,
 	}
 	if err := store.Events.Create(context.Background(), ev); err != nil {
 		t.Fatalf("insertEvent: %v", err)

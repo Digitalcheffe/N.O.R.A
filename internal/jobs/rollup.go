@@ -27,7 +27,7 @@ func RunMonthlyRollup(ctx context.Context, store *repo.Store) error {
 	}
 
 	for _, app := range apps {
-		rows, err := store.Events.GroupByTypeAndSeverity(ctx, app.ID, firstOfPrev, firstOfMonth)
+		rows, err := store.Events.GroupByTypeAndLevel(ctx, app.ID, firstOfPrev, firstOfMonth)
 		if err != nil {
 			return err
 		}
@@ -37,7 +37,7 @@ func RunMonthlyRollup(ctx context.Context, store *repo.Store) error {
 				Year:      year,
 				Month:     month,
 				EventType: row.EventType,
-				Severity:  row.Severity,
+				Severity:  row.Level,
 				Count:     row.Count,
 			}
 			if err := store.Rollups.Upsert(ctx, rollup); err != nil {

@@ -190,10 +190,10 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 
 			// Count events for this app+category in the period
 			f := repo.CategoryFilter{
-				AppIDs:        []string{a.ID},
+				SourceIDs:  []string{a.ID},
 				MatchField:    cat.MatchField,
 				MatchValue:    cat.MatchValue,
-				MatchSeverity: cat.MatchSeverity,
+				MatchLevel: cat.MatchSeverity,
 				Since:         pc.since,
 				Until:         pc.until,
 			}
@@ -220,11 +220,11 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		sf := repo.CategoryFilter{
 			MatchField:    cat.MatchField,
 			MatchValue:    cat.MatchValue,
-			MatchSeverity: cat.MatchSeverity,
+			MatchLevel: cat.MatchSeverity,
 		}
 		// Collect all app IDs that contribute to this label
 		for appID := range entry.perApp {
-			sf.AppIDs = append(sf.AppIDs, appID)
+			sf.SourceIDs = append(sf.SourceIDs, appID)
 		}
 		sparkline, err := h.events.SparklineBuckets(ctx, sf, pc.since, pc.bucketDur)
 		if err != nil {
@@ -284,7 +284,7 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 
 		// Per-app sparkline: all events for this app in the period
 		appSparkline, err := h.events.SparklineBuckets(ctx, repo.CategoryFilter{
-			AppIDs: []string{a.ID},
+			SourceIDs: []string{a.ID},
 			Since:  pc.since,
 			Until:  pc.until,
 		}, pc.since, pc.bucketDur)
@@ -300,10 +300,10 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			if err == nil && p != nil {
 				for _, cat := range p.Digest.Categories {
 					f := repo.CategoryFilter{
-						AppIDs:        []string{a.ID},
+						SourceIDs:  []string{a.ID},
 						MatchField:    cat.MatchField,
 						MatchValue:    cat.MatchValue,
-						MatchSeverity: cat.MatchSeverity,
+						MatchLevel: cat.MatchSeverity,
 						Since:         pc.since,
 						Until:         pc.until,
 					}
@@ -325,9 +325,9 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		var lastEventAt *string
 		var lastEventText *string
 		if ev, ok := latestEvents[a.ID]; ok {
-			s := ev.ReceivedAt.UTC().Format(time.RFC3339)
+			s := ev.CreatedAt.UTC().Format(time.RFC3339)
 			lastEventAt = &s
-			lastEventText = &ev.DisplayText
+			lastEventText = &ev.Title
 		}
 
 		appSummaries = append(appSummaries, appSummary{

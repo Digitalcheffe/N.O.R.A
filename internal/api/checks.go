@@ -335,8 +335,9 @@ func (h *ChecksHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	events, _, err := h.events.List(r.Context(), repo.ListFilter{
-		CheckID: id,
-		Limit:   50,
+		SourceID:   id,
+		SourceType: "monitor_check",
+		Limit:      50,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -349,24 +350,23 @@ func (h *ChecksHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 // createStatusEvent records a monitor check status change as an event.
-// app_id is optional — checks not linked to an app still generate events.
 func (h *ChecksHandler) createStatusEvent(ctx context.Context, check *models.MonitorCheck, result monitor.Result) {
-	severity := "info"
+	level := "info"
 	if result.Status == "down" || result.Status == "critical" {
-		severity = "error"
+		level = "error"
 	} else if result.Status == "warn" {
-		severity = "warn"
+		level = "warn"
 	}
-	displayText := check.Name + " — " + result.Status
 
 	event := &models.Event{
-		ID:          uuid.New().String(),
-		AppID:       check.AppID,
-		ReceivedAt:  result.CheckedAt,
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  string(result.Details),
-		Fields:      `{"source":"monitor","check_id":"` + check.ID + `","check_type":"` + check.Type + `","status":"` + result.Status + `"}`,
+		ID:         uuid.New().String(),
+		Level:      level,
+		SourceName: check.Name,
+		SourceType: "monitor_check",
+		SourceID:   check.ID,
+		Title:      check.Name + " — " + result.Status,
+		Payload:    string(result.Details),
+		CreatedAt:  result.CheckedAt,
 	}
 	// Log failure but don't fail the response.
 	_ = h.events.Create(ctx, event)

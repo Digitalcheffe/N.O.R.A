@@ -344,7 +344,7 @@ func TestSynologyPoller_Poll_DiskWarningFiresWarnEvent(t *testing.T) {
 	}
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "warn" && ev.DisplayText == "Disk 1 (WD Red) warning" {
+		if ev.Level == "warn" && ev.Title == "Disk 1 (WD Red) warning" {
 			found = true
 		}
 	}
@@ -370,7 +370,7 @@ func TestSynologyPoller_Poll_DiskCriticalFiresErrorEvent(t *testing.T) {
 	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "error" && ev.DisplayText == "Disk 2 (WD Red) critical" {
+		if ev.Level == "error" && ev.Title == "Disk 2 (WD Red) critical" {
 			found = true
 		}
 	}
@@ -587,7 +587,7 @@ func TestSynologyPoller_Poll_VolumeStatusChangeFiresEvent(t *testing.T) {
 	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "warn" && ev.DisplayText == "Volume /volume1 degraded" {
+		if ev.Level == "warn" && ev.Title == "Volume /volume1 degraded" {
 			found = true
 		}
 	}
@@ -613,7 +613,7 @@ func TestSynologyPoller_Poll_DSMUpdateFiresEvent(t *testing.T) {
 	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
 	found := false
 	for _, ev := range events {
-		if ev.Severity == "info" && ev.DisplayText == "DSM update available: 7.3.0-69999" {
+		if ev.Level == "info" && ev.Title == "DSM update available: 7.3.0-69999" {
 			found = true
 		}
 	}

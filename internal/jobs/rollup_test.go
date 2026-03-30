@@ -28,17 +28,18 @@ func createApp(t *testing.T, store *repo.Store) string {
 }
 
 // insertAppEvent creates an event attached to a specific app with an event_type
-// value embedded in the fields JSON.
-func insertAppEvent(t *testing.T, store *repo.Store, appID, severity, eventType string, at time.Time) {
+// value embedded in the payload JSON.
+func insertAppEvent(t *testing.T, store *repo.Store, appID, level, eventType string, at time.Time) {
 	t.Helper()
 	ev := &models.Event{
-		ID:          uuid.NewString(),
-		AppID:       appID,
-		ReceivedAt:  at,
-		Severity:    severity,
-		DisplayText: "test",
-		RawPayload:  "{}",
-		Fields:      `{"event_type":"` + eventType + `"}`,
+		ID:         uuid.NewString(),
+		Level:      level,
+		SourceName: "test-app",
+		SourceType: "app",
+		SourceID:   appID,
+		Title:      "test",
+		Payload:    `{"event_type":"` + eventType + `"}`,
+		CreatedAt:  at,
 	}
 	if err := store.Events.Create(context.Background(), ev); err != nil {
 		t.Fatalf("insertAppEvent: %v", err)
@@ -187,7 +188,7 @@ func TestRollupRunsBeforeRetention(t *testing.T) {
 
 	// Raw event should be purged by the info retention window (7d).
 	var eventCount int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM events WHERE app_id = ?", appID).Scan(&eventCount); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM events WHERE source_id = ?", appID).Scan(&eventCount); err != nil {
 		t.Fatalf("count events: %v", err)
 	}
 	if eventCount != 0 {

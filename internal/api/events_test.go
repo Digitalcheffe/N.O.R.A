@@ -29,22 +29,29 @@ func newEventsTestSetup(t *testing.T) (http.Handler, *sqlx.DB) {
 	return r, db
 }
 
-// insertEvent inserts an event directly into the DB and returns it.
-func insertEvent(t *testing.T, db *sqlx.DB, appID, severity, displayText string, at time.Time) models.Event {
+// insertEvent inserts an app event directly into the DB and returns it.
+func insertEvent(t *testing.T, db *sqlx.DB, appID, level, title string, at time.Time) models.Event {
 	t.Helper()
+	appName := "test-app"
+	if appID != "" {
+		// Try to look up the actual app name for a realistic source_name.
+		_ = db.QueryRowContext(context.Background(), "SELECT name FROM apps WHERE id = ?", appID).Scan(&appName)
+	}
 	ev := models.Event{
-		ID:          uuid.New().String(),
-		AppID:       appID,
-		ReceivedAt:  at.UTC().Truncate(time.Second),
-		Severity:    severity,
-		DisplayText: displayText,
-		RawPayload:  `{"source":"test"}`,
-		Fields:      `{"event_type":"test"}`,
+		ID:         uuid.New().String(),
+		Level:      level,
+		SourceName: appName,
+		SourceType: "app",
+		SourceID:   appID,
+		Title:      title,
+		Payload:    `{"source":"test","event_type":"test"}`,
+		CreatedAt:  at.UTC().Truncate(time.Second),
 	}
 	_, err := db.ExecContext(context.Background(),
-		`INSERT INTO events (id, app_id, received_at, severity, display_text, raw_payload, fields)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		ev.ID, ev.AppID, ev.ReceivedAt, ev.Severity, ev.DisplayText, ev.RawPayload, ev.Fields)
+		`INSERT INTO events (id, level, source_name, source_type, source_id, title, payload, created_at)
+		 VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
+		ev.ID, ev.Level, ev.SourceName, ev.SourceType, ev.SourceID,
+		ev.Title, ev.Payload, ev.CreatedAt)
 	if err != nil {
 		t.Fatalf("insertEvent: %v", err)
 	}
@@ -54,13 +61,13 @@ func insertEvent(t *testing.T, db *sqlx.DB, appID, severity, displayText string,
 // eventsListResponse mirrors the listEventsResponse shape for decoding in tests.
 type eventsListResponse struct {
 	Data []struct {
-		ID          string                 `json:"id"`
-		AppID       string                 `json:"app_id"`
-		AppName     string                 `json:"app_name"`
-		Severity    string                 `json:"severity"`
-		DisplayText string                 `json:"display_text"`
-		Fields      map[string]interface{} `json:"fields"`
-		RawPayload  interface{}            `json:"raw_payload"`
+		ID         string      `json:"id"`
+		Level      string      `json:"level"`
+		SourceName string      `json:"source_name"`
+		SourceType string      `json:"source_type"`
+		SourceID   string      `json:"source_id"`
+		Title      string      `json:"title"`
+		Payload    interface{} `json:"payload"`
 	} `json:"data"`
 	Total  int `json:"total"`
 	Limit  int `json:"limit"`
@@ -120,7 +127,7 @@ func TestListEvents_ReturnsAll(t *testing.T) {
 	}
 }
 
-func TestListEvents_AppNamePopulated(t *testing.T) {
+func TestListEvents_SourceNamePopulated(t *testing.T) {
 	router, db := newEventsTestSetup(t)
 	app := createApp(t, router, "Radarr")
 	insertEvent(t, db, app.ID, "info", "download complete", time.Now())
@@ -133,12 +140,12 @@ func TestListEvents_AppNamePopulated(t *testing.T) {
 	if len(resp.Data) == 0 {
 		t.Fatal("expected at least one event")
 	}
-	if resp.Data[0].AppName != "Radarr" {
-		t.Errorf("expected app_name=Radarr got %q", resp.Data[0].AppName)
+	if resp.Data[0].SourceName != "Radarr" {
+		t.Errorf("expected source_name=Radarr got %q", resp.Data[0].SourceName)
 	}
 }
 
-func TestListEvents_RawPayloadExcluded(t *testing.T) {
+func TestListEvents_PayloadExcludedFromList(t *testing.T) {
 	router, db := newEventsTestSetup(t)
 	app := createApp(t, router, "Sonarr")
 	insertEvent(t, db, app.ID, "info", "test", time.Now())
@@ -151,33 +158,15 @@ func TestListEvents_RawPayloadExcluded(t *testing.T) {
 	if len(resp.Data) == 0 {
 		t.Fatal("expected one event")
 	}
-	if resp.Data[0].RawPayload != nil {
-		t.Errorf("expected raw_payload to be absent from list response, got %v", resp.Data[0].RawPayload)
+	// payload must be absent from list results
+	if resp.Data[0].Payload != nil {
+		t.Errorf("expected payload to be absent from list response, got %v", resp.Data[0].Payload)
 	}
 }
 
-func TestListEvents_FieldsIsObject(t *testing.T) {
-	router, db := newEventsTestSetup(t)
-	app := createApp(t, router, "Sonarr")
-	insertEvent(t, db, app.ID, "info", "test", time.Now())
+// --- Filter: source_id ---
 
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
-	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
-
-	resp := decodeEventsResp(t, rr)
-	if len(resp.Data) == 0 {
-		t.Fatal("expected one event")
-	}
-	// fields must be a JSON object, not a string
-	if resp.Data[0].Fields == nil {
-		t.Error("expected fields to be a JSON object, got nil")
-	}
-}
-
-// --- Filter: app_id ---
-
-func TestListEvents_FilterByAppID(t *testing.T) {
+func TestListEvents_FilterBySourceID(t *testing.T) {
 	router, db := newEventsTestSetup(t)
 	app1 := createApp(t, router, "Sonarr")
 	app2 := createApp(t, router, "Radarr")
@@ -185,7 +174,7 @@ func TestListEvents_FilterByAppID(t *testing.T) {
 	insertEvent(t, db, app1.ID, "info", "sonarr event", now)
 	insertEvent(t, db, app2.ID, "info", "radarr event", now)
 
-	req := httptest.NewRequest(http.MethodGet, "/events?app_id="+app1.ID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/events?source_id="+app1.ID, nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -193,14 +182,14 @@ func TestListEvents_FilterByAppID(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1 got %d", resp.Total)
 	}
-	if resp.Data[0].AppID != app1.ID {
-		t.Errorf("expected app_id=%s got %s", app1.ID, resp.Data[0].AppID)
+	if resp.Data[0].SourceID != app1.ID {
+		t.Errorf("expected source_id=%s got %s", app1.ID, resp.Data[0].SourceID)
 	}
 }
 
-// --- Filter: severity ---
+// --- Filter: level ---
 
-func TestListEvents_FilterBySingleSeverity(t *testing.T) {
+func TestListEvents_FilterBySingleLevel(t *testing.T) {
 	router, db := newEventsTestSetup(t)
 	app := createApp(t, router, "Sonarr")
 	now := time.Now()
@@ -208,7 +197,7 @@ func TestListEvents_FilterBySingleSeverity(t *testing.T) {
 	insertEvent(t, db, app.ID, "warn", "warn event", now.Add(time.Second))
 	insertEvent(t, db, app.ID, "error", "error event", now.Add(2*time.Second))
 
-	req := httptest.NewRequest(http.MethodGet, "/events?severity=warn", nil)
+	req := httptest.NewRequest(http.MethodGet, "/events?level=warn", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -216,12 +205,12 @@ func TestListEvents_FilterBySingleSeverity(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1 got %d", resp.Total)
 	}
-	if resp.Data[0].Severity != "warn" {
-		t.Errorf("expected severity=warn got %s", resp.Data[0].Severity)
+	if resp.Data[0].Level != "warn" {
+		t.Errorf("expected level=warn got %s", resp.Data[0].Level)
 	}
 }
 
-func TestListEvents_FilterByMultipleSeverities(t *testing.T) {
+func TestListEvents_FilterByMultipleLevels(t *testing.T) {
 	router, db := newEventsTestSetup(t)
 	app := createApp(t, router, "Sonarr")
 	now := time.Now()
@@ -230,7 +219,7 @@ func TestListEvents_FilterByMultipleSeverities(t *testing.T) {
 	insertEvent(t, db, app.ID, "error", "error", now.Add(2*time.Second))
 	insertEvent(t, db, app.ID, "critical", "critical", now.Add(3*time.Second))
 
-	req := httptest.NewRequest(http.MethodGet, "/events?severity=warn,error,critical", nil)
+	req := httptest.NewRequest(http.MethodGet, "/events?level=warn,error,critical", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -258,8 +247,8 @@ func TestListEvents_FilterBySince(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1 got %d", resp.Total)
 	}
-	if resp.Data[0].DisplayText != "new" {
-		t.Errorf("expected 'new' event got %q", resp.Data[0].DisplayText)
+	if resp.Data[0].Title != "new" {
+		t.Errorf("expected 'new' event got %q", resp.Data[0].Title)
 	}
 }
 
@@ -279,8 +268,8 @@ func TestListEvents_FilterByUntil(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1 got %d", resp.Total)
 	}
-	if resp.Data[0].DisplayText != "old" {
-		t.Errorf("expected 'old' event got %q", resp.Data[0].DisplayText)
+	if resp.Data[0].Title != "old" {
+		t.Errorf("expected 'old' event got %q", resp.Data[0].Title)
 	}
 }
 
@@ -349,10 +338,9 @@ func TestGetEvent_HappyPath(t *testing.T) {
 	}
 
 	var detail struct {
-		ID         string                 `json:"id"`
-		Severity   string                 `json:"severity"`
-		RawPayload map[string]interface{} `json:"raw_payload"`
-		Fields     map[string]interface{} `json:"fields"`
+		ID      string                 `json:"id"`
+		Level   string                 `json:"level"`
+		Payload map[string]interface{} `json:"payload"`
 	}
 	if err := json.NewDecoder(rr.Body).Decode(&detail); err != nil {
 		t.Fatalf("decode detail: %v", err)
@@ -360,12 +348,12 @@ func TestGetEvent_HappyPath(t *testing.T) {
 	if detail.ID != ev.ID {
 		t.Errorf("expected id=%s got %s", ev.ID, detail.ID)
 	}
-	if detail.Severity != "error" {
-		t.Errorf("expected severity=error got %s", detail.Severity)
+	if detail.Level != "error" {
+		t.Errorf("expected level=error got %s", detail.Level)
 	}
-	// raw_payload must be present and be an object in the detail response
-	if detail.RawPayload == nil {
-		t.Error("expected raw_payload to be present in detail response")
+	// payload must be present and be an object in the detail response
+	if detail.Payload == nil {
+		t.Error("expected payload to be present in detail response")
 	}
 }
 
@@ -415,19 +403,19 @@ func TestListByApp_ExcludesOtherApps(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1 (only app1 events) got %d", resp.Total)
 	}
-	if resp.Data[0].AppID != app1.ID {
-		t.Errorf("expected app_id=%s got %s", app1.ID, resp.Data[0].AppID)
+	if resp.Data[0].SourceID != app1.ID {
+		t.Errorf("expected source_id=%s got %s", app1.ID, resp.Data[0].SourceID)
 	}
 }
 
-func TestListByApp_WithSeverityFilter(t *testing.T) {
+func TestListByApp_WithLevelFilter(t *testing.T) {
 	router, db := newEventsTestSetup(t)
 	app := createApp(t, router, "Sonarr")
 	now := time.Now()
 	insertEvent(t, db, app.ID, "info", "info", now)
 	insertEvent(t, db, app.ID, "error", "error", now.Add(time.Second))
 
-	req := httptest.NewRequest(http.MethodGet, "/apps/"+app.ID+"/events?severity=error", nil)
+	req := httptest.NewRequest(http.MethodGet, "/apps/"+app.ID+"/events?level=error", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -435,7 +423,7 @@ func TestListByApp_WithSeverityFilter(t *testing.T) {
 	if resp.Total != 1 {
 		t.Errorf("expected total=1 got %d", resp.Total)
 	}
-	if resp.Data[0].Severity != "error" {
-		t.Errorf("expected severity=error got %s", resp.Data[0].Severity)
+	if resp.Data[0].Level != "error" {
+		t.Errorf("expected level=error got %s", resp.Data[0].Level)
 	}
 }

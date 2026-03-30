@@ -112,11 +112,11 @@ func TestPingChecker_AllFailsDown(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(events.created))
 	}
 	ev := events.created[0]
-	if ev.Severity != "error" {
-		t.Errorf("expected severity=error, got %s", ev.Severity)
+	if ev.Level != "error" {
+		t.Errorf("expected level=error, got %s", ev.Level)
 	}
-	if ev.AppID != "app-1" {
-		t.Errorf("expected app_id=app-1, got %s", ev.AppID)
+	if ev.SourceType != "monitor_check" {
+		t.Errorf("expected source_type=monitor_check, got %s", ev.SourceType)
 	}
 }
 
@@ -135,8 +135,8 @@ func TestPingChecker_Recovery(t *testing.T) {
 		t.Fatalf("expected 1 recovery event, got %d", len(events.created))
 	}
 	ev := events.created[0]
-	if ev.Severity != "info" {
-		t.Errorf("expected severity=info, got %s", ev.Severity)
+	if ev.Level != "info" {
+		t.Errorf("expected level=info, got %s", ev.Level)
 	}
 }
 
@@ -155,8 +155,8 @@ func TestPingChecker_EventWithoutApp(t *testing.T) {
 	if len(events.created) != 1 {
 		t.Errorf("expected 1 event for check without app on status change, got %d", len(events.created))
 	}
-	if events.created[0].AppID != "" {
-		t.Errorf("expected empty app_id on event, got %s", events.created[0].AppID)
+	if events.created[0].SourceType != "monitor_check" {
+		t.Errorf("expected source_type=monitor_check on event, got %s", events.created[0].SourceType)
 	}
 }
 
