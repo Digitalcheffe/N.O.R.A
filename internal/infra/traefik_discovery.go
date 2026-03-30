@@ -72,16 +72,14 @@ func NewTraefikDiscovery(store *repo.Store) *TraefikDiscovery {
 // Non-fatal errors (SSL lookup failures, individual upsert failures) are logged
 // and execution continues so that a single bad router does not abort the sync.
 func (t *TraefikDiscovery) Run(ctx context.Context, component *models.InfrastructureComponent) error {
-	if component.Credentials == nil || *component.Credentials == "" {
-		return nil
-	}
-
 	var creds traefikDiscoveryCredentials
-	if err := json.Unmarshal([]byte(*component.Credentials), &creds); err != nil {
-		return nil // malformed credentials — already logged upstream
+	if component.Credentials != nil && *component.Credentials != "" {
+		if err := json.Unmarshal([]byte(*component.Credentials), &creds); err != nil {
+			log.Printf("traefik discovery: %s: malformed credentials, falling back to IP: %v", component.Name, err)
+		}
 	}
 	if creds.APIURL == "" {
-		return nil
+		creds.APIURL = "http://" + component.IP + ":8080"
 	}
 
 	client := NewTraefikClient(creds.APIURL, creds.APIKey)
