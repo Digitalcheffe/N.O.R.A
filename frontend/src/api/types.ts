@@ -403,6 +403,15 @@ export interface ScanResult {
   error?: string
 }
 
+export interface DiscoverResult {
+  status: string
+  discovered: number
+  updated: number
+  missing: number
+  message?: string
+  error?: string
+}
+
 
 export interface ResourceSummary {
   component_id: string

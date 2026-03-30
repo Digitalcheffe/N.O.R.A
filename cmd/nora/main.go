@@ -21,9 +21,10 @@ import (
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/monitor"
-	"github.com/digitalcheffe/nora/internal/scanner"
 	"github.com/digitalcheffe/nora/internal/push"
 	"github.com/digitalcheffe/nora/internal/repo"
+	"github.com/digitalcheffe/nora/internal/scanner"
+	"github.com/digitalcheffe/nora/internal/scanner/discovery"
 	"github.com/digitalcheffe/nora/migrations"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -109,10 +110,18 @@ func main() {
 	go monitor.NewScheduler(store).Start(schedCtx)
 
 	// Scan scheduler — Discovery (1h), Metrics (2m), Snapshots (30m).
-	// Concrete scanners are registered here as REFACTOR-06/07/08 add them.
+	// Discovery scanners are registered here by entity type (and collection
+	// method for SNMP).  Metrics and Snapshot scanners are added in
+	// REFACTOR-07 and REFACTOR-08.
 	scanCtx, scanCancel := context.WithCancel(context.Background())
 	defer scanCancel()
-	go scanner.NewScanScheduler(store).Start(scanCtx)
+	scanScheduler := scanner.NewScanScheduler(store)
+	scanScheduler.RegisterDiscovery("proxmox_node", discovery.NewProxmoxDiscoveryScanner(store))
+	scanScheduler.RegisterDiscovery("docker_engine", discovery.NewDockerDiscoveryScanner(store))
+	scanScheduler.RegisterDiscovery("synology", discovery.NewSynologyDiscoveryScanner(store))
+	scanScheduler.RegisterDiscovery("opnsense", discovery.NewOPNsenseDiscoveryScanner(store))
+	scanScheduler.RegisterDiscoveryByMethod("snmp", discovery.NewSNMPDiscoveryScanner(store))
+	go scanScheduler.Start(scanCtx)
 
 	// Resource rollup jobs — hourly aggregation and daily rollup + retention purge.
 	rollupCtx, rollupCancel := context.WithCancel(context.Background())

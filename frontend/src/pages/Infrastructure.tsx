@@ -10,7 +10,7 @@ import type {
   InfrastructureComponent,
   InfrastructureComponentInput,
   ResourceSummary,
-  ScanResult,
+  DiscoverResult,
   VolumeResource,
 } from '../api/types'
 import './Infrastructure.css'
@@ -319,7 +319,7 @@ export function Infrastructure() {
   const [submitting,            setSubmitting]            = useState(false)
   const [deletingId,            setDeletingId]            = useState<string | null>(null)
   const [scanningId,            setScanningId]            = useState<string | null>(null)
-  const [scanResults,           setScanResults]           = useState<Record<string, ScanResult>>({})
+  const [scanResults,           setScanResults]           = useState<Record<string, DiscoverResult>>({})
 
   // ── Polling ─────────────────────────────────────────────────────────────────
 
@@ -438,15 +438,15 @@ export function Infrastructure() {
     setScanningId(id)
     setScanResults(prev => { const n = { ...prev }; delete n[id]; return n })
     try {
-      const result = await infraApi.scan(id)
+      const result = await infraApi.discover(id)
       setScanResults(prev => ({ ...prev, [id]: result }))
       // Refresh the component list so last_status updates immediately.
       const res = await infraApi.list()
       setComponents(res.data)
       void pollAll(res.data)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Scan failed'
-      setScanResults(prev => ({ ...prev, [id]: { component_id: id, status: 'offline', last_polled_at: new Date().toISOString(), error: msg } }))
+      const msg = err instanceof Error ? err.message : 'Discover failed'
+      setScanResults(prev => ({ ...prev, [id]: { status: 'error', discovered: 0, updated: 0, missing: 0, error: msg } }))
     } finally {
       setScanningId(null)
     }
@@ -521,7 +521,7 @@ export function Infrastructure() {
               onClick={() => void handleScan(c.id)}
               disabled={isDeleting || isScanning || scanningId !== null}
             >
-              {isScanning ? 'Scanning…' : 'Scan Now'}
+              {isScanning ? 'Discovering…' : 'Discover Now'}
             </button>
             <button
               className="infra-card-btn"
@@ -577,7 +577,7 @@ export function Infrastructure() {
               onClick={() => void handleScan(c.id)}
               disabled={isDeleting || isScanning || scanningId !== null}
             >
-              {isScanning ? 'Scanning…' : 'Scan Now'}
+              {isScanning ? 'Discovering…' : 'Discover Now'}
             </button>
             <button
               className="infra-card-btn"
@@ -658,7 +658,7 @@ export function Infrastructure() {
                 onClick={() => void handleScan(c.id)}
                 disabled={isDeleting || isScanning || scanningId !== null}
               >
-                {isScanning ? 'Scanning…' : 'Scan Now'}
+                {isScanning ? 'Discovering…' : 'Discover Now'}
               </button>
             )}
             <button

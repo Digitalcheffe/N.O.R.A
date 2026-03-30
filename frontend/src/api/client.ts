@@ -15,6 +15,7 @@ import type {
   CustomProfile,
   DashboardSummaryResponse,
   DigestSchedule,
+  DiscoverResult,
   DiscoveredContainer,
   DiscoveredRoute,
   DockerEngine,
@@ -365,6 +366,9 @@ export const infrastructure = {
 
   scan: (id: string) =>
     request<ScanResult>('POST', `/infrastructure/${id}/scan`),
+
+  discover: (id: string) =>
+    request<DiscoverResult>('POST', `/infrastructure/${id}/discover`),
 
   events: (id: string, filter?: EventFilter) => {
     const params = new URLSearchParams()

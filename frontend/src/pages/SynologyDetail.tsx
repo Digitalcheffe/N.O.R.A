@@ -143,6 +143,8 @@ export function SynologyDetail() {
   const [noData, setNoData] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [discovering,   setDiscovering]   = useState(false)
+  const [discoverError, setDiscoverError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!componentId) return
@@ -161,6 +163,20 @@ export function SynologyDetail() {
       setLoading(false)
     }
   }, [componentId])
+
+  const handleDiscoverNow = useCallback(async () => {
+    if (!componentId || discovering) return
+    setDiscovering(true)
+    setDiscoverError(null)
+    try {
+      await infraApi.discover(componentId)
+      void load()
+    } catch (err) {
+      setDiscoverError(err instanceof Error ? err.message : 'Discover failed')
+    } finally {
+      setDiscovering(false)
+    }
+  }, [componentId, discovering, load])
 
   useEffect(() => { load() }, [load, tick])
 
@@ -207,6 +223,14 @@ export function SynologyDetail() {
             {d?.polled_at && (
               <span className="syn-polled-at">polled {timeAgo(d.polled_at)}</span>
             )}
+            <button
+              className="icd-scan-btn"
+              onClick={() => void handleDiscoverNow()}
+              disabled={discovering}
+            >
+              {discovering ? 'Discovering…' : 'Discover Now'}
+            </button>
+            {discoverError && <span className="icd-scan-error">{discoverError}</span>}
           </div>
         </div>
 

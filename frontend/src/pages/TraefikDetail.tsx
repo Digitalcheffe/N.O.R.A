@@ -10,7 +10,7 @@ import {
 import type {
   Event,
   InfrastructureComponent,
-  ScanResult,
+  DiscoverResult,
   TraefikOverview,
   DiscoveredRoute,
   TraefikServiceDetail,
@@ -153,7 +153,7 @@ function OverviewSection({
               )}
             </>
           ) : (
-            <div className="tk-empty">No overview data — run Scan Now to poll Traefik.</div>
+            <div className="tk-empty">No overview data — run Discover Now to poll Traefik.</div>
           )}
         </div>
       )}
@@ -530,9 +530,9 @@ export function TraefikDetail() {
   const [topLoading,   setTopLoading]   = useState(true)
   const [topError,     setTopError]     = useState<string | null>(null)
 
-  // Scan Now
-  const [scanning,     setScanning]     = useState(false)
-  const [scanResult,   setScanResult]   = useState<ScanResult | null>(null)
+  // Discover Now
+  const [discovering,     setDiscovering]     = useState(false)
+  const [discoverResult,  setDiscoverResult]  = useState<DiscoverResult | null>(null)
 
   // Overview
   const [overview,        setOverview]        = useState<TraefikOverview | null>(null)
@@ -585,29 +585,30 @@ export function TraefikDetail() {
       .finally(() => setServicesLoading(false))
   }, [componentId])
 
-  const handleScanNow = useCallback(async () => {
-    if (!componentId || scanning) return
-    setScanning(true)
-    setScanResult(null)
+  const handleDiscoverNow = useCallback(async () => {
+    if (!componentId || discovering) return
+    setDiscovering(true)
+    setDiscoverResult(null)
     try {
-      const result = await infraApi.scan(componentId)
-      setScanResult(result)
+      const result = await infraApi.discover(componentId)
+      setDiscoverResult(result)
       // Reload all sections with fresh data from the just-completed poll.
       loadTop()
       loadOverview()
       loadRouters()
       loadServices()
     } catch (err) {
-      setScanResult({
-        component_id: componentId,
-        status: 'offline',
-        last_polled_at: new Date().toISOString(),
-        error: err instanceof Error ? err.message : 'Scan failed',
+      setDiscoverResult({
+        status: 'error',
+        discovered: 0,
+        updated: 0,
+        missing: 0,
+        error: err instanceof Error ? err.message : 'Discover failed',
       })
     } finally {
-      setScanning(false)
+      setDiscovering(false)
     }
-  }, [componentId, scanning, loadTop, loadOverview, loadRouters, loadServices])
+  }, [componentId, discovering, loadTop, loadOverview, loadRouters, loadServices])
 
   useEffect(() => {
     loadTop()
@@ -679,13 +680,13 @@ export function TraefikDetail() {
             )}
             <button
               className="tk-scan-btn"
-              onClick={() => void handleScanNow()}
-              disabled={scanning || topLoading}
+              onClick={() => void handleDiscoverNow()}
+              disabled={discovering || topLoading}
             >
-              {scanning ? 'Scanning…' : 'Scan Now'}
+              {discovering ? 'Discovering…' : 'Discover Now'}
             </button>
-            {scanResult?.error && (
-              <span className="tk-scan-error">{scanResult.error}</span>
+            {discoverResult?.error && (
+              <span className="tk-scan-error">{discoverResult.error}</span>
             )}
           </div>
         </div>
