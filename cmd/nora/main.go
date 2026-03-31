@@ -247,6 +247,13 @@ func main() {
 	defer traefikCancel()
 	go jobs.StartTraefikComponentPollers(traefikCtx, store)
 
+	// Portainer enrichment worker — polls all enabled Portainer components every 15 minutes.
+	// Does not require a local Docker Engine component; gate is Portainer-component presence only.
+	portainerCtx, portainerCancel := context.WithCancel(context.Background())
+	defer portainerCancel()
+	portainerWorker := infra.NewPortainerEnrichmentWorker(store)
+	go portainerWorker.Start(portainerCtx)
+
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
 	defer dockerCancel()
@@ -416,6 +423,11 @@ func main() {
 			RunFn:       imagePoller.Run,
 		})
 	}
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "portainer_enrichment", Name: "Portainer Enrichment", Category: "integration",
+		Description: "Matches Portainer containers to NORA-known records and updates image update status.",
+		RunFn:       portainerWorker.Run,
+	})
 
 	// SYSTEM — instance-level background jobs.
 	jobRegistry.Register(&jobs.JobEntry{
@@ -457,6 +469,7 @@ func main() {
 		pushHandler.Routes(r)
 		api.NewRulesHandler(store, rulesEngine).Routes(r)
 		api.NewJobsHandler(jobRegistry).Routes(r)
+		api.NewPortainerHandler(store).Routes(r)
 		authHandler.Routes(r)
 	})
 
