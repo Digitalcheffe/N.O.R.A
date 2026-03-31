@@ -128,6 +128,27 @@ func (s *ScanScheduler) Start(ctx context.Context) {
 	}
 }
 
+// RunDiscovery runs the discovery pass immediately.
+// Used by the job registry for on-demand triggering.
+func (s *ScanScheduler) RunDiscovery(ctx context.Context) error {
+	s.runDiscoveryPass(ctx)
+	return nil
+}
+
+// RunMetrics runs the metrics collection pass immediately.
+// Used by the job registry for on-demand triggering.
+func (s *ScanScheduler) RunMetrics(ctx context.Context) error {
+	s.runMetricsPass(ctx)
+	return nil
+}
+
+// RunSnapshot runs the snapshot pass immediately.
+// Used by the job registry for on-demand triggering.
+func (s *ScanScheduler) RunSnapshot(ctx context.Context) error {
+	s.runSnapshotPass(ctx)
+	return nil
+}
+
 // runDiscoveryPass iterates all enabled components and calls each registered
 // DiscoveryScanner concurrently with DiscoveryTimeout per entity.
 // Scanners are looked up by entity type first; if none is registered for the

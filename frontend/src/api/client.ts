@@ -28,6 +28,8 @@ import type {
   InfrastructureComponentInput,
   InstanceMetrics,
   IntegrationDriver,
+  Job,
+  JobRunResult,
   LinkAppInput,
   ListResponse,
   LoginInput,
@@ -523,4 +525,14 @@ export const push = {
 
   test: () =>
     request<{ status: string }>('POST', '/push/test'),
+}
+
+// ── Jobs ──────────────────────────────────────────────────────────────────────
+
+export const jobsApi = {
+  list: () =>
+    request<{ data: Job[] }>('GET', '/jobs'),
+
+  run: (id: string) =>
+    request<JobRunResult>('POST', `/jobs/${id}/run`),
 }

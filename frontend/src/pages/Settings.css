@@ -873,3 +873,106 @@
   gap: 6px;
   justify-content: flex-end;
 }
+
+/* ── Jobs tab ────────────────────────────────────────────────────────────── */
+
+.jobs-description {
+  font-size: 13px;
+  color: var(--text2);
+  margin: 0 0 20px;
+}
+
+.jobs-category {
+  margin-bottom: 24px;
+}
+
+.jobs-category-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+
+.job-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.job-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.job-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.job-card-desc {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.job-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+
+.job-card-action {
+  flex-shrink: 0;
+}
+
+.job-run-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.job-run-badge--ok {
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+  color: var(--green);
+}
+
+.job-run-badge--error {
+  background: color-mix(in srgb, var(--red) 15%, transparent);
+  color: var(--red);
+}
+
+.job-btn-running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.job-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: job-spin 0.7s linear infinite;
+}
+
+@keyframes job-spin {
+  to { transform: rotate(360deg); }
+}

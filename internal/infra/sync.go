@@ -62,6 +62,13 @@ func (w *SyncWorker) SyncOne(ctx context.Context, integrationID string) (int, er
 	return w.syncIntegration(ctx, integration)
 }
 
+// RunSync syncs all enabled Traefik integrations immediately.
+// Used by the job registry for on-demand triggering.
+func (w *SyncWorker) RunSync(ctx context.Context) error {
+	w.syncAll(ctx)
+	return nil
+}
+
 // syncAll loads all enabled integrations and syncs each one.
 func (w *SyncWorker) syncAll(ctx context.Context) {
 	integrations, err := w.store.Infra.List(ctx)

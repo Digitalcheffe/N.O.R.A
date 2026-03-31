@@ -731,3 +731,20 @@ export interface InstanceMetrics {
   top_apps: TopAppItem[]
   app_events_24h: AppEventItem[]
 }
+
+// ── Jobs ─────────────────────────────────────────────────────────────────────
+
+export interface Job {
+  id: string
+  name: string
+  description: string
+  category: string
+  last_run_at: string | null
+  last_run_status: string | null
+}
+
+export interface JobRunResult {
+  status: 'ok' | 'error'
+  error?: string
+  duration_ms: number
+}

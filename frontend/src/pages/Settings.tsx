@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push, notifyRules } from '../api/client'
+import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push, notifyRules, jobsApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { usePushSubscription } from '../hooks/usePushSubscription'
 import type {
@@ -12,6 +12,8 @@ import type {
   DigestFrequency,
   DigestSchedule,
   InstanceMetrics,
+  Job,
+  JobRunResult,
   Rule,
   RuleCondition,
   RuleConditionLogic,
@@ -23,7 +25,7 @@ import type {
 
 import './Settings.css'
 
-type Tab = 'apps' | 'notifications' | 'notify_rules' | 'metrics' | 'users'
+type Tab = 'apps' | 'notifications' | 'notify_rules' | 'metrics' | 'users' | 'jobs'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'apps', label: 'Apps' },
@@ -31,6 +33,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'notify_rules', label: 'Notify Rules' },
   { id: 'metrics', label: 'Instance Metrics' },
   { id: 'users', label: 'Users' },
+  { id: 'jobs', label: 'Jobs' },
 ]
 
 // ── Delete confirmation modal ─────────────────────────────────────────────────
@@ -1376,6 +1379,123 @@ function NotifyRulesTab({ smtpConfigured }: NotifyRulesTabProps) {
   )
 }
 
+// ── Jobs tab ──────────────────────────────────────────────────────────────────
+
+type RunState = { status: 'idle' | 'running' | 'ok' | 'error'; message?: string; duration?: number }
+
+const CATEGORY_LABELS: Record<string, string> = {
+  monitor: 'Monitor',
+  data: 'Data',
+  integration: 'Integration',
+  system: 'System',
+}
+const CATEGORY_ORDER = ['monitor', 'data', 'integration', 'system']
+
+function JobsTab() {
+  const [jobList, setJobList] = useState<Job[]>([])
+  const [loading, setLoading] = useState(true)
+  const [runState, setRunState] = useState<Record<string, RunState>>({})
+
+  useEffect(() => {
+    jobsApi.list()
+      .then(r => setJobList(r.data))
+      .catch(() => {/* leave empty */})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleRun = async (id: string) => {
+    setRunState(prev => ({ ...prev, [id]: { status: 'running' } }))
+    try {
+      const result: JobRunResult = await jobsApi.run(id)
+      setRunState(prev => ({
+        ...prev,
+        [id]: { status: result.status, message: result.error, duration: result.duration_ms },
+      }))
+    } catch (e) {
+      setRunState(prev => ({ ...prev, [id]: { status: 'error', message: String(e) } }))
+    }
+    setTimeout(() => {
+      setRunState(prev => ({ ...prev, [id]: { status: 'idle' } }))
+    }, 3000)
+  }
+
+  const grouped = Object.fromEntries(
+    CATEGORY_ORDER.map(cat => [cat, jobList.filter(j => j.category === cat)])
+  )
+
+  return (
+    <div className="tab-content">
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Jobs</span>
+        </div>
+        <p className="jobs-description">Run built-in background jobs on demand.</p>
+        {loading ? (
+          <div className="settings-placeholder">Loading…</div>
+        ) : (
+          CATEGORY_ORDER
+            .filter(cat => (grouped[cat]?.length ?? 0) > 0)
+            .map(cat => (
+              <div key={cat} className="jobs-category">
+                <div className="jobs-category-label">{CATEGORY_LABELS[cat] ?? cat.toUpperCase()}</div>
+                {grouped[cat].map(job => {
+                  const rs = runState[job.id] ?? { status: 'idle' }
+                  const isRunning = rs.status === 'running'
+                  return (
+                    <div key={job.id} className="job-card">
+                      <div className="job-card-info">
+                        <div className="job-card-name">{job.name}</div>
+                        <div className="job-card-desc">{job.description}</div>
+                        {job.last_run_at && (
+                          <div className="job-card-meta">
+                            Last run: {new Date(job.last_run_at).toLocaleString()}
+                            {job.last_run_status && (
+                              <span className={`job-run-badge job-run-badge--${job.last_run_status}`}>
+                                {job.last_run_status}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {rs.status === 'ok' && (
+                          <div className="job-card-meta">
+                            <span className="job-run-badge job-run-badge--ok">
+                              Completed in {rs.duration}ms
+                            </span>
+                          </div>
+                        )}
+                        {rs.status === 'error' && (
+                          <div className="job-card-meta">
+                            <span className="job-run-badge job-run-badge--error">
+                              Failed{rs.message ? `: ${rs.message}` : ''}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="job-card-action">
+                        <button
+                          className="settings-btn secondary"
+                          onClick={() => handleRun(job.id)}
+                          disabled={isRunning}
+                        >
+                          {isRunning ? (
+                            <span className="job-btn-running">
+                              <span className="job-spinner" />
+                              Running…
+                            </span>
+                          ) : 'Run Now'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ))
+        )}
+      </section>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function Settings() {
@@ -1409,6 +1529,7 @@ export function Settings() {
         {activeTab === 'notify_rules' && <NotifyRulesTab smtpConfigured={smtpConfigured} />}
         {activeTab === 'metrics' && <MetricsTab />}
         {activeTab === 'users' && <UsersTab />}
+        {activeTab === 'jobs' && <JobsTab />}
       </div>
     </>
   )
