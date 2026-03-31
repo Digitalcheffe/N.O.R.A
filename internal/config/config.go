@@ -7,7 +7,6 @@ import (
 )
 
 type Config struct {
-	DevMode        bool
 	Secret         string
 	DBPath         string
 	Port           string
@@ -22,8 +21,11 @@ type Config struct {
 }
 
 func Load() *Config {
+	if os.Getenv("NORA_DEV_MODE") != "" {
+		log.Println("warning: NORA_DEV_MODE is no longer supported — auth is always required")
+	}
+
 	cfg := &Config{
-		DevMode:        getEnvBool("NORA_DEV_MODE", false),
 		Secret:         os.Getenv("NORA_SECRET"),
 		DBPath:         getEnvStr("NORA_DB_PATH", "/data/nora.db"),
 		Port:           getEnvStr("NORA_PORT", "8081"),
@@ -37,8 +39,8 @@ func Load() *Config {
 		VAPIDPrivate:   os.Getenv("NORA_VAPID_PRIVATE"),
 	}
 
-	if !cfg.DevMode && cfg.Secret == "" {
-		log.Fatal("NORA_SECRET is required when NORA_DEV_MODE is false")
+	if cfg.Secret == "" {
+		log.Fatal("NORA_SECRET is required")
 	}
 
 	return cfg
@@ -49,18 +51,6 @@ func getEnvStr(key, def string) string {
 		return v
 	}
 	return def
-}
-
-func getEnvBool(key string, def bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return def
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return def
-	}
-	return b
 }
 
 func getEnvInt(key string, def int) int {

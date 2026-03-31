@@ -18,7 +18,7 @@ import (
 
 func newSNMPTestStore(t *testing.T) *repo.Store {
 	t.Helper()
-	cfg := &config.Config{DBPath: ":memory:", DevMode: true}
+	cfg := &config.Config{DBPath: ":memory:"}
 	db, err := repo.Open(cfg, migrations.Files)
 	if err != nil {
 		t.Fatalf("open test db: %v", err)

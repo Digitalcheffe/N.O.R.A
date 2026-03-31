@@ -290,10 +290,12 @@ func main() {
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
 	pushHandler := api.NewPushHandler(cfg, store, pushSender)
 	pushHandler.RegisterPublicRoutes(r)
+	authHandler := api.NewAuthHandler(userRepo, cfg.Secret)
+	authHandler.RegisterPublicRoutes(r)
 
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(auth.RequireAuth(cfg.DevMode))
+		r.Use(auth.RequireAuth(cfg.Secret))
 		api.NewAppsHandler(appRepo).Routes(r)
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
@@ -311,6 +313,7 @@ func main() {
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
 		api.NewRulesHandler(store, rulesEngine).Routes(r)
+		authHandler.Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html
@@ -328,7 +331,7 @@ func main() {
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("NORA listening on %s (dev_mode=%v)", addr, cfg.DevMode)
+	log.Printf("NORA listening on %s", addr)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server error: %v", err)
 	}

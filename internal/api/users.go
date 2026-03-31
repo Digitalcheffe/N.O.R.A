@@ -1,16 +1,15 @@
 package api
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // UsersHandler serves user management endpoints.
@@ -84,9 +83,12 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Email: req.Email,
 		Role:  role,
 	}
-	// NOTE: SHA-256 is used as a placeholder until T-10 implements full auth with bcrypt.
-	hash := sha256.Sum256([]byte(req.Password))
-	passwordHash := fmt.Sprintf("%x", hash)
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+	passwordHash := string(hashed)
 
 	if err := h.users.Create(r.Context(), u, passwordHash); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

@@ -17,6 +17,8 @@ type UserRepo interface {
 	Create(ctx context.Context, u *models.User, passwordHash string) error
 	Delete(ctx context.Context, id string) error
 	GetByID(ctx context.Context, id string) (*models.User, error)
+	GetByEmail(ctx context.Context, email string) (*models.User, string, error)
+	Count(ctx context.Context) (int, error)
 }
 
 type sqliteUserRepo struct {
@@ -76,4 +78,31 @@ func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*models.User, 
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 	return &u, nil
+}
+
+// GetByEmail returns the user and their stored password hash for the given email.
+func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*models.User, string, error) {
+	var row struct {
+		models.User
+		PasswordHash string `db:"password_hash"`
+	}
+	err := r.db.GetContext(ctx, &row, `
+		SELECT id, email, role, created_at, password_hash FROM users WHERE email = ?`, email)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", ErrNotFound
+		}
+		return nil, "", fmt.Errorf("get user by email: %w", err)
+	}
+	return &row.User, row.PasswordHash, nil
+}
+
+// Count returns the total number of users.
+func (r *sqliteUserRepo) Count(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.GetContext(ctx, &n, `SELECT COUNT(*) FROM users`)
+	if err != nil {
+		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return n, nil
 }
