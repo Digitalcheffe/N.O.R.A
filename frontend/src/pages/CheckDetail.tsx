@@ -135,6 +135,7 @@ export function CheckDetail() {
   const [check, setCheck] = useState<MonitorCheck | null>(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
   const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
@@ -169,6 +170,16 @@ export function CheckDetail() {
       setCheck(updated)
     } catch { /* noop */ }
     finally { setRunning(false) }
+  }
+
+  async function handleResetBaseline() {
+    if (!id || !check) return
+    setResetting(true)
+    try {
+      const updated = await checksApi.resetBaseline(id)
+      setCheck(updated)
+    } catch { /* noop */ }
+    finally { setResetting(false) }
   }
 
   async function handleTogglePause() {
@@ -250,6 +261,16 @@ export function CheckDetail() {
             >
               {check.enabled ? '⏸ Pause' : '▶ Resume'}
             </button>
+            {check.type === 'dns' && (
+              <button
+                className="check-detail-action-btn"
+                onClick={() => void handleResetBaseline()}
+                disabled={resetting}
+                title="Re-resolve DNS now and save as the new baseline"
+              >
+                {resetting ? <span className="check-detail-spinner" /> : '⟳'} Reset Baseline
+              </button>
+            )}
             <button className="check-detail-action-btn" onClick={() => setShowEdit(true)}>
               ⚙ Settings
             </button>

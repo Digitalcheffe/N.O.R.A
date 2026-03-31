@@ -35,6 +35,7 @@ func (h *ChecksHandler) Routes(r chi.Router) {
 	r.Put("/checks/{id}", h.Update)
 	r.Delete("/checks/{id}", h.Delete)
 	r.Post("/checks/{id}/run", h.Run)
+	r.Post("/checks/{id}/reset-baseline", h.ResetBaseline)
 	r.Get("/checks/{id}/events", h.ListEvents)
 }
 
@@ -418,4 +419,53 @@ func (h *ChecksHandler) createStatusEvent(ctx context.Context, check *models.Mon
 	if err := h.events.Create(ctx, event); err != nil {
 		log.Printf("createStatusEvent: failed to write event for check %s: %v", check.ID, err)
 	}
+}
+
+// ResetBaseline re-resolves a DNS check immediately and stores the result as
+// the new baseline. Event history is not affected. Returns the updated check.
+// POST /api/v1/checks/{id}/reset-baseline
+func (h *ChecksHandler) ResetBaseline(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	check, err := h.checks.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "check not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if check.Type != "dns" {
+		writeError(w, http.StatusBadRequest, "reset-baseline is only valid for DNS checks")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	result := monitor.RunDNS(ctx, check.Target, check.DNSRecordType, "", check.DNSResolver)
+	cancel()
+
+	var det struct {
+		Records []string `json:"records"`
+	}
+	if json.Unmarshal(result.Details, &det) != nil || len(det.Records) == 0 {
+		writeError(w, http.StatusBadGateway, "DNS resolution failed — could not capture a baseline")
+		return
+	}
+
+	baseline := det.Records[0]
+	if err := h.checks.SetDNSBaseline(r.Context(), check.ID, baseline); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	now := time.Now().UTC()
+	_ = h.checks.UpdateStatus(r.Context(), check.ID, result.Status, string(result.Details), now)
+
+	updated, err := h.checks.Get(r.Context(), check.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
