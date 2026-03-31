@@ -40,6 +40,14 @@ type urlDetails struct {
 	LatencyMs  int64 `json:"latency_ms"`
 }
 
+// dnsDetails is stored in last_result for dns checks.
+type dnsDetails struct {
+	RecordType string   `json:"record_type"`
+	Records    []string `json:"records,omitempty"`
+	LatencyMs  int64    `json:"latency_ms"`
+	Error      *string  `json:"error,omitempty"`
+}
+
 // sslDetails is stored in last_result for ssl checks.
 // All fields are pointers so they serialise as null on TLS failure.
 type sslDetails struct {
@@ -182,11 +190,90 @@ func RunSSL(ctx context.Context, target string, warnDays, critDays int) Result {
 	return Result{Status: status, Details: details, CheckedAt: now}
 }
 
+// RunDNS resolves target using the given recordType (A, AAAA, MX, CNAME, TXT).
+// If expectedValue is non-empty, at least one resolved record must contain it as
+// a substring for the check to be "up". Returns "down" on lookup failure or
+// when the expected value is not found.
+func RunDNS(ctx context.Context, target, recordType, expectedValue string) Result {
+	now := time.Now().UTC()
+	if recordType == "" {
+		recordType = "A"
+	}
+
+	r := &net.Resolver{}
+	start := time.Now()
+
+	var records []string
+	var lookupErr error
+
+	switch strings.ToUpper(recordType) {
+	case "A", "AAAA":
+		addrs, err := r.LookupHost(ctx, target)
+		lookupErr = err
+		for _, a := range addrs {
+			isIPv6 := strings.Contains(a, ":")
+			if strings.ToUpper(recordType) == "AAAA" && !isIPv6 {
+				continue
+			}
+			if strings.ToUpper(recordType) == "A" && isIPv6 {
+				continue
+			}
+			records = append(records, a)
+		}
+	case "MX":
+		mxs, err := r.LookupMX(ctx, target)
+		lookupErr = err
+		for _, mx := range mxs {
+			records = append(records, mx.Host)
+		}
+	case "CNAME":
+		cname, err := r.LookupCNAME(ctx, target)
+		lookupErr = err
+		if err == nil {
+			records = []string{cname}
+		}
+	case "TXT":
+		txts, err := r.LookupTXT(ctx, target)
+		lookupErr = err
+		records = txts
+	default:
+		addrs, err := r.LookupHost(ctx, target)
+		lookupErr = err
+		records = addrs
+	}
+
+	latency := time.Since(start).Milliseconds()
+
+	if lookupErr != nil {
+		errStr := lookupErr.Error()
+		details, _ := json.Marshal(dnsDetails{RecordType: recordType, LatencyMs: latency, Error: &errStr})
+		return Result{Status: "down", Details: details, CheckedAt: now}
+	}
+
+	status := "up"
+	if expectedValue != "" {
+		found := false
+		for _, rec := range records {
+			if strings.Contains(rec, expectedValue) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			status = "down"
+		}
+	}
+
+	details, _ := json.Marshal(dnsDetails{RecordType: recordType, Records: records, LatencyMs: latency})
+	return Result{Status: status, Details: details, CheckedAt: now}
+}
+
 // Run dispatches a check by type and returns the result.
-// checkType must be one of "ping", "url", "ssl".
-// expectedStatus is used for url checks; warnDays/critDays for ssl checks.
-// skipTLSVerify applies only to url checks (ignore self-signed cert errors).
-func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays, critDays int, skipTLSVerify bool) (Result, error) {
+// checkType must be one of "ping", "url", "ssl", "dns".
+// expectedStatus is used for url checks; warnDays/critDays for ssl checks;
+// dnsRecordType/dnsExpectedValue for dns checks.
+// skipTLSVerify applies only to url checks.
+func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays, critDays int, skipTLSVerify bool, dnsRecordType, dnsExpectedValue string) (Result, error) {
 	switch checkType {
 	case "ping":
 		return RunPing(ctx, target), nil
@@ -194,6 +281,8 @@ func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays
 		return RunURL(ctx, target, expectedStatus, skipTLSVerify), nil
 	case "ssl":
 		return RunSSL(ctx, target, warnDays, critDays), nil
+	case "dns":
+		return RunDNS(ctx, target, dnsRecordType, dnsExpectedValue), nil
 	default:
 		return Result{}, fmt.Errorf("unknown check type: %s", checkType)
 	}

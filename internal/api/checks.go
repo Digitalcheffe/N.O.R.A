@@ -41,18 +41,20 @@ func (h *ChecksHandler) Routes(r chi.Router) {
 // --- request / response types ---
 
 type checkRequest struct {
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	Target         string  `json:"target"`
-	IntervalSecs   int     `json:"interval_secs"`
-	AppID          string  `json:"app_id"`
-	ExpectedStatus int     `json:"expected_status"`
-	SSLWarnDays    int     `json:"ssl_warn_days"`
-	SSLCritDays    int     `json:"ssl_crit_days"`
-	SSLSource      *string `json:"ssl_source"`     // "traefik" | "standalone" | nil
-	IntegrationID  *string `json:"integration_id"` // required when ssl_source == "traefik"
-	Enabled        *bool   `json:"enabled"`         // nil = no change, false = disable, true = enable
-	SkipTLSVerify  *bool   `json:"skip_tls_verify"` // nil = no change; for url checks only
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	Target           string  `json:"target"`
+	IntervalSecs     int     `json:"interval_secs"`
+	AppID            string  `json:"app_id"`
+	ExpectedStatus   int     `json:"expected_status"`
+	SSLWarnDays      int     `json:"ssl_warn_days"`
+	SSLCritDays      int     `json:"ssl_crit_days"`
+	SSLSource        *string `json:"ssl_source"`      // "traefik" | "standalone" | nil
+	IntegrationID    *string `json:"integration_id"`  // required when ssl_source == "traefik"
+	Enabled          *bool   `json:"enabled"`          // nil = no change, false = disable, true = enable
+	SkipTLSVerify    *bool   `json:"skip_tls_verify"`  // nil = no change; for url checks only
+	DNSRecordType    string  `json:"dns_record_type"`  // A | AAAA | MX | CNAME | TXT
+	DNSExpectedValue string  `json:"dns_expected_value"` // optional substring match
 }
 
 type listChecksResponse struct {
@@ -68,14 +70,14 @@ type runCheckResponse struct {
 
 // --- validation ---
 
-var validCheckTypes = map[string]bool{"ping": true, "url": true, "ssl": true}
+var validCheckTypes = map[string]bool{"ping": true, "url": true, "ssl": true, "dns": true}
 
 func validateCheck(req checkRequest) string {
 	if req.Name == "" {
 		return "name is required"
 	}
 	if !validCheckTypes[req.Type] {
-		return "type must be one of: ping, url, ssl"
+		return "type must be one of: ping, url, ssl, dns"
 	}
 	if req.Target == "" {
 		return "target is required"
@@ -86,6 +88,12 @@ func validateCheck(req checkRequest) string {
 	if req.Type == "url" {
 		if !strings.HasPrefix(req.Target, "http://") && !strings.HasPrefix(req.Target, "https://") {
 			return "target must begin with http:// or https:// for url checks"
+		}
+	}
+	if req.Type == "dns" {
+		validRecordTypes := map[string]bool{"A": true, "AAAA": true, "MX": true, "CNAME": true, "TXT": true, "": true}
+		if !validRecordTypes[strings.ToUpper(req.DNSRecordType)] {
+			return "dns_record_type must be one of: A, AAAA, MX, CNAME, TXT"
 		}
 	}
 	// For SSL checks, only require a URL prefix in standalone mode.
@@ -137,20 +145,22 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 	skipTLS := req.SkipTLSVerify != nil && *req.SkipTLSVerify
 
 	check := &models.MonitorCheck{
-		ID:             uuid.New().String(),
-		AppID:          req.AppID,
-		Name:           req.Name,
-		Type:           req.Type,
-		Target:         req.Target,
-		IntervalSecs:   req.IntervalSecs,
-		ExpectedStatus: req.ExpectedStatus,
-		SSLWarnDays:    warnDays,
-		SSLCritDays:    critDays,
-		SSLSource:      req.SSLSource,
-		IntegrationID:  req.IntegrationID,
-		SkipTLSVerify:  skipTLS,
-		Enabled:        true,
-		CreatedAt:      time.Now().UTC(),
+		ID:               uuid.New().String(),
+		AppID:            req.AppID,
+		Name:             req.Name,
+		Type:             req.Type,
+		Target:           req.Target,
+		IntervalSecs:     req.IntervalSecs,
+		ExpectedStatus:   req.ExpectedStatus,
+		SSLWarnDays:      warnDays,
+		SSLCritDays:      critDays,
+		SSLSource:        req.SSLSource,
+		IntegrationID:    req.IntegrationID,
+		SkipTLSVerify:    skipTLS,
+		DNSRecordType:    strings.ToUpper(req.DNSRecordType),
+		DNSExpectedValue: req.DNSExpectedValue,
+		Enabled:          true,
+		CreatedAt:        time.Now().UTC(),
 	}
 
 	if err := h.checks.Create(r.Context(), check); err != nil {
@@ -232,6 +242,12 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.SkipTLSVerify != nil {
 		existing.SkipTLSVerify = *req.SkipTLSVerify
 	}
+	if req.DNSRecordType != "" {
+		existing.DNSRecordType = strings.ToUpper(req.DNSRecordType)
+	}
+	if req.DNSExpectedValue != "" {
+		existing.DNSExpectedValue = req.DNSExpectedValue
+	}
 
 	// Re-validate the merged state. Include SSLSource so Traefik-mode checks
 	// are not incorrectly rejected for using a bare domain target.
@@ -297,7 +313,7 @@ func (h *ChecksHandler) Run(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays, check.SkipTLSVerify)
+	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays, check.SkipTLSVerify, check.DNSRecordType, check.DNSExpectedValue)
 	if runErr != nil {
 		writeError(w, http.StatusInternalServerError, runErr.Error())
 		return

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { MonitorCheck, CreateCheckInput, CheckType, SSLSource } from '../api/types'
+import type { MonitorCheck, CreateCheckInput, CheckType, SSLSource, DNSRecordType } from '../api/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -14,7 +14,9 @@ export type FormFields = {
   ssl_source: SSLSource
   integration_id: string
   traefik_domain: string
-  skip_tls_verify: string  // 'true' | 'false'
+  skip_tls_verify: string   // 'true' | 'false'
+  dns_record_type: DNSRecordType
+  dns_expected_value: string
 }
 
 export const defaultForm: FormFields = {
@@ -29,6 +31,8 @@ export const defaultForm: FormFields = {
   integration_id: '',
   traefik_domain: '',
   skip_tls_verify: 'false',
+  dns_record_type: 'A',
+  dns_expected_value: '',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -58,6 +62,8 @@ export function validateForm(form: FormFields): string | null {
 
   if (form.type === 'ping' && !form.target.trim()) return 'Target is required'
 
+  if (form.type === 'dns' && !form.target.trim()) return 'Hostname is required'
+
   return null
 }
 
@@ -74,6 +80,8 @@ export function checkToForm(check: MonitorCheck): FormFields {
     integration_id: check.integration_id ?? '',
     traefik_domain: check.ssl_source === 'traefik' ? check.target : '',
     skip_tls_verify: check.skip_tls_verify ? 'true' : 'false',
+    dns_record_type: (check.dns_record_type ?? 'A') as DNSRecordType,
+    dns_expected_value: check.dns_expected_value ?? '',
   }
 }
 
@@ -96,6 +104,12 @@ export function formToInput(form: FormFields, integrationID?: string): CreateChe
     input.ssl_source = form.ssl_source
     if (form.ssl_source === 'traefik' && integrationID) {
       input.integration_id = integrationID
+    }
+  }
+  if (form.type === 'dns') {
+    input.dns_record_type = form.dns_record_type
+    if (form.dns_expected_value.trim()) {
+      input.dns_expected_value = form.dns_expected_value.trim()
     }
   }
   return input
@@ -151,6 +165,25 @@ export function renderCheckResult(check: MonitorCheck): ReactNode {
             <span className="check-result-label">Subject</span>
             <span className="check-result-value">{String(r.subject)}</span>
           </>}
+        </div>
+      )
+    }
+    if (check.type === 'dns') {
+      if (r.error) return (
+        <div className="check-result-grid">
+          <span className="check-result-label">Error</span>
+          <span className="check-result-value check-result-error">{String(r.error)}</span>
+        </div>
+      )
+      const records = Array.isArray(r.records) ? (r.records as string[]) : []
+      return (
+        <div className="check-result-grid">
+          <span className="check-result-label">Record type</span>
+          <span className="check-result-value">{r.record_type != null ? String(r.record_type) : '—'}</span>
+          <span className="check-result-label">Resolved</span>
+          <span className="check-result-value">{records.length > 0 ? records.join(', ') : '—'}</span>
+          <span className="check-result-label">Latency</span>
+          <span className="check-result-value">{r.latency_ms != null ? `${r.latency_ms}ms` : '—'}</span>
         </div>
       )
     }

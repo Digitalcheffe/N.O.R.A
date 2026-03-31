@@ -18,7 +18,8 @@ interface CheckFormProps {
   onIntegrationChange: (integrationId: string) => void
 }
 
-const CHECK_TYPES: CheckType[] = ['ping', 'url', 'ssl']
+const CHECK_TYPES: CheckType[] = ['ping', 'url', 'ssl', 'dns']
+const DNS_RECORD_TYPES = ['A', 'AAAA', 'MX', 'CNAME', 'TXT']
 
 export function CheckForm({
   form,
@@ -132,7 +133,7 @@ export function CheckForm({
           </>
         )}
 
-        {(form.type !== 'ssl' || form.ssl_source === 'standalone' || !hasTraefik) && (
+        {(form.type !== 'ssl' || form.ssl_source === 'standalone' || !hasTraefik) && form.type !== 'dns' && (
           <div className="form-field">
             <div className="form-label">{form.type === 'ping' ? 'Host / IP' : 'URL'}</div>
             <input
@@ -148,6 +149,43 @@ export function CheckForm({
               </div>
             )}
           </div>
+        )}
+
+        {form.type === 'dns' && (
+          <>
+            <div className="form-field">
+              <div className="form-label">Hostname</div>
+              <input
+                className="form-input"
+                value={form.target}
+                onChange={e => onChange('target', e.target.value)}
+                placeholder="e.g. example.com"
+              />
+            </div>
+            <div className="form-field">
+              <div className="form-label">Record type</div>
+              <div className="type-selector">
+                {DNS_RECORD_TYPES.map(t => (
+                  <button
+                    key={t}
+                    className={`type-btn${form.dns_record_type === t ? ' active' : ''}`}
+                    onClick={() => onChange('dns_record_type', t)}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="form-field">
+              <div className="form-label">Expected value <span className="form-label-hint">(optional)</span></div>
+              <input
+                className="form-input"
+                value={form.dns_expected_value}
+                onChange={e => onChange('dns_expected_value', e.target.value)}
+                placeholder="e.g. 1.2.3.4 or mail.example.com"
+              />
+            </div>
+          </>
         )}
 
         <div className="form-field">

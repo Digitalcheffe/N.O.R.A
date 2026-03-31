@@ -43,7 +43,10 @@ const selectCheckCols = `
 	       interval_secs, COALESCE(expected_status,0) AS expected_status,
 	       ssl_warn_days, ssl_crit_days, ssl_source, integration_id,
 	       source_component_id,
-	       COALESCE(skip_tls_verify,0) AS skip_tls_verify, enabled,
+	       COALESCE(skip_tls_verify,0) AS skip_tls_verify,
+	       COALESCE(dns_record_type,'') AS dns_record_type,
+	       COALESCE(dns_expected_value,'') AS dns_expected_value,
+	       enabled,
 	       last_checked_at, COALESCE(last_status,'') AS last_status,
 	       COALESCE(last_result,'') AS last_result, created_at
 	FROM monitor_checks`
@@ -64,14 +67,17 @@ func (r *sqliteCheckRepo) Create(ctx context.Context, check *models.MonitorCheck
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO monitor_checks
 		  (id, app_id, name, type, target, interval_secs, expected_status,
-		   ssl_warn_days, ssl_crit_days, ssl_source, integration_id, skip_tls_verify, enabled)
-		VALUES (?, NULLIF(?,?), ?, ?, ?, ?, NULLIF(?,0), ?, ?, ?, ?, ?, ?)`,
+		   ssl_warn_days, ssl_crit_days, ssl_source, integration_id, skip_tls_verify,
+		   dns_record_type, dns_expected_value, enabled)
+		VALUES (?, NULLIF(?,?), ?, ?, ?, ?, NULLIF(?,0), ?, ?, ?, ?, ?, NULLIF(?,?), NULLIF(?,?), ?)`,
 		check.ID, check.AppID, check.AppID,
 		check.Name, check.Type, check.Target, check.IntervalSecs,
 		check.ExpectedStatus,
 		check.SSLWarnDays, check.SSLCritDays,
 		check.SSLSource, check.IntegrationID,
 		check.SkipTLSVerify,
+		check.DNSRecordType, check.DNSRecordType,
+		check.DNSExpectedValue, check.DNSExpectedValue,
 		check.Enabled)
 	if err != nil {
 		return fmt.Errorf("create check: %w", err)
@@ -96,7 +102,9 @@ func (r *sqliteCheckRepo) Update(ctx context.Context, check *models.MonitorCheck
 		UPDATE monitor_checks
 		SET app_id=NULLIF(?,?), name=?, type=?, target=?, interval_secs=?,
 		    expected_status=NULLIF(?,0), ssl_warn_days=?, ssl_crit_days=?,
-		    ssl_source=?, integration_id=?, skip_tls_verify=?, enabled=?
+		    ssl_source=?, integration_id=?, skip_tls_verify=?,
+		    dns_record_type=NULLIF(?,?), dns_expected_value=NULLIF(?,?),
+		    enabled=?
 		WHERE id=?`,
 		check.AppID, check.AppID,
 		check.Name, check.Type, check.Target, check.IntervalSecs,
@@ -104,6 +112,8 @@ func (r *sqliteCheckRepo) Update(ctx context.Context, check *models.MonitorCheck
 		check.SSLWarnDays, check.SSLCritDays,
 		check.SSLSource, check.IntegrationID,
 		check.SkipTLSVerify,
+		check.DNSRecordType, check.DNSRecordType,
+		check.DNSExpectedValue, check.DNSExpectedValue,
 		check.Enabled,
 		check.ID)
 	if err != nil {

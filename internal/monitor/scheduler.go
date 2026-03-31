@@ -19,6 +19,7 @@ type Scheduler struct {
 	ping  *PingChecker
 	url   *URLChecker
 	ssl   *SSLChecker
+	dns   *DNSChecker
 
 	mu     sync.Mutex
 	active map[string]context.CancelFunc // check ID → cancel for that goroutine
@@ -31,6 +32,7 @@ func NewScheduler(store *repo.Store) *Scheduler {
 		ping:   NewPingChecker(store),
 		url:    NewURLChecker(store),
 		ssl:    NewSSLChecker(store),
+		dns:    NewDNSChecker(store),
 		active: make(map[string]context.CancelFunc),
 	}
 }
@@ -148,6 +150,8 @@ func (s *Scheduler) dispatch(ctx context.Context, check *models.MonitorCheck) {
 		err = s.url.Run(ctx, check)
 	case "ssl":
 		err = s.ssl.Run(ctx, check)
+	case "dns":
+		err = s.dns.Run(ctx, check)
 	default:
 		log.Printf("monitor scheduler: unknown check type %q for check %q", check.Type, check.Name)
 	}

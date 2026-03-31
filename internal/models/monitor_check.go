@@ -22,7 +22,10 @@ type MonitorCheck struct {
 	SourceComponentID *string `db:"source_component_id" json:"source_component_id,omitempty"`
 	// SkipTLSVerify disables certificate validation for URL checks.
 	// Use for internal services with self-signed certificates.
-	SkipTLSVerify  bool    `db:"skip_tls_verify" json:"skip_tls_verify"`
+	SkipTLSVerify bool `db:"skip_tls_verify" json:"skip_tls_verify"`
+	// DNS check fields.
+	DNSRecordType     string `db:"dns_record_type"     json:"dns_record_type,omitempty"`
+	DNSExpectedValue  string `db:"dns_expected_value"  json:"dns_expected_value,omitempty"`
 	Enabled        bool    `db:"enabled"         json:"enabled"`
 	LastCheckedAt  *time.Time `db:"last_checked_at" json:"last_checked_at,omitempty"`
 	LastStatus     string     `db:"last_status"     json:"last_status,omitempty"`
