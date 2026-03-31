@@ -73,6 +73,18 @@
   gap: 4px;
 }
 
+.sidebar-logout {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sidebar-logout:hover {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .sidebar-avatar {
   width: 24px;
   height: 24px;
