@@ -1,11 +1,6 @@
 import { useLocation } from 'react-router-dom'
+import { useEnvStatus } from '../context/EnvStatusContext'
 import './MobileTopBar.css'
-
-type OverallStatus = 'ok' | 'warn' | 'down'
-
-interface Props {
-  status?: OverallStatus
-}
 
 const ROUTE_TITLES: Record<string, string> = {
   '/':          'Overview',
@@ -22,8 +17,9 @@ function pageTitle(pathname: string): string {
   return ROUTE_TITLES[pathname] ?? 'NORA'
 }
 
-export function MobileTopBar({ status = 'ok' }: Props) {
+export function MobileTopBar() {
   const location = useLocation()
+  const status = useEnvStatus()
   const title = pageTitle(location.pathname)
 
   return (

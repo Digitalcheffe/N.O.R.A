@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AutoRefreshProvider } from './context/AutoRefreshContext'
 import { AuthProvider } from './context/AuthContext'
+import { EnvStatusProvider } from './context/EnvStatusContext'
 import { AuthGuard } from './components/AuthGuard'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
@@ -30,7 +31,9 @@ export default function App() {
             <Route path="/setup" element={<Setup />} />
             <Route element={
               <AuthGuard>
-                <Layout />
+                <EnvStatusProvider>
+                  <Layout />
+                </EnvStatusProvider>
               </AuthGuard>
             }>
               <Route index element={<Dashboard />} />

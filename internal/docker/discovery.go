@@ -56,9 +56,13 @@ func newDiscovererWithClient(store *repo.Store, registry *apptemplate.Registry, 
 func (d *Discoverer) ScanAll(ctx context.Context) {
 	log.Printf("docker discovery: scanning all running containers for engine %s", d.engineID)
 
+	polledAt := time.Now().UTC().Format(time.RFC3339Nano)
 	containers, err := d.client.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
 		log.Printf("docker discovery: list containers: %v", err)
+		if updateErr := d.store.InfraComponents.UpdateStatus(ctx, d.engineID, "offline", polledAt); updateErr != nil {
+			log.Printf("docker discovery: update status offline: %v", updateErr)
+		}
 		return
 	}
 
@@ -76,6 +80,10 @@ func (d *Discoverer) ScanAll(ctx context.Context) {
 	// stopped so they don't show as running in the UI after a restart or removal.
 	if err := d.store.DiscoveredContainers.MarkStoppedIfNotRunning(ctx, d.engineID, runningIDs); err != nil {
 		log.Printf("docker discovery: mark stopped: %v", err)
+	}
+
+	if updateErr := d.store.InfraComponents.UpdateStatus(ctx, d.engineID, "online", polledAt); updateErr != nil {
+		log.Printf("docker discovery: update status online: %v", updateErr)
 	}
 
 	log.Printf("docker discovery: initial scan complete — %d containers", len(containers))
