@@ -22,6 +22,16 @@ export interface AuthUser {
   role: 'admin' | 'member'
 }
 
+export interface LoginResponse {
+  token: string
+  user: AuthUser
+}
+
+export interface ChangePasswordInput {
+  current_password: string
+  new_password: string
+}
+
 // ── Users ───────────────────────────────────────────────────────────────────
 
 export interface User {

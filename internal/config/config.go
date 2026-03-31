@@ -18,6 +18,9 @@ type Config struct {
 	DigestSchedule string
 	VAPIDPublic    string
 	VAPIDPrivate   string
+	// Bootstrap admin credentials — used only when the users table is empty.
+	AdminEmail    string
+	AdminPassword string
 }
 
 func Load() *Config {
@@ -37,6 +40,8 @@ func Load() *Config {
 		DigestSchedule: getEnvStr("NORA_DIGEST_SCHEDULE", "0 8 1 * *"),
 		VAPIDPublic:    os.Getenv("NORA_VAPID_PUBLIC"),
 		VAPIDPrivate:   os.Getenv("NORA_VAPID_PRIVATE"),
+		AdminEmail:     os.Getenv("NORA_ADMIN_EMAIL"),
+		AdminPassword:  os.Getenv("NORA_ADMIN_PASSWORD"),
 	}
 
 	if cfg.Secret == "" {

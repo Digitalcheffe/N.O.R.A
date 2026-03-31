@@ -1,6 +1,5 @@
 /* ── NORA API Client ─────────────────────────────────────────────────────────
    All API calls go through this file. Components never call fetch() directly.
-   In dev mode (VITE_DEV_MODE=true) auth headers are skipped.
    ──────────────────────────────────────────────────────────────────────────── */
 
 import type {
@@ -8,6 +7,7 @@ import type {
   AppMetric,
   AppTemplate,
   AuthUser,
+  ChangePasswordInput,
   CreateAppInput,
   CreateCheckInput,
   CreateIntegrationInput,
@@ -31,6 +31,7 @@ import type {
   LinkAppInput,
   ListResponse,
   LoginInput,
+  LoginResponse,
   MonitorCheck,
   PhysicalHost,
   ProxmoxGuestInfo,
@@ -87,14 +88,20 @@ async function request<T>(
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
 export const auth = {
+  me: () =>
+    request<AuthUser>('GET', '/auth/me'),
+
   login: (input: LoginInput) =>
-    request<AuthUser>('POST', '/auth/login', input),
+    request<LoginResponse>('POST', '/auth/login', input),
 
   register: (input: LoginInput) =>
     request<AuthUser>('POST', '/auth/register', input),
 
   logout: () =>
     request<void>('POST', '/auth/logout'),
+
+  setupRequired: () =>
+    request<{ required: boolean }>('GET', '/auth/setup-required'),
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -111,6 +118,9 @@ export const users = {
 
   delete: (id: string) =>
     request<void>('DELETE', `/users/${id}`),
+
+  changePassword: (input: ChangePasswordInput) =>
+    request<void>('PUT', '/users/me/password', input),
 }
 
 // ── Apps ──────────────────────────────────────────────────────────────────────
