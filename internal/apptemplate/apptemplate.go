@@ -140,9 +140,9 @@ func NewRegistry(fsys fs.FS) (*Registry, error) {
 	return reg, nil
 }
 
-// ExportBuiltins writes each embedded YAML from fsys into destDir.
-// Existing files are skipped so user edits are preserved across restarts.
-// New files added to the embedded set are written on the first startup after an upgrade.
+// ExportBuiltins writes each embedded YAML from fsys into destDir, always
+// overwriting existing files so upgraded containers land fresh builtin templates.
+// User-editable templates belong in the custom dir, not here.
 func ExportBuiltins(fsys fs.FS, destDir string) error {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("create builtin dir: %w", err)
@@ -157,14 +157,11 @@ func ExportBuiltins(fsys fs.FS, destDir string) error {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
 			continue
 		}
-		dest := filepath.Join(destDir, e.Name())
-		if _, err := os.Stat(dest); err == nil {
-			continue // already exists — preserve any user edits
-		}
 		data, err := fs.ReadFile(fsys, e.Name())
 		if err != nil {
 			return fmt.Errorf("read embedded %s: %w", e.Name(), err)
 		}
+		dest := filepath.Join(destDir, e.Name())
 		if err := os.WriteFile(dest, data, 0644); err != nil {
 			return fmt.Errorf("write %s: %w", dest, err)
 		}
