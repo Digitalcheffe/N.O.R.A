@@ -276,7 +276,6 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	// Public routes — no session auth
-	api.RegisterDocsRoutes(r)
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
 	pushHandler := api.NewPushHandler(cfg, store, pushSender)
 	pushHandler.RegisterPublicRoutes(r)

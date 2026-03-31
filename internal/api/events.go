@@ -218,24 +218,6 @@ func (h *EventsHandler) Timeseries(w http.ResponseWriter, r *http.Request) {
 // --- handlers ---
 
 // List returns a filtered page of events: GET /api/v1/events
-//
-// @Summary      List events
-// @Description  Returns a filtered, paginated list of events across all sources. payload is excluded.
-// @Tags         events
-// @Produce      json
-// @Param        source_id    query  string  false  "Filter by source ID (app ID, check ID, component ID, etc.)"
-// @Param        source_type  query  string  false  "Filter by source type: app, physical_host, virtual_host, docker_engine, monitor_check, system"
-// @Param        source_name  query  string  false  "Partial match on source name (case-insensitive)"
-// @Param        level        query  string  false  "Comma-separated level filter: debug,info,warn,error,critical"
-// @Param        since        query  string  false  "ISO8601 lower bound (inclusive) e.g. 2026-01-01T00:00:00Z"
-// @Param        until        query  string  false  "ISO8601 upper bound (inclusive) e.g. 2026-12-31T23:59:59Z"
-// @Param        limit        query  int     false  "Page size (default 50, max 500)"
-// @Param        offset       query  int     false  "Pagination offset (default 0)"
-// @Success      200  {object}  listEventsResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Security     BearerToken
-// @Router       /events [get]
 func (h *EventsHandler) List(w http.ResponseWriter, r *http.Request) {
 	f, err := parseFilter(r)
 	if err != nil {
@@ -262,17 +244,6 @@ func (h *EventsHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get returns a single event with payload: GET /api/v1/events/{id}
-//
-// @Summary      Get an event
-// @Description  Returns a single event by ID. Includes payload as a parsed JSON object.
-// @Tags         events
-// @Produce      json
-// @Param        id   path      string  true  "Event ID"
-// @Success      200  {object}  eventDetail
-// @Failure      404  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Security     BearerToken
-// @Router       /events/{id} [get]
 func (h *EventsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ev, err := h.events.Get(r.Context(), id)
@@ -288,22 +259,6 @@ func (h *EventsHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListByApp returns events scoped to a single app: GET /api/v1/apps/{id}/events
-//
-// @Summary      List events for an app
-// @Description  Returns a filtered, paginated list of events for a specific app. Same query params as /events.
-// @Tags         events
-// @Produce      json
-// @Param        id        path   string  true   "App ID"
-// @Param        level     query  string  false  "Comma-separated level filter"
-// @Param        since     query  string  false  "ISO8601 lower bound"
-// @Param        until     query  string  false  "ISO8601 upper bound"
-// @Param        limit     query  int     false  "Page size (default 50, max 500)"
-// @Param        offset    query  int     false  "Pagination offset"
-// @Success      200  {object}  listEventsResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Security     BearerToken
-// @Router       /apps/{id}/events [get]
 func (h *EventsHandler) ListByApp(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "id")
 	f, err := parseFilter(r)
