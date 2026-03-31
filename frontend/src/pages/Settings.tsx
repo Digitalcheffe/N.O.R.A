@@ -83,6 +83,22 @@ function AppsTab() {
   const [loadError, setLoadError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<CustomProfile | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [reloading, setReloading] = useState(false)
+
+  const handleReload = async () => {
+    setReloading(true)
+    setLoadError('')
+    try {
+      await appTemplates.reload()
+      const [bt, ct] = await Promise.all([appTemplates.list(), appTemplates.listCustom()])
+      setBuiltins([...bt.data].sort((a, b) => a.name.localeCompare(b.name)))
+      setCustoms(ct.data ?? [])
+    } catch {
+      setLoadError('Template reload failed')
+    } finally {
+      setReloading(false)
+    }
+  }
 
   const handleDelete = async () => {
     if (!confirmDelete) return
@@ -135,6 +151,13 @@ function AppsTab() {
       <section className="settings-section">
         <div className="section-header">
           <span className="section-title">Apps</span>
+          <button
+            className="settings-btn secondary"
+            onClick={handleReload}
+            disabled={reloading}
+          >
+            {reloading ? 'Reloading…' : 'Reload Templates'}
+          </button>
         </div>
         {loadError ? (
           <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{loadError}</div>

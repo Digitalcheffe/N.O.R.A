@@ -114,9 +114,10 @@ export interface TimeseriesFilter {
 
 // ── Monitor Checks ──────────────────────────────────────────────────────────
 
-export type CheckType = 'ping' | 'url' | 'ssl'
+export type CheckType = 'ping' | 'url' | 'ssl' | 'dns'
 export type CheckStatus = 'up' | 'warn' | 'down' | 'critical'
 export type SSLSource = 'traefik' | 'standalone'
+export type DNSRecordType = 'A' | 'AAAA' | 'MX' | 'CNAME' | 'TXT'
 
 export interface MonitorCheck {
   id: string
@@ -132,6 +133,9 @@ export interface MonitorCheck {
   integration_id: string | null
   source_component_id: string | null
   skip_tls_verify: boolean
+  dns_record_type: DNSRecordType | null
+  dns_expected_value: string | null
+  dns_resolver: string | null
   enabled: boolean
   last_checked_at: string | null
   last_status: CheckStatus | null
@@ -151,6 +155,9 @@ export interface CreateCheckInput {
   ssl_source?: SSLSource
   integration_id?: string
   skip_tls_verify?: boolean
+  dns_record_type?: DNSRecordType
+  dns_expected_value?: string
+  dns_resolver?: string
   enabled?: boolean
 }
 

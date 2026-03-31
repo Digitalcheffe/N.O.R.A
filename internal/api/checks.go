@@ -35,24 +35,28 @@ func (h *ChecksHandler) Routes(r chi.Router) {
 	r.Put("/checks/{id}", h.Update)
 	r.Delete("/checks/{id}", h.Delete)
 	r.Post("/checks/{id}/run", h.Run)
+	r.Post("/checks/{id}/reset-baseline", h.ResetBaseline)
 	r.Get("/checks/{id}/events", h.ListEvents)
 }
 
 // --- request / response types ---
 
 type checkRequest struct {
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	Target         string  `json:"target"`
-	IntervalSecs   int     `json:"interval_secs"`
-	AppID          string  `json:"app_id"`
-	ExpectedStatus int     `json:"expected_status"`
-	SSLWarnDays    int     `json:"ssl_warn_days"`
-	SSLCritDays    int     `json:"ssl_crit_days"`
-	SSLSource      *string `json:"ssl_source"`     // "traefik" | "standalone" | nil
-	IntegrationID  *string `json:"integration_id"` // required when ssl_source == "traefik"
-	Enabled        *bool   `json:"enabled"`         // nil = no change, false = disable, true = enable
-	SkipTLSVerify  *bool   `json:"skip_tls_verify"` // nil = no change; for url checks only
+	Name             string  `json:"name"`
+	Type             string  `json:"type"`
+	Target           string  `json:"target"`
+	IntervalSecs     int     `json:"interval_secs"`
+	AppID            string  `json:"app_id"`
+	ExpectedStatus   int     `json:"expected_status"`
+	SSLWarnDays      int     `json:"ssl_warn_days"`
+	SSLCritDays      int     `json:"ssl_crit_days"`
+	SSLSource        *string `json:"ssl_source"`      // "traefik" | "standalone" | nil
+	IntegrationID    *string `json:"integration_id"`  // required when ssl_source == "traefik"
+	Enabled          *bool   `json:"enabled"`          // nil = no change, false = disable, true = enable
+	SkipTLSVerify    *bool   `json:"skip_tls_verify"`  // nil = no change; for url checks only
+	DNSRecordType    string  `json:"dns_record_type"`    // A | AAAA | MX | CNAME | TXT
+	DNSExpectedValue string  `json:"dns_expected_value"` // optional substring match
+	DNSResolver      string  `json:"dns_resolver"`       // optional custom resolver e.g. "8.8.8.8"
 }
 
 type listChecksResponse struct {
@@ -68,14 +72,14 @@ type runCheckResponse struct {
 
 // --- validation ---
 
-var validCheckTypes = map[string]bool{"ping": true, "url": true, "ssl": true}
+var validCheckTypes = map[string]bool{"ping": true, "url": true, "ssl": true, "dns": true}
 
 func validateCheck(req checkRequest) string {
 	if req.Name == "" {
 		return "name is required"
 	}
 	if !validCheckTypes[req.Type] {
-		return "type must be one of: ping, url, ssl"
+		return "type must be one of: ping, url, ssl, dns"
 	}
 	if req.Target == "" {
 		return "target is required"
@@ -86,6 +90,12 @@ func validateCheck(req checkRequest) string {
 	if req.Type == "url" {
 		if !strings.HasPrefix(req.Target, "http://") && !strings.HasPrefix(req.Target, "https://") {
 			return "target must begin with http:// or https:// for url checks"
+		}
+	}
+	if req.Type == "dns" {
+		validRecordTypes := map[string]bool{"A": true, "AAAA": true, "MX": true, "CNAME": true, "TXT": true, "": true}
+		if !validRecordTypes[strings.ToUpper(req.DNSRecordType)] {
+			return "dns_record_type must be one of: A, AAAA, MX, CNAME, TXT"
 		}
 	}
 	// For SSL checks, only require a URL prefix in standalone mode.
@@ -137,26 +147,53 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 	skipTLS := req.SkipTLSVerify != nil && *req.SkipTLSVerify
 
 	check := &models.MonitorCheck{
-		ID:             uuid.New().String(),
-		AppID:          req.AppID,
-		Name:           req.Name,
-		Type:           req.Type,
-		Target:         req.Target,
-		IntervalSecs:   req.IntervalSecs,
-		ExpectedStatus: req.ExpectedStatus,
-		SSLWarnDays:    warnDays,
-		SSLCritDays:    critDays,
-		SSLSource:      req.SSLSource,
-		IntegrationID:  req.IntegrationID,
-		SkipTLSVerify:  skipTLS,
-		Enabled:        true,
-		CreatedAt:      time.Now().UTC(),
+		ID:               uuid.New().String(),
+		AppID:            req.AppID,
+		Name:             req.Name,
+		Type:             req.Type,
+		Target:           req.Target,
+		IntervalSecs:     req.IntervalSecs,
+		ExpectedStatus:   req.ExpectedStatus,
+		SSLWarnDays:      warnDays,
+		SSLCritDays:      critDays,
+		SSLSource:        req.SSLSource,
+		IntegrationID:    req.IntegrationID,
+		SkipTLSVerify:    skipTLS,
+		DNSRecordType:    strings.ToUpper(req.DNSRecordType),
+		DNSExpectedValue: req.DNSExpectedValue,
+		DNSResolver:      req.DNSResolver,
+		Enabled:          true,
+		CreatedAt:        time.Now().UTC(),
 	}
 
 	if err := h.checks.Create(r.Context(), check); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// For DNS checks: immediately resolve and capture the current value as the
+	// baseline so the monitor knows what "good" looks like from day one.
+	if check.Type == "dns" {
+		dnsCtx, dnsCancel := context.WithTimeout(r.Context(), 10*time.Second)
+		result := monitor.RunDNS(dnsCtx, check.Target, check.DNSRecordType, "", check.DNSResolver)
+		dnsCancel()
+
+		var det struct {
+			Records []string `json:"records"`
+		}
+		if json.Unmarshal(result.Details, &det) == nil && len(det.Records) > 0 {
+			check.DNSExpectedValue = det.Records[0]
+			_ = h.checks.SetDNSBaseline(r.Context(), check.ID, check.DNSExpectedValue)
+			now := time.Now().UTC()
+			detailsStr := string(result.Details)
+			_ = h.checks.UpdateStatus(r.Context(), check.ID, result.Status, detailsStr, now)
+			// Re-fetch so the response includes the captured baseline and status.
+			if updated, getErr := h.checks.Get(r.Context(), check.ID); getErr == nil {
+				check = updated
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, check)
 }
 
@@ -232,6 +269,15 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.SkipTLSVerify != nil {
 		existing.SkipTLSVerify = *req.SkipTLSVerify
 	}
+	if req.DNSRecordType != "" {
+		existing.DNSRecordType = strings.ToUpper(req.DNSRecordType)
+	}
+	if req.DNSExpectedValue != "" {
+		existing.DNSExpectedValue = req.DNSExpectedValue
+	}
+	if req.DNSResolver != "" {
+		existing.DNSResolver = req.DNSResolver
+	}
 
 	// Re-validate the merged state. Include SSLSource so Traefik-mode checks
 	// are not incorrectly rejected for using a bare domain target.
@@ -297,7 +343,7 @@ func (h *ChecksHandler) Run(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays, check.SkipTLSVerify)
+	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays, check.SkipTLSVerify, check.DNSRecordType, check.DNSExpectedValue, check.DNSResolver)
 	if runErr != nil {
 		writeError(w, http.StatusInternalServerError, runErr.Error())
 		return
@@ -373,4 +419,53 @@ func (h *ChecksHandler) createStatusEvent(ctx context.Context, check *models.Mon
 	if err := h.events.Create(ctx, event); err != nil {
 		log.Printf("createStatusEvent: failed to write event for check %s: %v", check.ID, err)
 	}
+}
+
+// ResetBaseline re-resolves a DNS check immediately and stores the result as
+// the new baseline. Event history is not affected. Returns the updated check.
+// POST /api/v1/checks/{id}/reset-baseline
+func (h *ChecksHandler) ResetBaseline(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	check, err := h.checks.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "check not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if check.Type != "dns" {
+		writeError(w, http.StatusBadRequest, "reset-baseline is only valid for DNS checks")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	result := monitor.RunDNS(ctx, check.Target, check.DNSRecordType, "", check.DNSResolver)
+	cancel()
+
+	var det struct {
+		Records []string `json:"records"`
+	}
+	if json.Unmarshal(result.Details, &det) != nil || len(det.Records) == 0 {
+		writeError(w, http.StatusBadGateway, "DNS resolution failed — could not capture a baseline")
+		return
+	}
+
+	baseline := det.Records[0]
+	if err := h.checks.SetDNSBaseline(r.Context(), check.ID, baseline); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	now := time.Now().UTC()
+	_ = h.checks.UpdateStatus(r.Context(), check.ID, result.Status, string(result.Details), now)
+
+	updated, err := h.checks.Get(r.Context(), check.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }

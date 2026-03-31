@@ -211,6 +211,9 @@ export const checks = {
   run: (id: string) =>
     request<MonitorCheck>('POST', `/checks/${id}/run`),
 
+  resetBaseline: (id: string) =>
+    request<MonitorCheck>('POST', `/checks/${id}/reset-baseline`),
+
   listEvents: (id: string) =>
     request<ListResponse<Event>>('GET', `/checks/${id}/events`),
 }
@@ -284,6 +287,9 @@ export const appTemplates = {
 
   deleteCustom: (id: string) =>
     request<void>('DELETE', `/app-templates/custom/${id}`),
+
+  reload: () =>
+    request<{ loaded: number }>('POST', '/app-templates/reload'),
 }
 
 // ── Infrastructure Integrations ───────────────────────────────────────────────

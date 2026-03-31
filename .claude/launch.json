@@ -7,10 +7,12 @@
       "runtimeArgs": ["run", "./cmd/nora/"],
       "port": 3001,
       "env": {
-        "NORA_DEV_MODE": "true",
         "NORA_SECRET": "dev-secret-local",
         "NORA_DB_PATH": "./data/nora.db",
-        "NORA_PORT": "3001"
+        "NORA_TEMPLATES_PATH": "./data/templates",
+        "NORA_PORT": "3001",
+        "NORA_ADMIN_EMAIL": "admin@nora.dev",
+        "NORA_ADMIN_PASSWORD": "admin123!"
       }
     },
     {

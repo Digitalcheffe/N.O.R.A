@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAutoRefresh, type RefreshInterval } from '../context/AutoRefreshContext'
+import { useEnvStatus } from '../context/EnvStatusContext'
 import './Topbar.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
@@ -7,7 +8,7 @@ type OverallStatus = 'ok' | 'warn' | 'down'
 
 interface TopbarProps {
   title: string
-  status?: OverallStatus
+  status?: OverallStatus     // explicit override — omit to use global env status
   statusLabel?: string
   timeFilter?: TimeFilter
   onTimeFilter?: (f: TimeFilter) => void
@@ -29,12 +30,14 @@ const REFRESH_OPTIONS: { value: RefreshInterval; label: string }[] = [
 
 export function Topbar({
   title,
-  status = 'ok',
+  status: statusProp,
   statusLabel,
   timeFilter = 'week',
   onTimeFilter,
   onAdd,
 }: TopbarProps) {
+  const envStatus = useEnvStatus()
+  const status = statusProp ?? envStatus
   const { interval, setInterval } = useAutoRefresh()
   const [dropOpen, setDropOpen] = useState(false)
   const dropRef = useRef<HTMLDivElement>(null)

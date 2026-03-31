@@ -89,6 +89,8 @@
    padding-top/bottom account for the fixed MobileTopBar (52px) and
    BottomNav (56px + safe-area). ── */
 .mobile-scroll-area {
+  position: relative;
+  z-index: 1;
   height: 100vh;
   padding-top: 52px;
   padding-bottom: calc(56px + env(safe-area-inset-bottom));
