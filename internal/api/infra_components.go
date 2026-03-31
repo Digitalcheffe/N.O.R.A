@@ -543,7 +543,7 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 
 	if len(rollups) == 0 {
 		// No rollup exists yet (hourly job hasn't run since first scan).
-		// Fall back to raw resource_readings from the last hour so Scan Now
+		// Fall back to raw resource_readings from the last hour so Discover Now
 		// shows data immediately without waiting for the rollup cycle.
 		now := time.Now().UTC()
 		aggs, aggErr := h.rollups.AggregateReadings(r.Context(), now.Add(-time.Hour), now)

@@ -48,7 +48,7 @@ export function BottomNav() {
         </NavLink>
 
         {/* Hosts */}
-        <NavLink to="/topology" className={({ isActive }) => `bottom-tab${isActive ? ' active' : ''}`}>
+        <NavLink to="/infrastructure" className={({ isActive }) => `bottom-tab${isActive ? ' active' : ''}`}>
           <div className="bottom-tab-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <rect x="2" y="2" width="20" height="8" rx="2" />

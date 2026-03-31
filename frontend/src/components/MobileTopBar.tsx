@@ -12,7 +12,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/apps':      'Apps',
   '/checks':    'Monitor',
   '/events':    'Events',
-  '/topology':  'Hosts',
+  '/infrastructure':  'Hosts',
   '/settings':  'Settings',
   '/profile':   'Profile',
 }
