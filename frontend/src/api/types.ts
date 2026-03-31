@@ -626,6 +626,63 @@ export interface SNMPDetail {
   no_data?: boolean
 }
 
+// ── Notification Rules ────────────────────────────────────────────────────────
+
+export type RuleOperator = 'is' | 'is_not' | 'contains' | 'does_not_contain'
+export type RuleConditionLogic = 'AND' | 'OR'
+export type RuleSourceType = 'app' | 'docker' | 'monitor'
+
+export interface RuleCondition {
+  field: string
+  operator: RuleOperator
+  value: string
+}
+
+export interface Rule {
+  id: string
+  name: string
+  enabled: boolean
+  source_id: string | null
+  source_type: RuleSourceType | null
+  severity: Severity | null
+  conditions: RuleCondition[]
+  condition_logic: RuleConditionLogic
+  delivery_email: boolean
+  delivery_push: boolean
+  delivery_webhook: boolean
+  webhook_url: string | null
+  notif_title: string
+  notif_body: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RuleSource {
+  id: string | null
+  label: string
+  type: RuleSourceType | null
+}
+
+export interface RuleSourcesResponse {
+  sources: RuleSource[]
+}
+
+export interface CreateRuleInput {
+  name: string
+  enabled: boolean
+  source_id?: string | null
+  source_type?: RuleSourceType | null
+  severity?: Severity | null
+  conditions: RuleCondition[]
+  condition_logic: RuleConditionLogic
+  delivery_email: boolean
+  delivery_push: boolean
+  delivery_webhook: boolean
+  webhook_url?: string | null
+  notif_title: string
+  notif_body: string
+}
+
 // ── Metrics ──────────────────────────────────────────────────────────────────
 
 export interface AppMetric {

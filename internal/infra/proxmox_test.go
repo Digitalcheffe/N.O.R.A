@@ -45,6 +45,7 @@ func newProxmoxTestStore(t *testing.T) *repo.Store {
 		repo.NewDiscoveredRouteRepo(db),
 		nil,
 		nil,
+		nil,
 	)
 }
 

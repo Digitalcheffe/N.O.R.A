@@ -11,6 +11,7 @@ import type {
   CreateAppInput,
   CreateCheckInput,
   CreateIntegrationInput,
+  CreateRuleInput,
   CreateUserInput,
   CustomProfile,
   DashboardSummaryResponse,
@@ -38,6 +39,8 @@ import type {
   ProxmoxTaskFailure,
   ResourceHistory,
   ResourceSummary,
+  Rule,
+  RuleSourcesResponse,
   SMTPSettings,
   SNMPDetail,
   ScanResult,
@@ -453,6 +456,31 @@ export const traefik = {
 export const metrics = {
   instance: () =>
     request<InstanceMetrics>('GET', '/metrics'),
+}
+
+// ── Notification Rules ────────────────────────────────────────────────────────
+
+export const notifyRules = {
+  sources: () =>
+    request<RuleSourcesResponse>('GET', '/rules/sources'),
+
+  list: () =>
+    request<ListResponse<Rule>>('GET', '/rules'),
+
+  get: (id: string) =>
+    request<Rule>('GET', `/rules/${id}`),
+
+  create: (input: CreateRuleInput) =>
+    request<Rule>('POST', '/rules', input),
+
+  update: (id: string, input: CreateRuleInput) =>
+    request<Rule>('PUT', `/rules/${id}`, input),
+
+  delete: (id: string) =>
+    request<void>('DELETE', `/rules/${id}`),
+
+  toggle: (id: string) =>
+    request<Rule>('PATCH', `/rules/${id}/toggle`),
 }
 
 // ── Web Push ──────────────────────────────────────────────────────────────────

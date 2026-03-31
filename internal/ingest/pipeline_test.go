@@ -25,7 +25,7 @@ func newTestStore(t *testing.T) *repo.Store {
 	t.Cleanup(func() { db.Close() })
 	appRepo := repo.NewAppRepo(db)
 	eventRepo := repo.NewEventRepo(db)
-	return repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	return repo.NewStore(appRepo, eventRepo, repo.NewCheckRepo(db), repo.NewRollupRepo(db), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 }
 
 func seedApp(t *testing.T, store *repo.Store, token string, rateLimit int) models.App {
