@@ -26,6 +26,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/scanner"
 	"github.com/digitalcheffe/nora/internal/scanner/discovery"
 	noraMetrics "github.com/digitalcheffe/nora/internal/scanner/metrics"
+	noraSnapshot "github.com/digitalcheffe/nora/internal/scanner/snapshot"
 	"github.com/digitalcheffe/nora/migrations"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -80,6 +81,7 @@ func main() {
 	discoveredContainerRepo := repo.NewDiscoveredContainerRepo(db)
 	discoveredRouteRepo := repo.NewDiscoveredRouteRepo(db)
 	webPushSubscriptionRepo := repo.NewWebPushSubscriptionRepo(db)
+	snapshotRepo := repo.NewSnapshotRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
@@ -88,6 +90,7 @@ func main() {
 		traefikComponentRepo, traefikOverviewRepo, traefikServiceRepo,
 		discoveredContainerRepo, discoveredRouteRepo,
 		webPushSubscriptionRepo,
+		snapshotRepo,
 	)
 
 	// Startup event — written once so users can see when NORA last started.
@@ -136,7 +139,34 @@ func main() {
 	scanScheduler.RegisterMetricsByMethod("snmp", noraMetrics.NewSNMPMetricsScanner(store))
 	// Docker MetricsScanner is wired after the ResourcePoller is created below.
 
+	// Snapshots (REFACTOR-08) — 30-minute condition polling.
+	// Infrastructure component scanners are registered by entity type / collection method.
+	// SSL snapshot scanning runs as a standalone job (iterates monitor_checks, not
+	// infrastructure_components) and is started on its own 30-minute ticker below.
+	scanScheduler.RegisterSnapshot("proxmox_node", noraSnapshot.NewProxmoxSnapshotScanner(store))
+	scanScheduler.RegisterSnapshot("synology", noraSnapshot.NewSynologySnapshotScanner(store))
+	scanScheduler.RegisterSnapshot("opnsense", noraSnapshot.NewOPNsenseSnapshotScanner(store))
+	scanScheduler.RegisterSnapshotByMethod("snmp", noraSnapshot.NewSNMPSnapshotScanner(store))
+
 	go scanScheduler.Start(scanCtx)
+
+	// SSL snapshot job — runs every SnapshotInterval independently of the scan
+	// scheduler because it iterates monitor_checks rather than infrastructure_components.
+	sslSnapshotCtx, sslSnapshotCancel := context.WithCancel(context.Background())
+	defer sslSnapshotCancel()
+	go func() {
+		sslJob := noraSnapshot.NewSSLSnapshotJob(store)
+		ticker := time.NewTicker(scanner.SnapshotInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-sslSnapshotCtx.Done():
+				return
+			case <-ticker.C:
+				sslJob.Run(sslSnapshotCtx)
+			}
+		}
+	}()
 
 	// Resource rollup jobs — hourly aggregation and daily rollup + retention purge.
 	rollupCtx, rollupCancel := context.WithCancel(context.Background())
