@@ -31,6 +31,9 @@ type DiscoveredContainerRepo interface {
 	MarkStoppedIfNotRunning(ctx context.Context, infraComponentID string, runningIDs []string) error
 	// DeleteDiscoveredContainer hard-deletes a discovered container record by UUID.
 	DeleteDiscoveredContainer(ctx context.Context, id string) error
+	// UpdateContainerImageCheck writes the latest image and registry digests and
+	// sets image_update_available.  Called by the ImageUpdatePoller after each poll.
+	UpdateContainerImageCheck(ctx context.Context, id string, imageDigest string, registryDigest string, updateAvailable bool) error
 }
 
 // DiscoveredRouteRepo manages the discovered_routes table.
@@ -83,7 +86,8 @@ func (r *sqliteDiscoveredContainerRepo) ListDiscoveredContainers(ctx context.Con
 	var rows []*models.DiscoveredContainer
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
+		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
+		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
 		FROM discovered_containers
 		WHERE infra_component_id = ?
 		ORDER BY container_name ASC`, infraComponentID)
@@ -100,7 +104,8 @@ func (r *sqliteDiscoveredContainerRepo) ListAllDiscoveredContainers(ctx context.
 	var rows []*models.DiscoveredContainer
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
+		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
+		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
 		FROM discovered_containers
 		ORDER BY infra_component_id ASC, container_name ASC`)
 	if err != nil {
@@ -116,7 +121,8 @@ func (r *sqliteDiscoveredContainerRepo) GetDiscoveredContainer(ctx context.Conte
 	var c models.DiscoveredContainer
 	err := r.db.GetContext(ctx, &c, `
 		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
+		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
+		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
 		FROM discovered_containers
 		WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -205,7 +211,8 @@ func (r *sqliteDiscoveredContainerRepo) FindByName(ctx context.Context, infraCom
 	var c models.DiscoveredContainer
 	err := r.db.GetContext(ctx, &c, `
 		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at
+		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
+		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
 		FROM discovered_containers
 		WHERE infra_component_id = ? AND container_name = ?
 		LIMIT 1`, infraComponentID, name)
@@ -216,6 +223,27 @@ func (r *sqliteDiscoveredContainerRepo) FindByName(ctx context.Context, infraCom
 		return nil, fmt.Errorf("find discovered container by name %s: %w", name, err)
 	}
 	return &c, nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) UpdateContainerImageCheck(ctx context.Context, id string, imageDigest string, registryDigest string, updateAvailable bool) error {
+	updateAvailableInt := 0
+	if updateAvailable {
+		updateAvailableInt = 1
+	}
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE discovered_containers
+		SET image_digest = ?, registry_digest = ?,
+		    image_update_available = ?, image_last_checked_at = ?
+		WHERE id = ?`,
+		imageDigest, registryDigest, updateAvailableInt, time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("update image check on container %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
+	}
+	return nil
 }
 
 func (r *sqliteDiscoveredContainerRepo) DeleteDiscoveredContainer(ctx context.Context, id string) error {

@@ -39,16 +39,19 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 
 // discoveredContainerResponse is the per-container shape returned by the API.
 type discoveredContainerResponse struct {
-	ID                   string    `json:"id"`
-	ContainerName        string    `json:"container_name"`
-	Image                string    `json:"image"`
-	Status               string    `json:"status"`
-	AppID                *string   `json:"app_id"`
-	ProfileSuggestion    *string   `json:"profile_suggestion"`
-	SuggestionConfidence *int      `json:"suggestion_confidence"`
-	CPUPercent           *float64  `json:"cpu_percent"`
-	MemPercent           *float64  `json:"mem_percent"`
-	LastSeenAt           time.Time `json:"last_seen_at"`
+	ID                   string     `json:"id"`
+	ContainerName        string     `json:"container_name"`
+	Image                string     `json:"image"`
+	Status               string     `json:"status"`
+	AppID                *string    `json:"app_id"`
+	ProfileSuggestion    *string    `json:"profile_suggestion"`
+	SuggestionConfidence *int       `json:"suggestion_confidence"`
+	CPUPercent           *float64   `json:"cpu_percent"`
+	MemPercent           *float64   `json:"mem_percent"`
+	LastSeenAt           time.Time  `json:"last_seen_at"`
+	// Image update fields (DD-9): populated by the ImageUpdatePoller.
+	ImageUpdateAvailable bool       `json:"image_update_available"`
+	ImageLastCheckedAt   *time.Time `json:"image_last_checked_at,omitempty"`
 }
 
 type listDiscoveredContainersResponse struct {
@@ -107,6 +110,8 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 			ProfileSuggestion:    c.ProfileSuggestion,
 			SuggestionConfidence: c.SuggestionConfidence,
 			LastSeenAt:           c.LastSeenAt,
+			ImageUpdateAvailable: c.ImageUpdateAvailable != 0,
+			ImageLastCheckedAt:   c.ImageLastCheckedAt,
 		}
 
 		// Walk lookup priority until we find a source ID that has metrics.
@@ -256,6 +261,8 @@ func (h *DockerDiscoveryHandler) ListAll(w http.ResponseWriter, r *http.Request)
 			ProfileSuggestion:    c.ProfileSuggestion,
 			SuggestionConfidence: c.SuggestionConfidence,
 			LastSeenAt:           c.LastSeenAt,
+			ImageUpdateAvailable: c.ImageUpdateAvailable != 0,
+			ImageLastCheckedAt:   c.ImageLastCheckedAt,
 		}
 		if m, ok := metrics[c.ContainerID]; ok {
 			if v, ok := m["cpu_percent"]; ok {

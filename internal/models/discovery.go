@@ -6,17 +6,22 @@ import "time"
 // app_id is set when the user links the container to an NORA app.
 // profile_suggestion is the profile_id NORA matched via image/name heuristics.
 type DiscoveredContainer struct {
-	ID                   string    `db:"id"                    json:"id"`
-	InfraComponentID     string    `db:"infra_component_id"    json:"infra_component_id"`
-	ContainerID          string    `db:"container_id"          json:"container_id"`
-	ContainerName        string    `db:"container_name"        json:"container_name"`
-	Image                string    `db:"image"                 json:"image"`
-	Status               string    `db:"status"                json:"status"`
-	AppID                *string   `db:"app_id"                json:"app_id,omitempty"`
-	ProfileSuggestion    *string   `db:"profile_suggestion"    json:"profile_suggestion,omitempty"`
-	SuggestionConfidence *int      `db:"suggestion_confidence" json:"suggestion_confidence,omitempty"`
-	LastSeenAt           time.Time `db:"last_seen_at"          json:"last_seen_at"`
-	CreatedAt            time.Time `db:"created_at"            json:"created_at"`
+	ID                   string     `db:"id"                    json:"id"`
+	InfraComponentID     string     `db:"infra_component_id"    json:"infra_component_id"`
+	ContainerID          string     `db:"container_id"          json:"container_id"`
+	ContainerName        string     `db:"container_name"        json:"container_name"`
+	Image                string     `db:"image"                 json:"image"`
+	Status               string     `db:"status"                json:"status"`
+	AppID                *string    `db:"app_id"                json:"app_id,omitempty"`
+	ProfileSuggestion    *string    `db:"profile_suggestion"    json:"profile_suggestion,omitempty"`
+	SuggestionConfidence *int       `db:"suggestion_confidence" json:"suggestion_confidence,omitempty"`
+	LastSeenAt           time.Time  `db:"last_seen_at"          json:"last_seen_at"`
+	CreatedAt            time.Time  `db:"created_at"            json:"created_at"`
+	// Fields added in migration 022 (DD-9).
+	ImageDigest          *string    `db:"image_digest"           json:"image_digest,omitempty"`
+	RegistryDigest       *string    `db:"registry_digest"        json:"registry_digest,omitempty"`
+	ImageUpdateAvailable int        `db:"image_update_available" json:"image_update_available"`
+	ImageLastCheckedAt   *time.Time `db:"image_last_checked_at"  json:"image_last_checked_at,omitempty"`
 }
 
 // DiscoveredRoute is an HTTP router entry found via a Traefik infrastructure component.

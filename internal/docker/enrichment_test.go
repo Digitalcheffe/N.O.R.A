@@ -103,6 +103,9 @@ func (m *enrichMockContainerRepo) FindByName(_ context.Context, _ string, _ stri
 func (m *enrichMockContainerRepo) DeleteDiscoveredContainer(_ context.Context, _ string) error {
 	return nil
 }
+func (m *enrichMockContainerRepo) UpdateContainerImageCheck(_ context.Context, _, _, _ string, _ bool) error {
+	return nil
+}
 
 type enrichMockRouteRepo struct {
 	routes map[string]*models.DiscoveredRoute
