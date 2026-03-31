@@ -19,6 +19,8 @@ type UserRepo interface {
 	GetByID(ctx context.Context, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, string, error)
 	Count(ctx context.Context) (int, error)
+	// UpdatePassword replaces the stored password hash for the given user ID.
+	UpdatePassword(ctx context.Context, id string, newHash string) error
 }
 
 type sqliteUserRepo struct {
@@ -95,6 +97,19 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*models.
 		return nil, "", fmt.Errorf("get user by email: %w", err)
 	}
 	return &row.User, row.PasswordHash, nil
+}
+
+// UpdatePassword replaces the stored password hash for the given user ID.
+func (r *sqliteUserRepo) UpdatePassword(ctx context.Context, id string, newHash string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, newHash, id)
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // Count returns the total number of users.

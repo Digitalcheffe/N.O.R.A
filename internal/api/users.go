@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/digitalcheffe/nora/internal/auth"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -27,6 +28,7 @@ func (h *UsersHandler) Routes(r chi.Router) {
 	r.Get("/users", h.List)
 	r.Post("/users", h.Create)
 	r.Delete("/users/{id}", h.Delete)
+	r.Put("/users/me/password", h.ChangePassword)
 }
 
 // --- request / response types ---
@@ -113,6 +115,56 @@ func (h *UsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "user not found")
 			return
 		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// ChangePassword updates the authenticated user's password.
+// PUT /api/v1/users/me/password
+func (h *UsersHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserID(r.Context())
+
+	var req changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "current_password and new_password are required")
+		return
+	}
+
+	// Get user by ID to retrieve email, then look up by email for hash.
+	user, err := h.users.GetByID(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_, hash, err := h.users.GetByEmail(r.Context(), user.Email)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.CurrentPassword)); err != nil {
+		writeError(w, http.StatusUnauthorized, "current password is incorrect")
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	if err := h.users.UpdatePassword(r.Context(), userID, string(newHash)); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
