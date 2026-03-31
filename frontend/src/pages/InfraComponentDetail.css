@@ -482,7 +482,7 @@
   transition: opacity 0.15s;
 }
 
-/* ── Scan Now button (header) ────────────────────────────────────────────────── */
+/* ── Discover Now button (header) ────────────────────────────────────────────── */
 
 .icd-scan-btn {
   font-family: var(--mono);

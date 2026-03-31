@@ -1,0 +1,162 @@
+/* ── Detail Page Layout ──────────────────────────────────────────────────────
+   Shared chrome for all entity detail pages. Enforces:
+   breadcrumb + name (left) | status + polled + actions (right)
+   key data points row
+   divider / children / divider
+   EventFeed
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.dpl-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dpl-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dpl-breadcrumb {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.dpl-breadcrumb:hover { color: var(--text); }
+
+.dpl-name {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.dpl-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+/* ── Status indicator ────────────────────────────────────────────────────── */
+
+.dpl-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.dpl-dot-online  { background: var(--green); }
+.dpl-dot-offline { background: var(--red); }
+.dpl-dot-warning { background: var(--yellow, #eab308); }
+.dpl-dot-unknown { background: var(--text3); }
+
+.dpl-status-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: capitalize;
+}
+
+.dpl-last-polled {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.dpl-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Key data points row ─────────────────────────────────────────────────── */
+
+.dpl-kdp-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.dpl-kdp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.dpl-kdp-label {
+  color: var(--text3);
+}
+
+.dpl-kdp-value {
+  color: var(--text2);
+}
+
+/* ── Dividers ────────────────────────────────────────────────────────────── */
+
+.dpl-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+/* ── Content area ────────────────────────────────────────────────────────── */
+
+.dpl-content {
+  /* Children render directly — no additional wrapper styles needed */
+}
+
+/* ── Discover Now button ─────────────────────────────────────────────────── */
+
+.dpl-discover-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--bg3);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.dpl-discover-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.dpl-discover-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dpl-discover-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+}
