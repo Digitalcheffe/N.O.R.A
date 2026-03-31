@@ -64,6 +64,7 @@ func (m *enrichMockCheckRepo) UpsertForComponent(_ context.Context, _ *models.Mo
 func (m *enrichMockCheckRepo) ExistsForTypeAndTarget(_ context.Context, _, target string) (bool, error) {
 	return m.existsByTarget[target], nil
 }
+func (m *enrichMockCheckRepo) SetDNSBaseline(_ context.Context, _, _ string) error { return nil }
 
 type enrichMockContainerRepo struct {
 	containers map[string]*models.DiscoveredContainer
