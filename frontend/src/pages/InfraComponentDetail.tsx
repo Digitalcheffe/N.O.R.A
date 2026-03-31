@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
+import { DetailPageLayout } from '../components/DetailPageLayout'
+import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
-import { EventFeed } from '../components/EventFeed'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
-  DiscoverResult,
   InfrastructureComponent,
   ResourceSummary,
   ResourceHistory,
@@ -18,6 +18,15 @@ import type {
 import './InfraComponentDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (secs < 60) return `${secs}s ago`
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
+  return `${Math.floor(secs / 86400)}d ago`
+}
 
 const TYPE_LABEL: Record<string, string> = {
   proxmox_node:  'Proxmox Node',
@@ -279,8 +288,7 @@ export function InfraComponentDetail() {
   const [allApps,       setAllApps]       = useState<App[]>([])
   const [linkingAppId,  setLinkingAppId]  = useState('')
   const [linkBusy,      setLinkBusy]      = useState(false)
-  const [discovering,   setDiscovering]   = useState(false)
-  const [discoverError, setDiscoverError] = useState<string | null>(null)
+  const [dockerCounts,  setDockerCounts]  = useState({ total: 0, running: 0 })
   const [loading,       setLoading]       = useState(true)
   const [error,         setError]         = useState<string | null>(null)
 
@@ -312,31 +320,17 @@ export function InfraComponentDetail() {
       .finally(() => setLoading(false))
   }, [id, tick])
 
-  async function handleDiscover() {
+  async function handleDiscoverSuccess() {
     if (!id || !component) return
-    setDiscovering(true)
-    setDiscoverError(null)
-    try {
-      const result: DiscoverResult = await infraApi.discover(id)
-      if (result.error) {
-        setDiscoverError(result.error)
-        return
-      }
-      // Re-fetch component status + resources + SNMP detail after discovery.
-      const [comp, res] = await Promise.all([
-        infraApi.get(id),
-        infraApi.resources(id, 'hour'),
-      ])
-      setComponent(comp)
-      setResources(res)
-      if (component.collection_method === 'snmp') {
-        const det = await infraApi.snmpDetail(id)
-        setSnmpDetail(det)
-      }
-    } catch (err: unknown) {
-      setDiscoverError(err instanceof Error ? err.message : 'Discovery failed')
-    } finally {
-      setDiscovering(false)
+    const [comp, res] = await Promise.all([
+      infraApi.get(id),
+      infraApi.resources(id, 'hour'),
+    ])
+    setComponent(comp)
+    setResources(res)
+    if (component.collection_method === 'snmp') {
+      const det = await infraApi.snmpDetail(id)
+      setSnmpDetail(det)
     }
   }
 
@@ -359,9 +353,9 @@ export function InfraComponentDetail() {
     setLinkedApps(prev => prev.filter(a => a.id !== appId))
   }
 
-  const statusClass = (s: string) => {
+  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
     if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'degraded'
+    if (s === 'degraded') return 'warning'
     if (s === 'offline')  return 'offline'
     return 'unknown'
   }
@@ -399,59 +393,108 @@ export function InfraComponentDetail() {
     return null
   }
 
+  const keyDataPoints = [
+    { label: 'Type', value: TYPE_LABEL[component.type] ?? component.type },
+    ...(component.ip ? [{ label: 'IP', value: component.ip }] : []),
+    ...(component.type === 'docker_engine' ? [
+      { label: 'Containers', value: `${dockerCounts.running} running / ${dockerCounts.total} total` },
+    ] : []),
+    ...(component.collection_method === 'snmp' && snmpDetail && !snmpDetail.no_data ? [
+      { label: 'Hostname', value: snmpDetail.hostname || '—' },
+      { label: 'Uptime', value: snmpDetail.uptime || '—' },
+      { label: 'OS', value: snmpDetail.os_description
+          ? (snmpDetail.os_description.length > 30 ? snmpDetail.os_description.slice(0, 30) + '…' : snmpDetail.os_description)
+          : '—' },
+    ] : []),
+  ]
+
+  const linkedIds = new Set(linkedApps.map(a => a.id))
+  const availableApps = allApps.filter(a => !linkedIds.has(a.id))
+
+  const dockerLinkedAppsHeader = component.type === 'docker_engine' ? (
+    <div className="dpl-linked-apps-compact">
+      <span className="dpl-linked-apps-label">Linked Apps</span>
+      {linkedApps.map(app => (
+        <span key={app.id} className="dpl-linked-app-chip">
+          {app.name}
+          <button onClick={() => void handleUnlinkApp(app.id)} title="Unlink">×</button>
+        </span>
+      ))}
+      {availableApps.length > 0 && (
+        <>
+          <select
+            className="dpl-linked-apps-select"
+            value={linkingAppId}
+            onChange={e => setLinkingAppId(e.target.value)}
+          >
+            <option value="">— link app —</option>
+            {availableApps.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <button
+            className="dpl-linked-apps-link-btn"
+            disabled={!linkingAppId || linkBusy}
+            onClick={() => void handleLinkApp()}
+          >
+            {linkBusy ? 'Linking…' : 'Link'}
+          </button>
+        </>
+      )}
+      {linkedApps.length === 0 && availableApps.length === 0 && (
+        <span style={{ fontSize: 12, color: 'var(--text3)' }}>None</span>
+      )}
+    </div>
+  ) : undefined
+
   return (
-    <>
-      <Topbar title={component.name} />
-      <div className="content">
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/topology"
+      name={component.name}
+      status={{ status: dplStatus(component.last_status) }}
+      lastPolled={component.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
+      keyDataPoints={keyDataPoints}
+      headerExtra={dockerLinkedAppsHeader}
+      actions={
+        component.collection_method !== 'none' ? (
+          <DiscoverNowButton
+            entityType={component.type}
+            entityId={component.id}
+            onSuccess={() => void handleDiscoverSuccess()}
+          />
+        ) : undefined
+      }
+      sourceId={component.id}
+    >
+      {/* SNMP hosts: three-section detail view */}
+      {component.collection_method === 'snmp' && (
+        <SNMPSection detail={snmpDetail} />
+      )}
 
-        {/* Header */}
-        <div className="icd-header">
-          <div className="icd-header-left">
-            <button className="icd-back-btn" onClick={() => navigate('/topology')}>← Infrastructure</button>
-            <h1 className="icd-title">{component.name}</h1>
-          </div>
-          <div className="icd-header-meta">
-            <span className={`icd-status-dot ${statusClass(component.last_status)}`} />
-            <span className="icd-status-label">{component.last_status}</span>
-            <span className="icd-type-badge">{TYPE_LABEL[component.type] ?? component.type}</span>
-            {component.ip && <span className="icd-ip">{component.ip}</span>}
-            {component.collection_method !== 'none' && (
-              <button
-                className="icd-scan-btn"
-                onClick={() => void handleDiscover()}
-                disabled={discovering}
-              >
-                {discovering ? 'Discovering…' : 'Discover Now'}
-              </button>
-            )}
-          </div>
+      {/* Non-SNMP resource metrics */}
+      {component.type !== 'docker_engine' && component.collection_method !== 'snmp' && (
+        <ResourceSection resources={resources} history={history} />
+      )}
+
+      {/* Type-specific content */}
+      {component.type === 'docker_engine' && (
+        <div className="icd-section">
+          <div className="icd-section-title">Containers</div>
+          <DockerEngineDetail
+            engineId={component.id}
+            onCountsLoaded={(total, running) => setDockerCounts({ total, running })}
+          />
         </div>
-        {discoverError && <div className="icd-scan-error">{discoverError}</div>}
+      )}
 
-        {/* SNMP hosts: three-section detail view */}
-        {component.collection_method === 'snmp' && (
-          <SNMPSection detail={snmpDetail} />
-        )}
+      {/* Discovered VMs & LXC containers (Proxmox nodes) */}
+      {component.type === 'proxmox_node' && (
+        <ProxmoxChildrenSection children={children} onNavigate={navigate} />
+      )}
 
-        {/* Non-SNMP resource metrics (Proxmox, Synology, etc.) */}
-        {component.type !== 'docker_engine' && component.collection_method !== 'snmp' && (
-          <ResourceSection resources={resources} history={history} />
-        )}
-
-        {/* Type-specific content */}
-        {component.type === 'docker_engine' && (
-          <div className="icd-section">
-            <div className="icd-section-title">Containers</div>
-            <DockerEngineDetail engineId={component.id} onCountsLoaded={() => {}} />
-          </div>
-        )}
-
-        {/* Discovered VMs & LXC containers (Proxmox nodes) */}
-        {component.type === 'proxmox_node' && (
-          <ProxmoxChildrenSection children={children} onNavigate={navigate} />
-        )}
-
-        {/* Linked Applications */}
+      {/* Linked Applications — only for non-docker types (docker uses headerExtra) */}
+      {component.type !== 'docker_engine' && (
         <LinkedAppsSection
           linkedApps={linkedApps}
           allApps={allApps}
@@ -461,12 +504,8 @@ export function InfraComponentDetail() {
           onLink={() => void handleLinkApp()}
           onUnlink={(appId) => void handleUnlinkApp(appId)}
         />
-
-        {/* Recent Events */}
-        <EventFeed sourceId={component.id} />
-
-      </div>
-    </>
+      )}
+    </DetailPageLayout>
   )
 }
 

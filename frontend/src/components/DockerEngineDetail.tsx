@@ -8,7 +8,7 @@ import type { DiscoveredContainer, App, AppTemplate } from '../api/types'
 
 interface Props {
   engineId: string
-  onCountsLoaded: (total: number, unlinked: number) => void
+  onCountsLoaded: (total: number, running: number, unlinked: number) => void
 }
 
 // ── Link form state ───────────────────────────────────────────────────────────
@@ -91,8 +91,9 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
         setContainers(ctrs.data)
         setApps(appList.data)
         setTemplates(tmplList.data)
+        const running = ctrs.data.filter(c => c.status === 'running').length
         const unlinked = ctrs.data.filter(c => !c.app_id).length
-        onCountsLoadedRef.current(ctrs.data.length, unlinked)
+        onCountsLoadedRef.current(ctrs.data.length, running, unlinked)
       })
       .catch(console.error)
       .finally(() => setLoading(false))

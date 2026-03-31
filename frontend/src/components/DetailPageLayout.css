@@ -160,3 +160,80 @@
   font-size: 11px;
   color: var(--red);
 }
+
+/* ── Header extra (compact linked apps, etc.) ─────────────────────────────── */
+
+.dpl-header-extra {
+  margin-bottom: 10px;
+}
+
+.dpl-linked-apps-compact {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dpl-linked-apps-label {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+}
+
+.dpl-linked-app-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text1);
+}
+
+.dpl-linked-app-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text3);
+  font-size: 13px;
+  padding: 0;
+  line-height: 1;
+}
+
+.dpl-linked-app-chip button:hover {
+  color: var(--red, #ef4444);
+}
+
+.dpl-linked-apps-select {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text1);
+}
+
+.dpl-linked-apps-link-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text1);
+}
+
+.dpl-linked-apps-link-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dpl-linked-apps-link-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
+import { DetailPageLayout } from '../components/DetailPageLayout'
+import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { infrastructure as infraApi, synology as synologyApi } from '../api/client'
 import type {
   InfrastructureComponent,
@@ -59,13 +61,6 @@ function statusDotClass(status: string): string {
 function statusLabel(status: string): string {
   if (!status) return '—'
   return status.charAt(0).toUpperCase() + status.slice(1)
-}
-
-function hostStatusClass(s: string): string {
-  if (s === 'online') return 'online'
-  if (s === 'degraded') return 'degraded'
-  if (s === 'offline' || s === 'down') return 'offline'
-  return 'unknown'
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -143,8 +138,6 @@ export function SynologyDetail() {
   const [noData, setNoData] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [discovering,   setDiscovering]   = useState(false)
-  const [discoverError, setDiscoverError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!componentId) return
@@ -163,20 +156,6 @@ export function SynologyDetail() {
       setLoading(false)
     }
   }, [componentId])
-
-  const handleDiscoverNow = useCallback(async () => {
-    if (!componentId || discovering) return
-    setDiscovering(true)
-    setDiscoverError(null)
-    try {
-      await infraApi.discover(componentId)
-      void load()
-    } catch (err) {
-      setDiscoverError(err instanceof Error ? err.message : 'Discover failed')
-    } finally {
-      setDiscovering(false)
-    }
-  }, [componentId, discovering, load])
 
   useEffect(() => { load() }, [load, tick])
 
@@ -202,142 +181,142 @@ export function SynologyDetail() {
   }
 
   const d = detail
-  const statusCls = hostStatusClass(component.last_status)
+
+  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
+    if (s === 'online')   return 'online'
+    if (s === 'degraded') return 'warning'
+    if (s === 'offline' || s === 'down') return 'offline'
+    return 'unknown'
+  }
+
+  const totalStorageBytes = d?.volumes.reduce((sum, v) => sum + v.total_bytes, 0) ?? 0
+
+  const keyDataPoints = [
+    { label: 'Model',   value: d?.model        || '—' },
+    { label: 'DSM',     value: d?.dsm_version  || '—' },
+    { label: 'Storage', value: totalStorageBytes > 0 ? formatBytes(totalStorageBytes) : '—' },
+    { label: 'Uptime',  value: d?.uptime       || '—' },
+  ]
 
   return (
-    <>
-      <Topbar title={component.name} />
-      <div className="content">
-
-        {/* Header */}
-        <div className="icd-header">
-          <div className="icd-header-left">
-            <button className="icd-back-btn" onClick={() => navigate('/topology')}>← Infrastructure</button>
-            <h1 className="icd-title">{component.name}</h1>
-          </div>
-          <div className="icd-header-meta">
-            <span className={`icd-status-dot ${statusCls}`} />
-            <span className="icd-status-label">{component.last_status}</span>
-            <span className="icd-type-badge">Synology NAS</span>
-            {component.ip && <span className="icd-ip">{component.ip}</span>}
-            {d?.polled_at && (
-              <span className="syn-polled-at">polled {timeAgo(d.polled_at)}</span>
-            )}
-            <button
-              className="icd-scan-btn"
-              onClick={() => void handleDiscoverNow()}
-              disabled={discovering}
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/topology"
+      name={component.name}
+      status={{ status: dplStatus(component.last_status) }}
+      lastPolled={d?.polled_at ? `Polled ${timeAgo(d.polled_at)}` : undefined}
+      keyDataPoints={noData ? [] : keyDataPoints}
+      actions={
+        <DiscoverNowButton
+          entityType="synology"
+          entityId={componentId!}
+          onSuccess={() => void load()}
+        />
+      }
+      sourceId={componentId!}
+    >
+      {/* Section 1 — System Info */}
+      <div className="icd-section">
+        <div className="icd-section-title">System Info</div>
+        {noData ? (
+          <div className="snmp-pending">Awaiting first scan</div>
+        ) : (
+          <div className="syn-info-grid">
+            <span className="syn-info-key">Model</span>
+            <span className="syn-info-val">{d?.model || '—'}</span>
+            <span className="syn-info-key">DSM</span>
+            <span className="syn-info-val">{d?.dsm_version || '—'}</span>
+            <span className="syn-info-key">Hostname</span>
+            <span className="syn-info-val">{d?.hostname || '—'}</span>
+            <span className="syn-info-key">Uptime</span>
+            <span className="syn-info-val">{d?.uptime || '—'}</span>
+            <span className="syn-info-key">Temp</span>
+            <span
+              className="syn-info-val"
+              style={d?.temperature_c ? { color: tempColor(d.temperature_c) } : undefined}
             >
-              {discovering ? 'Discovering…' : 'Discover Now'}
-            </button>
-            {discoverError && <span className="icd-scan-error">{discoverError}</span>}
+              {d?.temperature_c ? `${d.temperature_c}°C` : '—'}
+            </span>
           </div>
-        </div>
-
-        {/* Section 1 — System Info */}
-        <div className="icd-section">
-          <div className="icd-section-title">System Info</div>
-          {noData ? (
-            <div className="snmp-pending">Awaiting first scan</div>
-          ) : (
-            <div className="syn-info-grid">
-              <span className="syn-info-key">Model</span>
-              <span className="syn-info-val">{d?.model || '—'}</span>
-              <span className="syn-info-key">DSM</span>
-              <span className="syn-info-val">{d?.dsm_version || '—'}</span>
-              <span className="syn-info-key">Hostname</span>
-              <span className="syn-info-val">{d?.hostname || '—'}</span>
-              <span className="syn-info-key">Uptime</span>
-              <span className="syn-info-val">{d?.uptime || '—'}</span>
-              <span className="syn-info-key">Temp</span>
-              <span
-                className="syn-info-val"
-                style={d?.temperature_c ? { color: tempColor(d.temperature_c) } : undefined}
-              >
-                {d?.temperature_c ? `${d.temperature_c}°C` : '—'}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Section 2 — CPU & Memory */}
-        <div className="icd-section">
-          <div className="icd-section-title">CPU &amp; Memory</div>
-          <div className="syn-res-list">
-            <ResourceBar
-              label="CPU"
-              value={d?.cpu_percent ?? 0}
-              color={barFillColor(d?.cpu_percent ?? 0)}
-            />
-            <ResourceBar
-              label="MEM"
-              value={d?.memory?.percent ?? 0}
-              color={barFillColor(d?.memory?.percent ?? 0)}
-              extra={
-                d?.memory?.total_bytes
-                  ? `${formatBytes(d.memory.used_bytes)} / ${formatBytes(d.memory.total_bytes)}`
-                  : undefined
-              }
-            />
-          </div>
-        </div>
-
-        {/* Section 3 — Volumes */}
-        <div className="icd-section">
-          <div className="icd-section-title">Volumes</div>
-          {!d || d.volumes.length === 0 ? (
-            <div className="snmp-pending">Pending first scan</div>
-          ) : (
-            <div className="syn-vol-list">
-              {d.volumes.map(vol => (
-                <VolumeRow key={vol.path} vol={vol} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Section 4 — Disks */}
-        <div className="icd-section">
-          <div className="icd-section-title">Disks</div>
-          {!d || d.disks.length === 0 ? (
-            <div className="snmp-pending">Pending first scan</div>
-          ) : (
-            <div className="syn-disk-list">
-              {d.disks.map(disk => (
-                <DiskRow key={disk.slot} disk={disk} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Section 5 — Updates */}
-        <div className="icd-section">
-          <div className="icd-section-title">Updates</div>
-          <div className="syn-update-row">
-            <span className="syn-update-label">DSM</span>
-            {!d ? (
-              <span className="syn-update-value muted">—</span>
-            ) : d.update?.available ? (
-              <>
-                <span className="syn-update-arrow">↑</span>
-                <span className="syn-update-value available">{d.update.version} available</span>
-                {d.dsm_version && (
-                  <span className="syn-update-current">(currently {d.dsm_version})</span>
-                )}
-              </>
-            ) : (
-              <>
-                <span className="syn-update-check">✓</span>
-                <span className="syn-update-value">Up to date</span>
-                {d.dsm_version && (
-                  <span className="syn-update-current muted">{d.dsm_version}</span>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
+        )}
       </div>
-    </>
+
+      {/* Section 2 — CPU & Memory */}
+      <div className="icd-section">
+        <div className="icd-section-title">CPU &amp; Memory</div>
+        <div className="syn-res-list">
+          <ResourceBar
+            label="CPU"
+            value={d?.cpu_percent ?? 0}
+            color={barFillColor(d?.cpu_percent ?? 0)}
+          />
+          <ResourceBar
+            label="MEM"
+            value={d?.memory?.percent ?? 0}
+            color={barFillColor(d?.memory?.percent ?? 0)}
+            extra={
+              d?.memory?.total_bytes
+                ? `${formatBytes(d.memory.used_bytes)} / ${formatBytes(d.memory.total_bytes)}`
+                : undefined
+            }
+          />
+        </div>
+      </div>
+
+      {/* Section 3 — Volumes */}
+      <div className="icd-section">
+        <div className="icd-section-title">Volumes</div>
+        {!d || d.volumes.length === 0 ? (
+          <div className="snmp-pending">Pending first scan</div>
+        ) : (
+          <div className="syn-vol-list">
+            {d.volumes.map(vol => (
+              <VolumeRow key={vol.path} vol={vol} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Section 4 — Disks */}
+      <div className="icd-section">
+        <div className="icd-section-title">Disks</div>
+        {!d || d.disks.length === 0 ? (
+          <div className="snmp-pending">Pending first scan</div>
+        ) : (
+          <div className="syn-disk-list">
+            {d.disks.map(disk => (
+              <DiskRow key={disk.slot} disk={disk} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Section 5 — Updates */}
+      <div className="icd-section">
+        <div className="icd-section-title">Updates</div>
+        <div className="syn-update-row">
+          <span className="syn-update-label">DSM</span>
+          {!d ? (
+            <span className="syn-update-value muted">—</span>
+          ) : d.update?.available ? (
+            <>
+              <span className="syn-update-arrow">↑</span>
+              <span className="syn-update-value available">{d.update.version} available</span>
+              {d.dsm_version && (
+                <span className="syn-update-current">(currently {d.dsm_version})</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="syn-update-check">✓</span>
+              <span className="syn-update-value">Up to date</span>
+              {d.dsm_version && (
+                <span className="syn-update-current muted">{d.dsm_version}</span>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </DetailPageLayout>
   )
 }

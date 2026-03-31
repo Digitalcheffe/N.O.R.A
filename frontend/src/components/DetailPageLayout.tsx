@@ -30,8 +30,10 @@ export interface DetailPageLayoutProps {
   lastPolled?: string
   /** Top right action area (e.g. Discover Now button) */
   actions?: React.ReactNode
-  /** Required for EventFeed at the bottom */
-  sourceType: string
+  /** Extra content rendered between the KDP row and the first divider (e.g. compact linked apps) */
+  headerExtra?: React.ReactNode
+  /** Optional source_type filter for EventFeed at the bottom */
+  sourceType?: string
   /** Required for EventFeed at the bottom */
   sourceId: string
   /** Unique content section — rendered between dividers */
@@ -57,6 +59,7 @@ export function DetailPageLayout({
   status,
   lastPolled,
   actions,
+  headerExtra,
   sourceType,
   sourceId,
   children,
@@ -108,6 +111,11 @@ export function DetailPageLayout({
               </span>
             ))}
           </div>
+        )}
+
+        {/* ── Header extra (e.g. compact linked apps) ── */}
+        {headerExtra && (
+          <div className="dpl-header-extra">{headerExtra}</div>
         )}
 
         {/* ── Divider ── */}
