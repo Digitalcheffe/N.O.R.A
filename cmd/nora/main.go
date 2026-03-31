@@ -144,7 +144,8 @@ func main() {
 	// Monitor scheduler — runs all enabled checks on their configured intervals.
 	schedCtx, schedCancel := context.WithCancel(context.Background())
 	defer schedCancel()
-	go monitor.NewScheduler(store).Start(schedCtx)
+	monitorScheduler := monitor.NewScheduler(store)
+	go monitorScheduler.Start(schedCtx)
 
 	// Scan scheduler — Discovery (1h), Metrics (2m), Snapshots (30m).
 	// Discovery scanners are registered by entity type (and collection method
@@ -286,9 +287,11 @@ func main() {
 	// newer image versions.  Skipped if the Docker socket is not available.
 	imagePollerCtx, imagePollerCancel := context.WithCancel(context.Background())
 	defer imagePollerCancel()
-	if imagePoller, err := docker.NewImageUpdatePoller(store); err != nil {
+	var imagePoller *docker.ImageUpdatePoller
+	if p, err := docker.NewImageUpdatePoller(store); err != nil {
 		log.Printf("image update poller: socket not available, skipping (%v)", err)
 	} else {
+		imagePoller = p
 		go imagePoller.StartEvery(imagePollerCtx, scanner.DiscoveryInterval)
 	}
 
@@ -302,6 +305,124 @@ func main() {
 		scanScheduler.RegisterMetrics("docker_engine",
 			noraMetrics.NewDockerMetricsScanner(store, localEngineID, resourcePoller))
 	}
+
+	// Job registry — every background job is registered here so it can be
+	// listed and triggered on-demand via the /api/v1/jobs endpoints.
+	jobRegistry := jobs.NewRegistry()
+
+	// MONITOR — per-check-type runners.
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "ping_checks", Name: "Ping Checks", Category: "monitor",
+		Description: "Runs all enabled ping checks immediately.",
+		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "ping") },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "url_checks", Name: "URL Checks", Category: "monitor",
+		Description: "Runs all enabled URL checks immediately.",
+		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "url") },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "ssl_checks", Name: "SSL Checks", Category: "monitor",
+		Description: "Evaluates certificate expiry for all SSL checks.",
+		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "ssl") },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "dns_checks", Name: "DNS Checks", Category: "monitor",
+		Description: "Runs all enabled DNS checks immediately.",
+		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "dns") },
+	})
+
+	// DATA — aggregation and retention jobs.
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "resource_rollup", Name: "Resource Rollup", Category: "data",
+		Description: "Collapses raw resource readings into hourly summary rollups.",
+		RunFn:       func(ctx context.Context) error { return jobs.RunHourlyRollup(ctx, store) },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "event_retention", Name: "Event Retention Purge", Category: "data",
+		Description: "Deletes expired events per severity retention rules.",
+		RunFn:       func(ctx context.Context) error { return jobs.RunEventRetention(ctx, store) },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "monthly_rollup", Name: "Monthly Rollup", Category: "data",
+		Description: "Aggregates events from the previous calendar month into rollup counts.",
+		RunFn:       func(ctx context.Context) error { return jobs.RunMonthlyRollup(ctx, store) },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "monthly_digest", Name: "Monthly Digest", Category: "data",
+		Description: "Sends the digest email for the current period.",
+		RunFn: func(ctx context.Context) error {
+			return digestJob.Send(ctx, time.Now().UTC().Format("2006-01"))
+		},
+	})
+
+	// INTEGRATION — infrastructure pollers and scan passes.
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "traefik_sync", Name: "Traefik Sync", Category: "integration",
+		Description: "Syncs certificate data from all enabled Traefik integrations.",
+		RunFn:       syncWorker.RunSync,
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "traefik_pollers", Name: "Traefik Component Pollers", Category: "integration",
+		Description: "Polls routes and service health from all enabled Traefik components.",
+		RunFn: func(ctx context.Context) error {
+			jobs.RunTraefikComponentPollers(ctx, store)
+			return nil
+		},
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "proxmox_pollers", Name: "Proxmox Pollers", Category: "integration",
+		Description: "Polls status and metrics from all enabled Proxmox nodes.",
+		RunFn: func(ctx context.Context) error {
+			jobs.RunProxmoxPollers(ctx, store)
+			return nil
+		},
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "synology_pollers", Name: "Synology Pollers", Category: "integration",
+		Description: "Polls status and storage info from all enabled Synology components.",
+		RunFn: func(ctx context.Context) error {
+			jobs.RunSynologyPollers(ctx, store, make(map[string]*infra.SynologyPoller))
+			return nil
+		},
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "snmp_pollers", Name: "SNMP Pollers", Category: "integration",
+		Description: "Polls all enabled SNMP targets for metrics and status.",
+		RunFn: func(ctx context.Context) error {
+			jobs.RunSNMPPollers(ctx, store)
+			return nil
+		},
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "scan_discovery", Name: "Infrastructure Discovery", Category: "integration",
+		Description: "Discovers resources across all enabled infrastructure components.",
+		RunFn:       scanScheduler.RunDiscovery,
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "scan_metrics", Name: "Infrastructure Metrics", Category: "integration",
+		Description: "Collects metrics from all enabled infrastructure components.",
+		RunFn:       scanScheduler.RunMetrics,
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "scan_snapshots", Name: "Infrastructure Snapshots", Category: "integration",
+		Description: "Polls health status from all enabled infrastructure components.",
+		RunFn:       scanScheduler.RunSnapshot,
+	})
+	if imagePoller != nil {
+		jobRegistry.Register(&jobs.JobEntry{
+			ID: "docker_image_scan", Name: "Docker Image Scan", Category: "integration",
+			Description: "Checks all running containers for available image updates.",
+			RunFn:       imagePoller.Run,
+		})
+	}
+
+	// SYSTEM — instance-level background jobs.
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "metrics_collection", Name: "Metrics Collection", Category: "system",
+		Description: "Recalculates per-app event throughput metrics.",
+		RunFn:       func(ctx context.Context) error { return jobs.RunMetricsCollection(ctx, store) },
+	})
 
 	// Router
 	r := chi.NewRouter()
@@ -335,6 +456,7 @@ func main() {
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
 		api.NewRulesHandler(store, rulesEngine).Routes(r)
+		api.NewJobsHandler(jobRegistry).Routes(r)
 		authHandler.Routes(r)
 	})
 
