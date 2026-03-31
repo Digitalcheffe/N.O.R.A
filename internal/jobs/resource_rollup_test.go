@@ -18,7 +18,7 @@ import (
 // returns both the store and the underlying *sqlx.DB for direct queries in tests.
 func newTestStore(t *testing.T) (*repo.Store, *sqlx.DB) {
 	t.Helper()
-	cfg := &config.Config{DBPath: ":memory:", DevMode: true}
+	cfg := &config.Config{DBPath: ":memory:"}
 	db, err := repo.Open(cfg, migrations.Files)
 	if err != nil {
 		t.Fatalf("open test db: %v", err)

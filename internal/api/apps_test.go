@@ -19,7 +19,7 @@ import (
 // newTestDB opens an in-memory SQLite database with all migrations applied.
 func newTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	cfg := &config.Config{DBPath: ":memory:", DevMode: true}
+	cfg := &config.Config{DBPath: ":memory:"}
 	db, err := repo.Open(cfg, migrations.Files)
 	if err != nil {
 		t.Fatalf("open test db: %v", err)

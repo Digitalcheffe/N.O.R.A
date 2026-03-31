@@ -16,7 +16,7 @@ import (
 // This ensures apps and infrastructure_components tables exist for FK constraints.
 func openDiscoveryTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	cfg := &config.Config{DBPath: ":memory:", DevMode: true}
+	cfg := &config.Config{DBPath: ":memory:"}
 	db, err := Open(cfg, migrations.Files)
 	if err != nil {
 		t.Fatalf("open discovery test db: %v", err)
