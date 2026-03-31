@@ -81,12 +81,19 @@
   gap: 10px;
 }
 
-/* ── Mobile scroll area ── */
+/* ── Mobile scroll area ──
+   Must use height (not min-height) so the div is a fixed-height scroll
+   container. min-height causes the element to expand with content, which
+   pushes overflow to the window — and window scrolling is unreliable in
+   standalone PWA mode on iOS/Android.
+   padding-top/bottom account for the fixed MobileTopBar (52px) and
+   BottomNav (56px + safe-area). ── */
 .mobile-scroll-area {
+  height: 100vh;
   padding-top: 52px;
   padding-bottom: calc(56px + env(safe-area-inset-bottom));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
-  min-height: 100vh;
+  box-sizing: border-box;
 }
