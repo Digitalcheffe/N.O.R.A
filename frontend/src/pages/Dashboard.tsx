@@ -258,7 +258,7 @@ export function Dashboard() {
               <div>
                 <div className="section-header">
                   <div className="section-title">Infrastructure</div>
-                  <button className="section-action" onClick={() => navigate('/topology')}>
+                  <button className="section-action" onClick={() => navigate('/infrastructure')}>
                     View all →
                   </button>
                 </div>
@@ -280,7 +280,7 @@ export function Dashboard() {
                       <HostWidget
                         key={host.id}
                         host={hostData}
-                        onClick={() => navigate('/topology')}
+                        onClick={() => navigate('/infrastructure')}
                       />
                     )
                   })}

@@ -14,7 +14,7 @@ import (
 
 // ScanOneComponent immediately runs the appropriate poller for a single
 // infrastructure component. It returns the resulting status string and any
-// error encountered. This is the backend for the "Scan Now" API endpoint.
+// error encountered. This is the backend for the "Discover Now" API endpoint.
 func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.InfrastructureComponent) (string, error) {
 	if !c.Enabled {
 		return c.LastStatus, fmt.Errorf("component is disabled")

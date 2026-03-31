@@ -571,7 +571,7 @@ export function TraefikDetail() {
   return (
     <DetailPageLayout
       breadcrumb="Infrastructure"
-      breadcrumbPath="/topology"
+      breadcrumbPath="/infrastructure"
       name={topLoading ? '…' : (component?.name ?? 'Traefik')}
       status={component ? { status: dplStatus(component.last_status) } : undefined}
       lastPolled={overview?.updated_at ? `Polled ${timeAgo(overview.updated_at)}` : undefined}

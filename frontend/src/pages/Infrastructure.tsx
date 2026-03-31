@@ -487,7 +487,7 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/topology/traefik/${c.id}`)}>
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/traefik/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -511,7 +511,7 @@ export function Infrastructure() {
           <div className="infra-card-actions">
             <button
               className="infra-card-btn accent"
-              onClick={() => navigate(`/topology/traefik/${c.id}`)}
+              onClick={() => navigate(`/infrastructure/traefik/${c.id}`)}
               disabled={isDeleting || isScanning}
             >
               View Detail
@@ -552,7 +552,7 @@ export function Infrastructure() {
         <div
           className="infra-card-header"
           style={{ cursor: 'pointer' }}
-          onClick={() => navigate(`/topology/${c.id}`)}
+          onClick={() => navigate(`/infrastructure/${c.id}`)}
         >
           <div className="infra-card-title-group">
             <div className="infra-card-name">{c.name}</div>
@@ -616,8 +616,8 @@ export function Infrastructure() {
     const canScan = c.collection_method !== 'none'
 
     const detailPath = c.type === 'proxmox_node'
-      ? `/topology/proxmox/${c.id}`
-      : `/topology/${c.id}`
+      ? `/infrastructure/proxmox/${c.id}`
+      : `/infrastructure/${c.id}`
 
     return (
       <div key={c.id} className="infra-card">

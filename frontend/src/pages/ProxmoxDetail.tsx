@@ -622,7 +622,7 @@ export function ProxmoxDetail() {
           <div className="px-fullpage-error">
             {topError ?? 'Component not found'}
           </div>
-          <button className="px-back-btn" onClick={() => navigate('/topology')}>
+          <button className="px-back-btn" onClick={() => navigate('/infrastructure')}>
             ← Infrastructure
           </button>
         </div>
@@ -643,7 +643,7 @@ export function ProxmoxDetail() {
   return (
     <DetailPageLayout
       breadcrumb="Infrastructure"
-      breadcrumbPath="/topology"
+      breadcrumbPath="/infrastructure"
       name={topLoading ? '…' : (component?.name ?? 'Proxmox')}
       status={component ? { status: dplStatus(component.last_status) } : undefined}
       lastPolled={component?.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}

@@ -174,7 +174,7 @@ export function SynologyDetail() {
         <Topbar title="Synology NAS" />
         <div className="content">
           <div className="icd-error">{error ?? 'Component not found'}</div>
-          <button className="icd-back-btn" onClick={() => navigate('/topology')}>← Back</button>
+          <button className="icd-back-btn" onClick={() => navigate('/infrastructure')}>← Back</button>
         </div>
       </>
     )
@@ -201,7 +201,7 @@ export function SynologyDetail() {
   return (
     <DetailPageLayout
       breadcrumb="Infrastructure"
-      breadcrumbPath="/topology"
+      breadcrumbPath="/infrastructure"
       name={component.name}
       status={{ status: dplStatus(component.last_status) }}
       lastPolled={d?.polled_at ? `Polled ${timeAgo(d.polled_at)}` : undefined}

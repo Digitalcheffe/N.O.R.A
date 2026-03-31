@@ -375,7 +375,7 @@ export function InfraComponentDetail() {
         <Topbar title="Component" />
         <div className="content">
           <div className="icd-error">{error ?? 'Component not found'}</div>
-          <button className="icd-back-btn" onClick={() => navigate('/topology')}>← Back</button>
+          <button className="icd-back-btn" onClick={() => navigate('/infrastructure')}>← Back</button>
         </div>
       </>
     )
@@ -383,13 +383,13 @@ export function InfraComponentDetail() {
 
   // Traefik components have their own detail page.
   if (component.type === 'traefik') {
-    navigate(`/topology/traefik/${component.id}`, { replace: true })
+    navigate(`/infrastructure/traefik/${component.id}`, { replace: true })
     return null
   }
 
   // Synology components have their own detail page.
   if (component.type === 'synology') {
-    navigate(`/topology/synology/${component.id}`, { replace: true })
+    navigate(`/infrastructure/synology/${component.id}`, { replace: true })
     return null
   }
 
@@ -450,7 +450,7 @@ export function InfraComponentDetail() {
   return (
     <DetailPageLayout
       breadcrumb="Infrastructure"
-      breadcrumbPath="/topology"
+      breadcrumbPath="/infrastructure"
       name={component.name}
       status={{ status: dplStatus(component.last_status) }}
       lastPolled={component.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
@@ -551,7 +551,7 @@ function ProxmoxChildrenSection({ children, onNavigate }: ProxmoxChildrenSection
               <div
                 key={c.id}
                 className="icd-child-card"
-                onClick={() => onNavigate(`/topology/${c.id}`)}
+                onClick={() => onNavigate(`/infrastructure/${c.id}`)}
               >
                 <div className="icd-child-header">
                   <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
@@ -576,7 +576,7 @@ function ProxmoxChildrenSection({ children, onNavigate }: ProxmoxChildrenSection
               <div
                 key={c.id}
                 className="icd-child-card"
-                onClick={() => onNavigate(`/topology/${c.id}`)}
+                onClick={() => onNavigate(`/infrastructure/${c.id}`)}
               >
                 <div className="icd-child-header">
                   <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
