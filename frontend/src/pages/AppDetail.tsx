@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
-import { Topbar } from '../components/Topbar'
-import { EventFeed } from '../components/EventFeed'
+import { DetailPageLayout } from '../components/DetailPageLayout'
 import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi } from '../api/client'
 import type { App, AppSummary, AppTemplate } from '../api/types'
 import '../styles/Modal.css'
@@ -317,7 +316,7 @@ export function AppDetail() {
   const navigate = useNavigate()
   const { tick } = useAutoRefresh()
 
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
+  const timeFilter: TimeFilter = 'week'
 
   const [app, setApp] = useState<App | null>(null)
   const [appSummary, setAppSummary] = useState<AppSummary | null>(null)
@@ -347,32 +346,32 @@ export function AppDetail() {
 
   const appName = app?.name ?? appId
   const baseUrl = app?.config?.base_url as string | undefined
-  const status = appSummary?.status ?? 'online'
-  const topbarStatus = status === 'online' ? 'ok' : (status as 'warn' | 'down')
+  const rawStatus = appSummary?.status ?? 'online'
+  const dplStatus: 'online' | 'offline' | 'unknown' | 'warning' =
+    rawStatus === 'online' ? 'online' : rawStatus === 'down' ? 'offline' : 'warning'
   const lastEvent = appSummary?.last_event_at
     ? new Date(appSummary.last_event_at).toLocaleString('en-US', {
         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
       })
     : null
+
+  const keyDataPoints = [
+    { label: 'Profile', value: app?.profile_id || 'Generic' },
+    { label: 'Rate limit', value: app?.rate_limit ? `${app.rate_limit}/min` : 'Unlimited' },
+    ...(baseUrl ? [{ label: 'URL', value: baseUrl }] : []),
+  ]
+
   return (
     <>
-      <Topbar title={appName} status={topbarStatus} timeFilter={timeFilter} onTimeFilter={setTimeFilter} />
-      <div className="content">
-
-        {/* ── App header ── */}
-        <div className="detail-header">
-          <div className="detail-header-left">
-            <div className="detail-app-icon">{appName.slice(0, 2).toUpperCase()}</div>
-            <div className="detail-app-meta">
-              <div className="detail-app-name">{appName}</div>
-              {lastEvent && <div className="detail-app-last">Last event: {lastEvent}</div>}
-            </div>
-            <div className="detail-status-dot-wrap">
-              <div className={`status-dot${status !== 'online' ? ` ${status === 'down' ? 'down' : 'warn'}` : ''}`} />
-            </div>
-          </div>
-
-          <div className="detail-header-actions">
+      <DetailPageLayout
+        breadcrumb="Apps"
+        breadcrumbPath="/apps"
+        name={appName}
+        status={{ status: dplStatus }}
+        lastPolled={lastEvent ? `Last event: ${lastEvent}` : undefined}
+        keyDataPoints={keyDataPoints}
+        actions={
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {baseUrl && (
               <a className="detail-launch-btn" href={baseUrl} target="_blank" rel="noopener noreferrer">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -391,8 +390,10 @@ export function AppDetail() {
               Settings
             </button>
           </div>
-        </div>
-
+        }
+        sourceType="app"
+        sourceId={appId}
+      >
         {/* ── Stats row ── */}
         {appSummary && (
           <div className="detail-stats-row">
@@ -412,11 +413,7 @@ export function AppDetail() {
             )}
           </div>
         )}
-
-        {/* ── Events section ── */}
-        <EventFeed sourceType="app" sourceId={appId} />
-
-      </div>
+      </DetailPageLayout>
 
       {showSettings && app && (
         <AppSettingsModal

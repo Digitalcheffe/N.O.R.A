@@ -2,15 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
-import { EventRow } from '../components/EventRow'
+import { DetailPageLayout } from '../components/DetailPageLayout'
+import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import {
   infrastructure as infraApi,
   traefik as traefikApi,
 } from '../api/client'
 import type {
-  Event,
   InfrastructureComponent,
-  DiscoverResult,
   TraefikOverview,
   DiscoveredRoute,
   TraefikServiceDetail,
@@ -462,60 +461,6 @@ function ServicesSection({
   )
 }
 
-// ── Events section ────────────────────────────────────────────────────────────
-
-function ComponentEventsSection({ componentId }: { componentId: string }) {
-  const [events, setEvents] = useState<Event[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setLoading(true)
-    infraApi.events(componentId, { limit: 25, sort: 'newest' })
-      .then(r => { setEvents(r.data); setTotal(r.total); setError(null) })
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load events'))
-      .finally(() => setLoading(false))
-  }, [componentId])
-
-  return (
-    <div className="tk-section">
-      <div className="tk-section-header-row">
-        <div className="tk-section-title" style={{ margin: 0 }}>Recent Events</div>
-        {!loading && !error && (
-          <span className="tk-count-label">{total} total</span>
-        )}
-      </div>
-      {error ? (
-        <SectionError msg={error} onRetry={() => {
-          setLoading(true)
-          infraApi.events(componentId, { limit: 25, sort: 'newest' })
-            .then(r => { setEvents(r.data); setTotal(r.total); setError(null) })
-            .catch(err => setError(err instanceof Error ? err.message : 'Failed to load events'))
-            .finally(() => setLoading(false))
-        }} />
-      ) : loading ? (
-        <table className="tk-table"><tbody><SkeletonRows count={4} /></tbody></table>
-      ) : events.length === 0 ? (
-        <div className="tk-empty">No events recorded for this component.</div>
-      ) : (
-        <>
-          <div className="event-row events-col-header">
-            <span>Time</span>
-            <span />
-            <span>Source</span>
-            <span>Event</span>
-            <span>Severity</span>
-          </div>
-          {events.map(ev => (
-            <EventRow key={ev.id} event={ev} />
-          ))}
-        </>
-      )}
-    </div>
-  )
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function TraefikDetail() {
@@ -529,10 +474,6 @@ export function TraefikDetail() {
   const [component,    setComponent]    = useState<InfrastructureComponent | null>(null)
   const [topLoading,   setTopLoading]   = useState(true)
   const [topError,     setTopError]     = useState<string | null>(null)
-
-  // Discover Now
-  const [discovering,     setDiscovering]     = useState(false)
-  const [discoverResult,  setDiscoverResult]  = useState<DiscoverResult | null>(null)
 
   // Overview
   const [overview,        setOverview]        = useState<TraefikOverview | null>(null)
@@ -585,31 +526,6 @@ export function TraefikDetail() {
       .finally(() => setServicesLoading(false))
   }, [componentId])
 
-  const handleDiscoverNow = useCallback(async () => {
-    if (!componentId || discovering) return
-    setDiscovering(true)
-    setDiscoverResult(null)
-    try {
-      const result = await infraApi.discover(componentId)
-      setDiscoverResult(result)
-      // Reload all sections with fresh data from the just-completed poll.
-      loadTop()
-      loadOverview()
-      loadRouters()
-      loadServices()
-    } catch (err) {
-      setDiscoverResult({
-        status: 'error',
-        discovered: 0,
-        updated: 0,
-        missing: 0,
-        error: err instanceof Error ? err.message : 'Discover failed',
-      })
-    } finally {
-      setDiscovering(false)
-    }
-  }, [componentId, discovering, loadTop, loadOverview, loadRouters, loadServices])
-
   useEffect(() => {
     loadTop()
     loadOverview()
@@ -623,9 +539,9 @@ export function TraefikDetail() {
     serviceHealthMap[s.service_name] = `${s.servers_up}/${s.server_count} UP`
   }
 
-  const statusClass = (s: string) => {
+  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
     if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'degraded'
+    if (s === 'degraded') return 'warning'
     if (s === 'offline')  return 'offline'
     return 'unknown'
   }
@@ -646,82 +562,60 @@ export function TraefikDetail() {
     )
   }
 
+  const keyDataPoints = [
+    { label: 'Version',  value: overview?.version ?? '—' },
+    { label: 'Routers',  value: overview ? String(overview.routers_total) : '—' },
+    { label: 'Services', value: overview ? String(overview.services_total) : '—' },
+  ]
+
   return (
-    <>
-      <Topbar title={component?.name ?? 'Traefik'} />
-      <div className="content">
-
-        {/* Header */}
-        <div className="tk-header">
-          <div className="tk-header-left">
-            <button className="tk-back-btn" onClick={() => navigate(-1)}>
-              ← Infrastructure
-            </button>
-            <h1 className="tk-title">
-              {topLoading
-                ? <span className="tk-skeleton-inline" />
-                : (component?.name ?? '…')}
-            </h1>
-          </div>
-          <div className="tk-header-right">
-            {component && (
-              <>
-                <span className={`tk-status-dot ${statusClass(component.last_status)}`} />
-                <span className="tk-status-label">{component.last_status}</span>
-              </>
-            )}
-            {!overviewLoading && overview?.version && (
-              <span className="tk-version">{overview.version}</span>
-            )}
-            {overview?.updated_at && (
-              <span className="tk-polled-at">
-                Last polled {timeAgo(overview.updated_at)}
-              </span>
-            )}
-            <button
-              className="tk-scan-btn"
-              onClick={() => void handleDiscoverNow()}
-              disabled={discovering || topLoading}
-            >
-              {discovering ? 'Discovering…' : 'Discover Now'}
-            </button>
-            {discoverResult?.error && (
-              <span className="tk-scan-error">{discoverResult.error}</span>
-            )}
-          </div>
-        </div>
-
-        {/* Overview */}
-        <OverviewSection
-          overview={overviewLoading ? null : overview}
-          loading={overviewLoading}
-          error={overviewError}
-          onRetry={loadOverview}
-          routersRef={routersSectionRef}
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/topology"
+      name={topLoading ? '…' : (component?.name ?? 'Traefik')}
+      status={component ? { status: dplStatus(component.last_status) } : undefined}
+      lastPolled={overview?.updated_at ? `Polled ${timeAgo(overview.updated_at)}` : undefined}
+      keyDataPoints={overviewLoading ? [] : keyDataPoints}
+      actions={
+        <DiscoverNowButton
+          entityType="traefik"
+          entityId={componentId!}
+          onSuccess={() => {
+            loadTop()
+            loadOverview()
+            loadRouters()
+            loadServices()
+          }}
         />
+      }
+      sourceId={componentId!}
+    >
+      {/* Overview */}
+      <OverviewSection
+        overview={overviewLoading ? null : overview}
+        loading={overviewLoading}
+        error={overviewError}
+        onRetry={loadOverview}
+        routersRef={routersSectionRef}
+      />
 
-        {/* Routers */}
-        <RoutersSection
-          routers={routers}
-          loading={routersLoading}
-          error={routersError}
-          onRetry={loadRouters}
-          sectionRef={routersSectionRef}
-          serviceHealthMap={serviceHealthMap}
-        />
+      {/* Routers */}
+      <RoutersSection
+        routers={routers}
+        loading={routersLoading}
+        error={routersError}
+        onRetry={loadRouters}
+        sectionRef={routersSectionRef}
+        serviceHealthMap={serviceHealthMap}
+      />
 
-        {/* Services */}
-        <ServicesSection
-          services={services}
-          loading={servicesLoading}
-          error={servicesError}
-          onRetry={loadServices}
-        />
-
-        {/* Events */}
-        {componentId && <ComponentEventsSection componentId={componentId} />}
-
-      </div>
-    </>
+      {/* Services */}
+      <ServicesSection
+        services={services}
+        loading={servicesLoading}
+        error={servicesError}
+        onRetry={loadServices}
+      />
+    </DetailPageLayout>
   )
 }

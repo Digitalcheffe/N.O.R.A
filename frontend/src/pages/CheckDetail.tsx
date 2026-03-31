@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
+import { DetailPageLayout } from '../components/DetailPageLayout'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
-import { EventFeed } from '../components/EventFeed'
 import type { MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
 import {
   CheckForm,
@@ -16,31 +16,6 @@ import {
 import { formatEventTime } from '../utils/formatTime'
 import '../styles/Modal.css'
 import './CheckDetail.css'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function statusLabel(check: MonitorCheck): string {
-  if (check.type === 'ssl') {
-    if (check.last_result) {
-      try {
-        const r = JSON.parse(check.last_result) as { days_remaining?: number }
-        if (r.days_remaining != null) return `${r.days_remaining}d`
-      } catch { /* fallthrough */ }
-    }
-    return 'SSL'
-  }
-  if (check.last_status === 'up') return 'UP'
-  if (check.last_status === 'down') return 'DOWN'
-  if (check.last_status === 'warn') return 'WARN'
-  return '—'
-}
-
-function statusClass(status: string | null): string {
-  if (status === 'up') return 'monitor-status-block up'
-  if (status === 'warn') return 'monitor-status-block warn'
-  if (status === 'down' || status === 'critical') return 'monitor-status-block down'
-  return 'monitor-status-block unknown'
-}
 
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 
@@ -239,32 +214,29 @@ export function CheckDetail() {
 
   if (!check) return null
 
+  const dplStatus: 'online' | 'offline' | 'unknown' | 'warning' =
+    check.last_status === 'up'   ? 'online'  :
+    check.last_status === 'down' ? 'offline' :
+    check.last_status === 'warn' ? 'warning' : 'unknown'
+
+  const keyDataPoints = [
+    { label: 'Type', value: check.type.toUpperCase() },
+    { label: 'Target', value: check.target },
+    { label: 'Interval', value: `every ${check.interval_secs}s` },
+    { label: 'Status', value: check.last_status ? check.last_status.toUpperCase() : 'UNKNOWN' },
+  ]
+
   return (
     <>
-      <Topbar title={check.name} />
-      <div className="content">
-
-        {/* Header */}
-        <div className="check-detail-header">
-          <div className="check-detail-header-left">
-            <button className="check-detail-back-btn" onClick={() => navigate('/checks')}>
-              ← Checks
-            </button>
-            <div className={statusClass(check.last_status)}>
-              {statusLabel(check)}
-            </div>
-            <div className="check-detail-meta">
-              <div className="check-detail-name">
-                {check.name}
-                <span className={`check-type-badge check-type-${check.type}`}>
-                  {check.type.toUpperCase()}
-                </span>
-                {!check.enabled && <span className="check-paused-badge">PAUSED</span>}
-              </div>
-              <div className="check-detail-target">{check.target}</div>
-            </div>
-          </div>
-          <div className="check-detail-header-actions">
+      <DetailPageLayout
+        breadcrumb="Checks"
+        breadcrumbPath="/checks"
+        name={check.name}
+        status={{ status: dplStatus }}
+        lastPolled={check.last_checked_at ? formatEventTime(check.last_checked_at) : undefined}
+        keyDataPoints={keyDataPoints}
+        actions={
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <button
               className="check-detail-action-btn"
               onClick={() => void handleRun()}
@@ -282,34 +254,10 @@ export function CheckDetail() {
               ⚙ Settings
             </button>
           </div>
-        </div>
-
-        {/* Stats */}
-        <div className="check-detail-stats">
-          <div className="check-detail-stat">
-            <div className="check-detail-stat-label">Status</div>
-            <div className={`check-detail-stat-value ${check.last_status ?? 'unknown'}`}>
-              {check.last_status ? check.last_status.toUpperCase() : 'UNKNOWN'}
-            </div>
-          </div>
-          <div className="check-detail-stat">
-            <div className="check-detail-stat-label">Last Checked</div>
-            <div className="check-detail-stat-value">
-              {check.last_checked_at
-                ? new Date(check.last_checked_at).toLocaleString()
-                : '—'}
-            </div>
-          </div>
-          <div className="check-detail-stat">
-            <div className="check-detail-stat-label">Interval</div>
-            <div className="check-detail-stat-value">every {check.interval_secs}s</div>
-          </div>
-          <div className="check-detail-stat">
-            <div className="check-detail-stat-label">Type</div>
-            <div className="check-detail-stat-value">{check.type.toUpperCase()}</div>
-          </div>
-        </div>
-
+        }
+        sourceType="monitor_check"
+        sourceId={id ?? ''}
+      >
         {/* Last Result */}
         <div className="check-detail-section">
           <div className="check-detail-section-header">
@@ -326,11 +274,7 @@ export function CheckDetail() {
             </div>
           </div>
         </div>
-
-        {/* History */}
-        <EventFeed sourceType="monitor_check" sourceId={id ?? ''} title="HISTORY" />
-
-      </div>
+      </DetailPageLayout>
 
       {showEdit && (
         <EditModal

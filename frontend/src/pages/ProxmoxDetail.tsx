@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
+import { DetailPageLayout } from '../components/DetailPageLayout'
+import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { infrastructure as infraApi, proxmox as proxmoxApi } from '../api/client'
 import type {
   InfrastructureComponent,
@@ -523,8 +525,6 @@ export function ProxmoxDetail() {
   const [resources,    setResources]    = useState<ResourceSummary | null>(null)
   const [topLoading,   setTopLoading]   = useState(true)
   const [topError,     setTopError]     = useState<string | null>(null)
-  const [discovering,  setDiscovering]  = useState(false)
-  const [discoverError, setDiscoverError] = useState<string | null>(null)
 
   // Section data
   const [pools,        setPools]        = useState<ProxmoxStoragePool[]>([])
@@ -596,23 +596,6 @@ export function ProxmoxDetail() {
       .finally(() => setFailuresLoading(false))
   }, [componentId])
 
-  const handleDiscoverNow = useCallback(async () => {
-    if (!componentId || discovering) return
-    setDiscovering(true)
-    setDiscoverError(null)
-    try {
-      await infraApi.discover(componentId)
-      loadTop()
-      loadPools()
-      loadGuests()
-      loadStatus()
-      loadFailures()
-    } catch (err) {
-      setDiscoverError(err instanceof Error ? err.message : 'Discover failed')
-    } finally {
-      setDiscovering(false)
-    }
-  }, [componentId, discovering, loadTop, loadPools, loadGuests, loadStatus, loadFailures])
 
   // Initial load and auto-refresh
   useEffect(() => {
@@ -623,9 +606,9 @@ export function ProxmoxDetail() {
     loadFailures()
   }, [loadTop, loadPools, loadGuests, loadStatus, loadFailures, tick])
 
-  const statusClass = (s: string) => {
+  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
     if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'degraded'
+    if (s === 'degraded') return 'warning'
     if (s === 'offline')  return 'offline'
     return 'unknown'
   }
@@ -648,87 +631,76 @@ export function ProxmoxDetail() {
   }
 
   const updatesAvailable = nodeStatuses.reduce((sum, ns) => sum + ns.updates_available, 0)
+  const ns = nodeStatuses[0]
+
+  const keyDataPoints = [
+    { label: 'Uptime',   value: ns?.uptime     ? formatUptime(ns.uptime)    : '—' },
+    { label: 'vCPUs',    value: ns?.cpu_count   ? String(ns.cpu_count)       : '—' },
+    { label: 'RAM',      value: ns?.total_mem_bytes ? formatBytes(ns.total_mem_bytes) : '—' },
+    { label: 'PVE',      value: ns?.pve_version ?? '—' },
+  ]
 
   return (
-    <>
-      <Topbar title={component?.name ?? 'Proxmox'} />
-      <div className="content">
-
-        {/* Header */}
-        <div className="px-header">
-          <div className="px-header-left">
-            <button className="px-back-btn" onClick={() => navigate(-1)}>
-              ← Infrastructure
-            </button>
-            <h1 className="px-title">
-              {topLoading ? <span className="px-skeleton-inline" /> : (component?.name ?? '…')}
-            </h1>
-          </div>
-          <div className="px-header-right">
-            {component && (
-              <>
-                <span className={`px-status-dot ${statusClass(component.last_status)}`} />
-                <span className="px-status-label">{component.last_status}</span>
-              </>
-            )}
-            {component?.last_polled_at && (
-              <span className="px-polled-at">
-                Last polled {timeAgo(component.last_polled_at)}
-              </span>
-            )}
-            <button
-              className="px-scan-btn"
-              onClick={() => void handleDiscoverNow()}
-              disabled={discovering || topLoading}
-            >
-              {discovering ? 'Discovering…' : 'Discover Now'}
-            </button>
-            {discoverError && (
-              <span className="px-scan-error">{discoverError}</span>
-            )}
-          </div>
-        </div>
-
-        {/* Updates banner */}
-        {!statusLoading && !statusError && updatesAvailable > 0 && component && (
-          <UpdatesBanner
-            componentId={componentId!}
-            count={updatesAvailable}
-            nodeName={component.name}
-          />
-        )}
-
-        {/* Node Overview */}
-        <NodeOverviewSection
-          resources={topLoading ? null : resources}
-          nodeStatuses={statusLoading ? [] : nodeStatuses}
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/topology"
+      name={topLoading ? '…' : (component?.name ?? 'Proxmox')}
+      status={component ? { status: dplStatus(component.last_status) } : undefined}
+      lastPolled={component?.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
+      keyDataPoints={statusLoading ? [] : keyDataPoints}
+      actions={
+        <DiscoverNowButton
+          entityType="proxmox_node"
+          entityId={componentId!}
+          onSuccess={() => {
+            loadTop()
+            loadPools()
+            loadGuests()
+            loadStatus()
+            loadFailures()
+          }}
         />
-
-        {/* Storage Pools */}
-        <StoragePoolsSection
-          pools={pools}
-          loading={poolsLoading}
-          error={poolsError ? `Failed to load storage pools. ${poolsError}` : null}
-          onRetry={loadPools}
+      }
+      sourceId={componentId!}
+    >
+      {/* Updates banner */}
+      {!statusLoading && !statusError && updatesAvailable > 0 && component && (
+        <UpdatesBanner
+          componentId={componentId!}
+          count={updatesAvailable}
+          nodeName={component.name}
         />
+      )}
 
-        {/* VMs & LXCs */}
-        <GuestsSection
-          guests={guests}
-          loading={guestsLoading}
-          error={guestsError ? `Failed to load guests. ${guestsError}` : null}
-          onRetry={loadGuests}
-        />
+      {/* Node Overview */}
+      <NodeOverviewSection
+        resources={topLoading ? null : resources}
+        nodeStatuses={statusLoading ? [] : nodeStatuses}
+      />
 
-        {/* Task Failures */}
-        <TaskFailuresSection
-          failures={failures}
-          loading={failuresLoading}
-          error={failuresError ? `Failed to load task failures. ${failuresError}` : null}
-          onRetry={loadFailures}
-        />
+      {/* Storage Pools */}
+      <StoragePoolsSection
+        pools={pools}
+        loading={poolsLoading}
+        error={poolsError ? `Failed to load storage pools. ${poolsError}` : null}
+        onRetry={loadPools}
+      />
 
-      </div>
-    </>
+      {/* VMs & LXCs */}
+      <GuestsSection
+        guests={guests}
+        loading={guestsLoading}
+        error={guestsError ? `Failed to load guests. ${guestsError}` : null}
+        onRetry={loadGuests}
+      />
+
+      {/* Task Failures */}
+      <TaskFailuresSection
+        failures={failures}
+        loading={failuresLoading}
+        error={failuresError ? `Failed to load task failures. ${failuresError}` : null}
+        onRetry={loadFailures}
+      />
+    </DetailPageLayout>
   )
 }
