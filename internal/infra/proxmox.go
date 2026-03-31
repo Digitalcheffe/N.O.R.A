@@ -137,6 +137,81 @@ func (p *ProxmoxPoller) get(ctx context.Context, path string, out interface{}) e
 	return json.Unmarshal(env.Data, out)
 }
 
+// ── Metrics-only collection ───────────────────────────────────────────────────
+
+// ProxmoxNodeMetrics holds the raw metric values collected for one Proxmox node.
+// The caller (MetricsScanner) is responsible for writing these to resource_readings
+// and applying threshold rules.
+type ProxmoxNodeMetrics struct {
+	Node        string
+	CPUPercent  float64
+	MemPercent  float64
+	MemUsedGB   float64
+	MemTotalGB  float64
+	DiskPercent float64
+}
+
+// CollectNodeMetrics fetches CPU%, memory, and disk metrics for each node in the
+// cluster and returns them as raw values without writing to the database.
+// It returns the list of nodes found and any partial errors encountered.
+func (p *ProxmoxPoller) CollectNodeMetrics(ctx context.Context) ([]ProxmoxNodeMetrics, error) {
+	var nodes []proxmoxNode
+	if err := p.get(ctx, "/api2/json/nodes", &nodes); err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	var results []ProxmoxNodeMetrics
+	for _, node := range nodes {
+		m, err := p.fetchNodeMetrics(ctx, node.Node)
+		if err != nil {
+			log.Printf("proxmox metrics %s: node %s: %v", p.componentID, node.Node, err)
+			continue
+		}
+		results = append(results, m)
+	}
+	return results, nil
+}
+
+func (p *ProxmoxPoller) fetchNodeMetrics(ctx context.Context, node string) (ProxmoxNodeMetrics, error) {
+	var status proxmoxNodeStatus
+	if err := p.get(ctx, fmt.Sprintf("/api2/json/nodes/%s/status", node), &status); err != nil {
+		return ProxmoxNodeMetrics{}, fmt.Errorf("node status: %w", err)
+	}
+
+	cpuPercent := status.CPU * 100
+	var memPercent, memUsedGB, memTotalGB float64
+	if status.Memory.Total > 0 {
+		memPercent = (status.Memory.Used / status.Memory.Total) * 100
+		memUsedGB = status.Memory.Used / (1024 * 1024 * 1024)
+		memTotalGB = status.Memory.Total / (1024 * 1024 * 1024)
+	}
+
+	var storages []proxmoxStorage
+	var diskPercent float64
+	if err := p.get(ctx, fmt.Sprintf("/api2/json/nodes/%s/storage", node), &storages); err == nil {
+		var usedTotal, sizeTotal float64
+		for _, s := range storages {
+			if s.Active == 0 {
+				continue
+			}
+			usedTotal += s.Used
+			sizeTotal += s.Total
+		}
+		if sizeTotal > 0 {
+			diskPercent = (usedTotal / sizeTotal) * 100
+		}
+	}
+
+	return ProxmoxNodeMetrics{
+		Node:        node,
+		CPUPercent:  cpuPercent,
+		MemPercent:  memPercent,
+		MemUsedGB:   memUsedGB,
+		MemTotalGB:  memTotalGB,
+		DiskPercent: diskPercent,
+	}, nil
+}
+
 // ── Poll ──────────────────────────────────────────────────────────────────────
 
 // Poll runs one full poll cycle: fetches all nodes, records metrics, and fires

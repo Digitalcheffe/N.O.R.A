@@ -30,7 +30,8 @@ type ScanScheduler struct {
 	store                    *repo.Store
 	discovery                map[string]DiscoveryScanner // keyed by entity type
 	discoveryByMethod        map[string]DiscoveryScanner // keyed by collection_method
-	metrics                  map[string]MetricsScanner
+	metrics                  map[string]MetricsScanner   // keyed by entity type
+	metricsByMethod          map[string]MetricsScanner   // keyed by collection_method
 	snapshots                map[string]SnapshotScanner
 	mu                       sync.RWMutex
 }
@@ -43,6 +44,7 @@ func NewScanScheduler(store *repo.Store) *ScanScheduler {
 		discovery:         make(map[string]DiscoveryScanner),
 		discoveryByMethod: make(map[string]DiscoveryScanner),
 		metrics:           make(map[string]MetricsScanner),
+		metricsByMethod:   make(map[string]MetricsScanner),
 		snapshots:         make(map[string]SnapshotScanner),
 	}
 }
@@ -68,6 +70,15 @@ func (s *ScanScheduler) RegisterMetrics(entityType string, sc MetricsScanner) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.metrics[entityType] = sc
+}
+
+// RegisterMetricsByMethod registers a MetricsScanner keyed by collection_method
+// rather than entity type. This is used for SNMP hosts which may have any entity
+// type but share collection_method="snmp".
+func (s *ScanScheduler) RegisterMetricsByMethod(collectionMethod string, sc MetricsScanner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.metricsByMethod[collectionMethod] = sc
 }
 
 // RegisterSnapshot registers a SnapshotScanner for the given entity type.
@@ -151,6 +162,8 @@ func (s *ScanScheduler) runDiscoveryPass(ctx context.Context) {
 
 // runMetricsPass iterates all enabled components and calls each registered
 // MetricsScanner concurrently with MetricsTimeout per entity.
+// Scanners are looked up by entity type first; if none is registered for the
+// type the scheduler falls back to a lookup by collection_method.
 func (s *ScanScheduler) runMetricsPass(ctx context.Context) {
 	components, err := s.listEnabled(ctx)
 	if err != nil {
@@ -160,12 +173,16 @@ func (s *ScanScheduler) runMetricsPass(ctx context.Context) {
 
 	s.mu.RLock()
 	scanners := copyMetrics(s.metrics)
+	methodScanners := copyMetrics(s.metricsByMethod)
 	s.mu.RUnlock()
 
 	var wg sync.WaitGroup
 	for i := range components {
 		c := &components[i]
 		sc, ok := scanners[c.Type]
+		if !ok {
+			sc, ok = methodScanners[c.CollectionMethod]
+		}
 		if !ok {
 			continue
 		}
