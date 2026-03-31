@@ -267,7 +267,7 @@ func main() {
 	if imagePoller, err := docker.NewImageUpdatePoller(store); err != nil {
 		log.Printf("image update poller: socket not available, skipping (%v)", err)
 	} else {
-		go imagePoller.Start(imagePollerCtx)
+		go imagePoller.StartEvery(imagePollerCtx, scanner.DiscoveryInterval)
 	}
 
 	// Docker ResourcePoller — metrics collection is driven by the scan scheduler
