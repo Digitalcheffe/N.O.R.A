@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -376,8 +377,10 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			return
 		}
 		if err := h.store.DiscoveredContainers.SetDiscoveredContainerApp(r.Context(), id, app.ID); err != nil {
-			// Best-effort rollback — orphaned app is better than silent failure.
-			_ = h.store.Apps.Delete(r.Context(), app.ID)
+			// Best-effort rollback — log if the cleanup delete itself fails.
+			if delErr := h.store.Apps.Delete(r.Context(), app.ID); delErr != nil {
+				log.Printf("LinkContainerApp: rollback delete failed for app %s: %v", app.ID, delErr)
+			}
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -508,7 +511,10 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 			return
 		}
 		if err := h.store.DiscoveredRoutes.SetDiscoveredRouteApp(r.Context(), id, app.ID); err != nil {
-			_ = h.store.Apps.Delete(r.Context(), app.ID)
+			// Best-effort rollback — log if the cleanup delete itself fails.
+			if delErr := h.store.Apps.Delete(r.Context(), app.ID); delErr != nil {
+				log.Printf("LinkRouteApp: rollback delete failed for app %s: %v", app.ID, delErr)
+			}
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}

@@ -124,9 +124,9 @@ function parseAppTemplateYAML(content: string): ParsedAppTemplate | null {
       if (/^digest:/.test(trimmed)) { section = 'digest'; subSection = ''; continue }
 
       // Sub-section headers (2-space indent)
-      if (/^  field_mappings:/.test(trimmed)) { subSection = 'field_mappings'; continue }
-      if (/^  severity_mapping:/.test(trimmed)) { subSection = 'severity_mapping'; continue }
-      if (/^  (recommended_events|not_recommended|categories):/.test(trimmed)) { subSection = 'list'; continue }
+      if (/^ {2}field_mappings:/.test(trimmed)) { subSection = 'field_mappings'; continue }
+      if (/^ {2}severity_mapping:/.test(trimmed)) { subSection = 'severity_mapping'; continue }
+      if (/^ {2}(recommended_events|not_recommended|categories):/.test(trimmed)) { subSection = 'list'; continue }
 
       const kv = trimmed.match(/^(\s*)(\S[^:]*?):\s*(.*)$/)
       if (!kv) continue

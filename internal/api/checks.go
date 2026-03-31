@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -369,5 +370,7 @@ func (h *ChecksHandler) createStatusEvent(ctx context.Context, check *models.Mon
 		CreatedAt:  result.CheckedAt,
 	}
 	// Log failure but don't fail the response.
-	_ = h.events.Create(ctx, event)
+	if err := h.events.Create(ctx, event); err != nil {
+		log.Printf("createStatusEvent: failed to write event for check %s: %v", check.ID, err)
+	}
 }

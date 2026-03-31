@@ -5,14 +5,14 @@ import { Topbar } from '../components/Topbar'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
 import type { MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
+import { CheckForm } from '../components/CheckForm'
 import {
-  CheckForm,
   type FormFields,
   validateForm,
   checkToForm,
   formToInput,
   renderCheckResult,
-} from '../components/CheckForm'
+} from '../components/checkFormHelpers'
 import { formatEventTime } from '../utils/formatTime'
 import '../styles/Modal.css'
 import './CheckDetail.css'

@@ -230,33 +230,36 @@ export function Events() {
 
   // Fetch events list
   useEffect(() => {
-    setLoading(true)
-    setError(null)
-    const filter: EventFilter = {
-      sort,
-      limit: pageSize,
-      offset: page * pageSize,
-    }
-    // Date range: custom dates take priority over timeFilter tabs
-    if (fromDate) {
-      filter.from = new Date(fromDate).toISOString()
-    } else {
-      filter.from = sinceFromTimeFilter(timeFilter)
-    }
-    if (toDate) {
-      filter.to = new Date(toDate + 'T23:59:59').toISOString()
-    }
-    if (severity) filter.level = severity
-    if (sourceType) filter.source_type = sourceType as 'app' | 'infra' | 'check'
-    if (search) filter.search = search
-    eventsApi
-      .list(filter)
-      .then(res => {
+    void (async () => {
+      setLoading(true)
+      setError(null)
+      const filter: EventFilter = {
+        sort,
+        limit: pageSize,
+        offset: page * pageSize,
+      }
+      // Date range: custom dates take priority over timeFilter tabs
+      if (fromDate) {
+        filter.from = new Date(fromDate).toISOString()
+      } else {
+        filter.from = sinceFromTimeFilter(timeFilter)
+      }
+      if (toDate) {
+        filter.to = new Date(toDate + 'T23:59:59').toISOString()
+      }
+      if (severity) filter.level = severity
+      if (sourceType) filter.source_type = sourceType as 'app' | 'infra' | 'check'
+      if (search) filter.search = search
+      try {
+        const res = await eventsApi.list(filter)
         setEventList(res.data)
         setTotal(res.total)
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoading(false))
+      } catch (e) {
+        setError((e as Error).message)
+      } finally {
+        setLoading(false)
+      }
+    })()
   }, [timeFilter, severity, sourceType, search, searchTrigger, fromDate, toDate, sort, pageSize, page, tick])
 
   // Fetch chart data

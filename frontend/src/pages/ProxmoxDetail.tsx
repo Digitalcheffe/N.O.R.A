@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
@@ -432,8 +432,13 @@ function TaskFailuresSection({
   error: string | null
   onRetry: () => void
 }) {
-  const recent = failures.filter(
-    f => Date.now() - f.start_time * 1000 < SEVEN_DAYS_MS,
+  const recent = useMemo(
+    () => {
+      // eslint-disable-next-line react-hooks/purity
+      const now = Date.now()
+      return failures.filter(f => now - f.start_time * 1000 < SEVEN_DAYS_MS)
+    },
+    [failures],
   )
 
   return (
@@ -599,11 +604,13 @@ export function ProxmoxDetail() {
 
   // Initial load and auto-refresh
   useEffect(() => {
-    loadTop()
-    loadPools()
-    loadGuests()
-    loadStatus()
-    loadFailures()
+    void (async () => {
+      loadTop()
+      loadPools()
+      loadGuests()
+      loadStatus()
+      loadFailures()
+    })()
   }, [loadTop, loadPools, loadGuests, loadStatus, loadFailures, tick])
 
   function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {

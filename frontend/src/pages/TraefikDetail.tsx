@@ -527,10 +527,12 @@ export function TraefikDetail() {
   }, [componentId])
 
   useEffect(() => {
-    loadTop()
-    loadOverview()
-    loadRouters()
-    loadServices()
+    void (async () => {
+      loadTop()
+      loadOverview()
+      loadRouters()
+      loadServices()
+    })()
   }, [loadTop, loadOverview, loadRouters, loadServices, tick])
 
   // Build service health map for router cross-reference tooltip

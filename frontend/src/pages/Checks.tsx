@@ -5,13 +5,13 @@ import { Topbar } from '../components/Topbar'
 import { SSLRow } from '../components/SSLRow'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
 import type { MonitorCheck, SSLCert, InfraIntegration, TraefikCert } from '../api/types'
+import { CheckForm } from '../components/CheckForm'
 import {
-  CheckForm,
   type FormFields,
   defaultForm,
   validateForm,
   formToInput,
-} from '../components/CheckForm'
+} from '../components/checkFormHelpers'
 import { formatEventTime } from '../utils/formatTime'
 import '../styles/Modal.css'
 import './Checks.css'
