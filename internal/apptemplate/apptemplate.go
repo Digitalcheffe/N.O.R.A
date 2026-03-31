@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -99,11 +101,15 @@ type AppTemplate struct {
 
 // Registry loads all bundled YAML app templates from an embedded filesystem.
 type Registry struct {
-	templates map[string]*AppTemplate
+	mu         sync.RWMutex
+	templates  map[string]*AppTemplate
+	builtinDir string
+	customDir  string
 }
 
 // NewRegistry loads all *.yaml files from fsys and returns a populated Registry.
 // Each template is keyed by its filename without extension (e.g. "sonarr").
+// Used by tests and legacy callers; does not support disk-based Reload.
 func NewRegistry(fsys fs.FS) (*Registry, error) {
 	reg := &Registry{templates: make(map[string]*AppTemplate)}
 
@@ -134,9 +140,112 @@ func NewRegistry(fsys fs.FS) (*Registry, error) {
 	return reg, nil
 }
 
+// ExportBuiltins writes each embedded YAML from fsys into destDir.
+// Existing files are skipped so user edits are preserved across restarts.
+// New files added to the embedded set are written on the first startup after an upgrade.
+func ExportBuiltins(fsys fs.FS, destDir string) error {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("create builtin dir: %w", err)
+	}
+
+	entries, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		return fmt.Errorf("read embedded templates: %w", err)
+	}
+
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
+			continue
+		}
+		dest := filepath.Join(destDir, e.Name())
+		if _, err := os.Stat(dest); err == nil {
+			continue // already exists — preserve any user edits
+		}
+		data, err := fs.ReadFile(fsys, e.Name())
+		if err != nil {
+			return fmt.Errorf("read embedded %s: %w", e.Name(), err)
+		}
+		if err := os.WriteFile(dest, data, 0644); err != nil {
+			return fmt.Errorf("write %s: %w", dest, err)
+		}
+	}
+	return nil
+}
+
+// NewRegistryFromDisk loads templates from builtinDir and customDir on disk.
+// Custom templates override builtins when they share the same ID (filename stem).
+func NewRegistryFromDisk(builtinDir, customDir string) (*Registry, error) {
+	reg := &Registry{
+		templates:  make(map[string]*AppTemplate),
+		builtinDir: builtinDir,
+		customDir:  customDir,
+	}
+	if err := reg.reload(); err != nil {
+		return nil, err
+	}
+	return reg, nil
+}
+
+// Reload re-reads all templates from the builtin and custom directories.
+// Safe to call concurrently — acquires a write lock for the swap.
+func (r *Registry) Reload() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.reload()
+}
+
+// reload is the internal (unlocked) implementation shared by NewRegistryFromDisk and Reload.
+func (r *Registry) reload() error {
+	newTemplates := make(map[string]*AppTemplate)
+
+	if err := loadDirIntoMap(r.builtinDir, newTemplates); err != nil {
+		return fmt.Errorf("load builtin templates: %w", err)
+	}
+	// Custom templates override builtins with matching IDs.
+	if err := loadDirIntoMap(r.customDir, newTemplates); err != nil {
+		return fmt.Errorf("load custom templates: %w", err)
+	}
+
+	r.templates = newTemplates
+	return nil
+}
+
+// loadDirIntoMap reads all *.yaml files from dir and merges them into m.
+// Missing or non-existent dirs are treated as empty (no error).
+func loadDirIntoMap(dir string, m map[string]*AppTemplate) error {
+	if dir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read dir %s: %w", dir, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return fmt.Errorf("read %s: %w", e.Name(), err)
+		}
+		var t AppTemplate
+		if err := yaml.Unmarshal(data, &t); err != nil {
+			return fmt.Errorf("parse %s: %w", e.Name(), err)
+		}
+		id := strings.TrimSuffix(e.Name(), ".yaml")
+		m[id] = &t
+	}
+	return nil
+}
+
 // Get returns the app template for templateID, or nil if no template is registered.
 // A nil template is valid — it means passthrough (no field extraction or mapping).
 func (r *Registry) Get(templateID string) (*AppTemplate, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if t, ok := r.templates[templateID]; ok {
 		return t, nil
 	}
@@ -145,6 +254,8 @@ func (r *Registry) Get(templateID string) (*AppTemplate, error) {
 
 // List returns all registered app templates keyed by ID.
 func (r *Registry) List() map[string]*AppTemplate {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := make(map[string]*AppTemplate, len(r.templates))
 	for k, v := range r.templates {
 		out[k] = v
@@ -192,7 +303,9 @@ func InferEventTypeFromKeys(payload interface{}, keys []EventTypeKeyRule) string
 // If the template has event_type_keys configured and event_type is not already extracted,
 // it synthesizes event_type from the payload structure.
 func (r *Registry) ExtractFields(templateID string, payload []byte) (map[string]string, error) {
+	r.mu.RLock()
 	t, ok := r.templates[templateID]
+	r.mu.RUnlock()
 	if !ok {
 		return map[string]string{}, nil
 	}
@@ -223,7 +336,9 @@ func (r *Registry) ExtractFields(templateID string, payload []byte) (map[string]
 // Checks display_templates[event_type] first, then falls back to display_template.
 // Returns "Event received" when no template is configured.
 func (r *Registry) RenderDisplayText(templateID string, fields map[string]string) string {
+	r.mu.RLock()
 	t, ok := r.templates[templateID]
+	r.mu.RUnlock()
 	if !ok {
 		return "Event received"
 	}
@@ -253,7 +368,9 @@ func (r *Registry) RenderDisplayText(templateID string, fields map[string]string
 // "{primary}:{compound}" first, then falls back to the primary key alone.
 // Returns "info" for unknown values or missing configuration.
 func (r *Registry) MapSeverity(templateID string, fields map[string]string) string {
+	r.mu.RLock()
 	t, ok := r.templates[templateID]
+	r.mu.RUnlock()
 	if !ok || t.Webhook.SeverityField == "" || len(t.Webhook.SeverityMapping) == 0 {
 		return "info"
 	}

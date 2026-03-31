@@ -6,12 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"testing/fstest"
 
 	"github.com/digitalcheffe/nora/internal/api"
 	"github.com/digitalcheffe/nora/internal/apptemplate"
-	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
-	"testing/fstest"
 )
 
 // newAppTemplatesRouter builds a chi router with the app templates handler under /api/v1.
@@ -40,10 +39,9 @@ webhook:
 		t.Fatalf("build registry: %v", err)
 	}
 
-	db := newTestDB(t)
-	customRepo := repo.NewCustomProfileRepo(db)
+	customDir := t.TempDir()
 
-	h := api.NewProfilesHandler(registry, customRepo)
+	h := api.NewProfilesHandler(registry, customDir)
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) {
 		h.Routes(r)

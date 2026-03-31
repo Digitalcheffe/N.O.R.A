@@ -74,7 +74,6 @@ func main() {
 	resourceRollupRepo := repo.NewResourceRollupRepo(db)
 	infraComponentRepo := repo.NewInfraComponentRepo(db)
 	dockerEngineRepo := repo.NewDockerEngineRepo(db)
-	customProfileRepo := repo.NewCustomProfileRepo(db)
 	infraRepo := repo.NewInfraRepo(db)
 	settingsRepo := repo.NewSettingsRepo(db)
 	metricsRepo := repo.NewMetricsRepo(db)
@@ -125,12 +124,20 @@ func main() {
 	// automatically trigger rule evaluation with no per-callsite changes.
 	store.Events = rules.NewNotifyingEventRepo(store.Events, rulesEngine)
 
-	// App template registry — load all bundled YAML app templates
-	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
+	// App template registry — export embedded templates to disk then load from disk.
+	builtinDir := cfg.TemplatesPath + "/builtin"
+	customDir := cfg.TemplatesPath + "/custom"
+	if err := os.MkdirAll(customDir, 0755); err != nil {
+		log.Fatalf("create custom templates dir: %v", err)
+	}
+	if err := apptemplate.ExportBuiltins(noraappprofiles.Files, builtinDir); err != nil {
+		log.Fatalf("export builtin templates: %v", err)
+	}
+	registry, err := apptemplate.NewRegistryFromDisk(builtinDir, customDir)
 	if err != nil {
 		log.Fatalf("app template registry init failed: %v", err)
 	}
-	log.Printf("loaded %d app templates", len(registry.List()))
+	log.Printf("loaded %d app templates from %s", len(registry.List()), cfg.TemplatesPath)
 
 	limiter := ingest.NewRateLimiter()
 
@@ -317,7 +324,7 @@ func main() {
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, eventRepo, store).Routes(r)
-		api.NewProfilesHandler(registry, customProfileRepo).Routes(r)
+		api.NewProfilesHandler(registry, customDir).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDockerDiscoveryHandler(store, registry).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)

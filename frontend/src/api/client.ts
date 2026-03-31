@@ -284,6 +284,9 @@ export const appTemplates = {
 
   deleteCustom: (id: string) =>
     request<void>('DELETE', `/app-templates/custom/${id}`),
+
+  reload: () =>
+    request<{ loaded: number }>('POST', '/app-templates/reload'),
 }
 
 // ── Infrastructure Integrations ───────────────────────────────────────────────
