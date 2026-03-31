@@ -249,6 +249,16 @@ func main() {
 		go watcher.Start(dockerCtx)
 	}
 
+	// Image update poller — checks container registries daily at 02:00 UTC for
+	// newer image versions.  Skipped if the Docker socket is not available.
+	imagePollerCtx, imagePollerCancel := context.WithCancel(context.Background())
+	defer imagePollerCancel()
+	if imagePoller, err := docker.NewImageUpdatePoller(store); err != nil {
+		log.Printf("image update poller: socket not available, skipping (%v)", err)
+	} else {
+		go imagePoller.Start(imagePollerCtx)
+	}
+
 	// Docker ResourcePoller — metrics collection is driven by the scan scheduler
 	// (every 2 minutes via DockerMetricsScanner) rather than a standalone ticker.
 	// The poller is registered with the scheduler so PollAll is called on the
