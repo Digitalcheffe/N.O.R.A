@@ -24,13 +24,30 @@ func NewDNSChecker(store *repo.Store) *DNSChecker {
 }
 
 // Run executes a DNS check for the given MonitorCheck and persists the result.
-// On a status transition an event is created.
+// If no baseline is stored yet, the first successful result is captured as the
+// baseline so future runs can detect changes. On a status transition an event is created.
 func (d *DNSChecker) Run(ctx context.Context, check *models.MonitorCheck) error {
 	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	result := d.resolve(runCtx, check.Target, check.DNSRecordType, check.DNSExpectedValue)
 	cancel()
 
 	now := time.Now().UTC()
+
+	// If no baseline is stored yet and this run resolved successfully, capture it now.
+	if check.DNSExpectedValue == "" && result.Status == "up" {
+		var det struct {
+			Records []string `json:"records"`
+		}
+		if json.Unmarshal(result.Details, &det) == nil && len(det.Records) > 0 {
+			baseline := det.Records[0]
+			if err := d.store.Checks.SetDNSBaseline(ctx, check.ID, baseline); err != nil {
+				log.Printf("dns checker: set baseline for %s: %v", check.ID, err)
+			} else {
+				check.DNSExpectedValue = baseline
+				log.Printf("dns checker: baseline captured for %q — %s", check.Name, baseline)
+			}
+		}
+	}
 
 	prevStatus := check.LastStatus
 	if prevStatus != "" && prevStatus != result.Status {

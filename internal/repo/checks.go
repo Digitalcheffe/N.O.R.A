@@ -27,6 +27,8 @@ type CheckRepo interface {
 	UpsertForComponent(ctx context.Context, check *models.MonitorCheck) error
 	// ExistsForTypeAndTarget reports whether any check with the given type and target exists.
 	ExistsForTypeAndTarget(ctx context.Context, checkType, target string) (bool, error)
+	// SetDNSBaseline stores the captured baseline value for a DNS check.
+	SetDNSBaseline(ctx context.Context, id, baseline string) error
 }
 
 type sqliteCheckRepo struct {
@@ -182,6 +184,15 @@ func (r *sqliteCheckRepo) ExistsForTypeAndTarget(ctx context.Context, checkType,
 		return false, fmt.Errorf("exists check for type/target: %w", err)
 	}
 	return count > 0, nil
+}
+
+func (r *sqliteCheckRepo) SetDNSBaseline(ctx context.Context, id, baseline string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE monitor_checks SET dns_expected_value = ? WHERE id = ?`, baseline, id)
+	if err != nil {
+		return fmt.Errorf("set dns baseline: %w", err)
+	}
+	return nil
 }
 
 // UpsertForComponent inserts or updates a Traefik-owned SSL check identified by

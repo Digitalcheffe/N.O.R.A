@@ -176,14 +176,11 @@ export function CheckForm({
                 ))}
               </div>
             </div>
-            <div className="form-field">
-              <div className="form-label">Expected value <span className="form-label-hint">(optional)</span></div>
-              <input
-                className="form-input"
-                value={form.dns_expected_value}
-                onChange={e => onChange('dns_expected_value', e.target.value)}
-                placeholder="e.g. 1.2.3.4 or mail.example.com"
-              />
+            <div className="form-field form-field-full">
+              <div className="ssl-standalone-warning">
+                The current DNS value will be captured on creation and used as the baseline.
+                An alert fires if the resolved record ever changes.
+              </div>
             </div>
           </>
         )}

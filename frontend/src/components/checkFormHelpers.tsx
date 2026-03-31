@@ -182,6 +182,10 @@ export function renderCheckResult(check: MonitorCheck): ReactNode {
           <span className="check-result-value">{r.record_type != null ? String(r.record_type) : '—'}</span>
           <span className="check-result-label">Resolved</span>
           <span className="check-result-value">{records.length > 0 ? records.join(', ') : '—'}</span>
+          {check.dns_expected_value && <>
+            <span className="check-result-label">Baseline</span>
+            <span className="check-result-value">{check.dns_expected_value}</span>
+          </>}
           <span className="check-result-label">Latency</span>
           <span className="check-result-value">{r.latency_ms != null ? `${r.latency_ms}ms` : '—'}</span>
         </div>

@@ -167,6 +167,30 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// For DNS checks: immediately resolve and capture the current value as the
+	// baseline so the monitor knows what "good" looks like from day one.
+	if check.Type == "dns" {
+		dnsCtx, dnsCancel := context.WithTimeout(r.Context(), 10*time.Second)
+		result := monitor.RunDNS(dnsCtx, check.Target, check.DNSRecordType, "")
+		dnsCancel()
+
+		var det struct {
+			Records []string `json:"records"`
+		}
+		if json.Unmarshal(result.Details, &det) == nil && len(det.Records) > 0 {
+			check.DNSExpectedValue = det.Records[0]
+			_ = h.checks.SetDNSBaseline(r.Context(), check.ID, check.DNSExpectedValue)
+			now := time.Now().UTC()
+			detailsStr := string(result.Details)
+			_ = h.checks.UpdateStatus(r.Context(), check.ID, result.Status, detailsStr, now)
+			// Re-fetch so the response includes the captured baseline and status.
+			if updated, getErr := h.checks.Get(r.Context(), check.ID); getErr == nil {
+				check = updated
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, check)
 }
 
