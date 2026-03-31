@@ -31,6 +31,7 @@ const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   generic_host:  'none',
   docker_engine: 'docker_socket',
   traefik:       'traefik_api',
+  portainer:     'portainer_api',
 }
 
 const TYPE_LABEL: Record<ComponentType, string> = {
@@ -44,6 +45,7 @@ const TYPE_LABEL: Record<ComponentType, string> = {
   generic_host:  'Generic Host',
   docker_engine: 'Docker Engine',
   traefik:       'Traefik',
+  portainer:     'Portainer',
 }
 
 const CAN_HAVE_CHILDREN = new Set<ComponentType>(['proxmox_node', 'bare_metal', 'vm'])
@@ -84,6 +86,9 @@ interface InfraForm {
   // Traefik config
   traefik_api_url: string
   traefik_api_key: string
+  // Portainer config
+  portainer_base_url: string
+  portainer_api_key: string
 }
 
 const DEFAULT_FORM: InfraForm = {
@@ -112,6 +117,8 @@ const DEFAULT_FORM: InfraForm = {
   docker_socket_path: '/var/run/docker.sock',
   traefik_api_url: '',
   traefik_api_key: '',
+  portainer_base_url: '',
+  portainer_api_key: '',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -190,6 +197,14 @@ function formToPayload(form: InfraForm, isEdit: boolean): InfrastructureComponen
         api_key: form.traefik_api_key,
       })
     }
+  } else if (form.type === 'portainer') {
+    const hasCredFields = !!form.portainer_base_url
+    if (!isEdit || hasCredFields) {
+      payload.credentials = JSON.stringify({
+        base_url: form.portainer_base_url,
+        api_key:  form.portainer_api_key,
+      })
+    }
   }
 
   if (SNMP_TYPES.has(form.type)) {
@@ -234,6 +249,8 @@ function componentToForm(c: InfrastructureComponent): InfraForm {
       form.docker_socket_path = (m.socket_path as string) ?? '/var/run/docker.sock'
     } else if (c.type === 'traefik') {
       form.traefik_api_url = (m.api_url as string) ?? ''
+    } else if (c.type === 'portainer') {
+      form.portainer_base_url = (m.base_url as string) ?? ''
     }
   }
 
@@ -606,9 +623,65 @@ export function Infrastructure() {
     return <span className="infra-scan-feedback ok">Status: {r.status}</span>
   }
 
+  function renderPortainerCard(c: InfrastructureComponent) {
+    const isDeleting = deletingId === c.id
+    const isScanning = scanningId === c.id
+
+    return (
+      <div key={c.id} className="infra-card">
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/portainer/${c.id}`)}>
+          <div className="infra-card-title-group">
+            <div className="infra-card-name">
+              {c.name}
+              <span className="infra-card-nav-arrow" aria-hidden="true"> ›</span>
+            </div>
+            <div className="infra-card-meta">Portainer · {c.ip || '—'}</div>
+          </div>
+          <div className="infra-card-status-group" onClick={e => e.stopPropagation()}>
+            <span className={`infra-status-dot ${statusClass(c.last_status)}`} />
+            <span className="infra-status-label">{statusLabel(c.last_status)}</span>
+          </div>
+        </div>
+
+        <div className="infra-card-footer">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+            {lastPolledAt && (
+              <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
+            )}
+            {renderScanFeedback(c.id)}
+          </div>
+          <div className="infra-card-actions">
+            <button
+              className="infra-card-btn accent"
+              onClick={() => navigate(`/infrastructure/portainer/${c.id}`)}
+              disabled={isDeleting || isScanning}
+            >
+              View Detail
+            </button>
+            <button
+              className="infra-card-btn"
+              onClick={() => openEdit(c)}
+              disabled={isDeleting || isScanning}
+            >
+              Edit
+            </button>
+            <button
+              className="infra-card-btn danger"
+              onClick={() => void handleDelete(c.id)}
+              disabled={isDeleting || isScanning}
+            >
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderCard(c: InfrastructureComponent) {
     if (c.type === 'traefik')       return renderTraefikCard(c)
     if (c.type === 'docker_engine') return renderDockerCard(c)
+    if (c.type === 'portainer')     return renderPortainerCard(c)
 
     const res = resourcesMap[c.id]
     const isDeleting = deletingId === c.id
@@ -723,6 +796,7 @@ export function Infrastructure() {
               <option value="generic_host">Generic Host</option>
               <option value="docker_engine">Docker Engine</option>
               <option value="traefik">Traefik</option>
+              <option value="portainer">Portainer</option>
             </select>
           </div>
 
@@ -949,6 +1023,36 @@ export function Infrastructure() {
             <div className="infra-hint">
               NORA will poll the Traefik API every 5 minutes to discover SSL certs and HTTP routes.
               SSL checks are auto-created per cert and shown on the Checks page.
+            </div>
+          </>
+        )}
+
+        {/* ── Portainer credentials ── */}
+        {form.type === 'portainer' && (
+          <>
+            <SectionHeading>
+              Portainer API{' '}
+              {editingId && editingHasCreds
+                ? <span className="infra-cred-saved">Credentials saved</span>
+                : editingId && <span className="infra-optional">(leave blank to keep existing)</span>}
+            </SectionHeading>
+            <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="form-field form-field-full">
+                <div className="form-label">Base URL</div>
+                <input className="form-input" value={form.portainer_base_url}
+                  onChange={e => setField('portainer_base_url', e.target.value)}
+                  placeholder="http://portainer.local:9000" />
+              </div>
+              <div className="form-field form-field-full">
+                <div className="form-label">API Key</div>
+                <input className="form-input" type="password" value={form.portainer_api_key}
+                  onChange={e => setField('portainer_api_key', e.target.value)}
+                  placeholder={editingHasCreds ? 'leave blank to keep saved key' : '••••••••'} />
+              </div>
+            </div>
+            <div className="infra-hint">
+              Generate an API key in Portainer under My Account → Access Tokens.
+              NORA polls every 15 minutes to enrich container image update status.
             </div>
           </>
         )}

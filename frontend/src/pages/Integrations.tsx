@@ -57,6 +57,12 @@ const DRIVERS = [
     description: 'Any network-reachable device — routers, switches, appliances.',
     capabilities: ['ping', 'availability monitoring'],
   },
+  {
+    name: 'portainer',
+    label: 'Portainer',
+    description: 'Container visibility and image update detection via Portainer REST API.',
+    capabilities: ['container discovery', 'image update detection', 'multi-endpoint', 'API polling'],
+  },
 ]
 
 // ── Driver card ───────────────────────────────────────────────────────────────

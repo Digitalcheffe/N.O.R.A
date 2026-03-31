@@ -95,6 +95,7 @@ var credentialSecretFields = map[string][]string{
 	"proxmox_node": {"token_secret"},
 	"synology":     {"password"},
 	"traefik":      {"api_key"},
+	"portainer":    {"api_key"},
 }
 
 // extractCredentialMeta parses stored credentials and returns a copy with
@@ -184,6 +185,7 @@ var validComponentTypes = map[string]bool{
 	"generic_host":  true,
 	"docker_engine": true,
 	"traefik":       true,
+	"portainer":     true,
 }
 
 var validCollectionMethods = map[string]bool{
@@ -192,6 +194,7 @@ var validCollectionMethods = map[string]bool{
 	"snmp":          true,
 	"docker_socket": true,
 	"traefik_api":   true,
+	"portainer_api": true,
 	"none":          true,
 }
 

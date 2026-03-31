@@ -36,6 +36,7 @@ const TYPE_COLOR: Record<ComponentType, string> = {
   generic_host:  '#6b7280',
   docker_engine: '#14b8a6',
   traefik:       '#f97316',
+  portainer:     '#13bef9',
 }
 
 const TYPE_LABEL: Record<ComponentType, string> = {
@@ -49,6 +50,7 @@ const TYPE_LABEL: Record<ComponentType, string> = {
   generic_host:  'Generic Host',
   docker_engine: 'Docker Engine',
   traefik:       'Traefik',
+  portainer:     'Portainer',
 }
 
 const STATUS_COLOR: Record<string, string> = {

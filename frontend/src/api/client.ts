@@ -30,6 +30,9 @@ import type {
   IntegrationDriver,
   Job,
   JobRunResult,
+  PortainerEndpoint,
+  PortainerEndpointSummary,
+  PortainerContainerResource,
   LinkAppInput,
   ListResponse,
   LoginInput,
@@ -535,4 +538,17 @@ export const jobsApi = {
 
   run: (id: string) =>
     request<JobRunResult>('POST', `/jobs/${id}/run`),
+}
+
+// ── Portainer (DD-8) ──────────────────────────────────────────────────────────
+
+export const portainer = {
+  listEndpoints: (componentId: string) =>
+    request<ListResponse<PortainerEndpoint>>('GET', `/integrations/portainer/${componentId}/endpoints`),
+
+  endpointSummary: (componentId: string, endpointId: number) =>
+    request<PortainerEndpointSummary>('GET', `/integrations/portainer/${componentId}/endpoints/${endpointId}/summary`),
+
+  endpointContainers: (componentId: string, endpointId: number) =>
+    request<ListResponse<PortainerContainerResource>>('GET', `/integrations/portainer/${componentId}/endpoints/${endpointId}/containers`),
 }
