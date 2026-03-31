@@ -277,7 +277,8 @@ func RunDNS(ctx context.Context, target, recordType, expectedValue, resolver str
 			}
 		}
 		if !found {
-			status = "down"
+			// Record resolved but differs from baseline — warn rather than down.
+			status = "warn"
 		}
 	}
 

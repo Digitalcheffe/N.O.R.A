@@ -66,10 +66,14 @@ func (d *DNSChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 func (d *DNSChecker) createStatusEvent(ctx context.Context, check *models.MonitorCheck, result Result, now time.Time) error {
 	level := "info"
 	var displayText string
-	if result.Status == "down" {
+	switch result.Status {
+	case "down":
 		level = "error"
 		displayText = fmt.Sprintf("DNS check failed — %s (%s)", check.Name, check.Target)
-	} else {
+	case "warn":
+		level = "warn"
+		displayText = fmt.Sprintf("DNS record changed — %s (%s)", check.Name, check.Target)
+	default:
 		displayText = fmt.Sprintf("DNS check restored — %s (%s)", check.Name, check.Target)
 	}
 
