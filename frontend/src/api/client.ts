@@ -454,3 +454,29 @@ export const metrics = {
   instance: () =>
     request<InstanceMetrics>('GET', '/metrics'),
 }
+
+// ── Web Push ──────────────────────────────────────────────────────────────────
+
+interface PushKeys {
+  p256dh: string
+  auth: string
+}
+
+interface PushSubscribeInput {
+  endpoint: string
+  keys: PushKeys
+}
+
+export const push = {
+  vapidPublicKey: () =>
+    request<{ public_key: string }>('GET', '/push/vapid-public-key'),
+
+  subscribe: (input: PushSubscribeInput) =>
+    request<void>('POST', '/push/subscribe', input),
+
+  unsubscribe: (input: { endpoint: string }) =>
+    request<void>('DELETE', '/push/subscribe', input),
+
+  test: () =>
+    request<{ status: string }>('POST', '/push/test'),
+}
