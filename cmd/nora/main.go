@@ -20,6 +20,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/ingest"
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
+	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/monitor"
 	"github.com/digitalcheffe/nora/internal/push"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -31,6 +32,8 @@ import (
 	"github.com/digitalcheffe/nora/migrations"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func main() {
@@ -95,6 +98,18 @@ func main() {
 		snapshotRepo,
 		ruleRepo,
 	)
+
+	// Bootstrap admin account — only runs when the users table is empty and
+	// NORA_ADMIN_EMAIL + NORA_ADMIN_PASSWORD are both set.
+	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
+		if n, err := userRepo.Count(context.Background()); err == nil && n == 0 {
+			if err := seedAdmin(context.Background(), userRepo, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+				log.Printf("admin bootstrap failed: %v", err)
+			} else {
+				log.Printf("admin bootstrap: created admin account for %s", cfg.AdminEmail)
+			}
+		}
+	}
 
 	// Startup event — written once so users can see when NORA last started.
 	jobs.EmitStartupEvent(context.Background(), store)
@@ -335,6 +350,21 @@ func main() {
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+// seedAdmin creates the first admin user from the bootstrap env vars.
+// It must only be called when the users table is empty.
+func seedAdmin(ctx context.Context, users repo.UserRepo, email, password string) error {
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	u := &models.User{
+		ID:    uuid.NewString(),
+		Email: email,
+		Role:  "admin",
+	}
+	return users.Create(ctx, u, string(hashed))
 }
 
 // spaHandler serves static files when they exist, and falls back to index.html

@@ -156,6 +156,8 @@ NORA_SMTP_FROM         From address for digest emails
 NORA_DIGEST_SCHEDULE   Cron expression for monthly digest (default: 0 8 1 * *)
 NORA_VAPID_PUBLIC      VAPID public key (auto-generated on first run if absent)
 NORA_VAPID_PRIVATE     VAPID private key (auto-generated on first run if absent)
+NORA_ADMIN_EMAIL       Bootstrap admin email — seeds first admin only when users table is empty
+NORA_ADMIN_PASSWORD    Bootstrap admin password — used with NORA_ADMIN_EMAIL
 ```
 
 ---
