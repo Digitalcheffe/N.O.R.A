@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users } from '../api/client'
+import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push } from '../api/client'
+import { usePushSubscription } from '../hooks/usePushSubscription'
 import type {
   AppTemplate,
   CustomProfile,
@@ -205,6 +206,107 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
+// ── Web Push section ──────────────────────────────────────────────────────────
+
+function WebPushSection() {
+  const { isSupported, isSubscribed, isLoading, subscribe, unsubscribe } = usePushSubscription()
+  const [permission, setPermission] = useState<NotificationPermission | 'unknown'>('unknown')
+  const [testMsg, setTestMsg] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [actionError, setActionError] = useState('')
+
+  useEffect(() => {
+    if (typeof Notification !== 'undefined') {
+      setPermission(Notification.permission)
+    }
+  }, [])
+
+  const handleSubscribe = async () => {
+    setActionError('')
+    try {
+      // Request notification permission first if needed
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        const result = await Notification.requestPermission()
+        setPermission(result)
+        if (result !== 'granted') return
+      }
+      await subscribe()
+      setPermission('granted')
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Failed to subscribe')
+    }
+  }
+
+  const handleUnsubscribe = async () => {
+    setActionError('')
+    try {
+      await unsubscribe()
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Failed to unsubscribe')
+    }
+  }
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestMsg('')
+    try {
+      await push.test()
+      setTestMsg('Test notification sent.')
+    } catch (e: unknown) {
+      setTestMsg(e instanceof Error ? e.message : 'Test failed')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <section className="settings-section">
+      <div className="section-header">
+        <span className="section-title">Web Push Notifications</span>
+      </div>
+
+      {!isSupported ? (
+        <div className="push-status push-status--unsupported">
+          <span className="push-status-dot push-status-dot--off">✕</span>
+          Not supported in this browser. Web Push requires HTTPS or localhost.
+        </div>
+      ) : permission === 'denied' ? (
+        <div className="push-status push-status--denied">
+          <span className="push-status-dot push-status-dot--off">✕</span>
+          Notifications are blocked. Reset permissions in your browser settings, then reload.
+        </div>
+      ) : (
+        <div className="push-status-row">
+          <div className={`push-status ${isSubscribed ? 'push-status--on' : 'push-status--off'}`}>
+            <span className={`push-status-dot ${isSubscribed ? 'push-status-dot--on' : 'push-status-dot--off'}`}>
+              {isSubscribed ? '●' : '○'}
+            </span>
+            {isSubscribed ? 'Subscribed on this device' : 'Not subscribed'}
+          </div>
+          <div className="settings-actions" style={{ marginTop: 12 }}>
+            {isSubscribed ? (
+              <button className="settings-btn secondary" onClick={handleUnsubscribe} disabled={isLoading}>
+                {isLoading ? 'Working…' : 'Unsubscribe'}
+              </button>
+            ) : (
+              <button className="settings-btn primary" onClick={handleSubscribe} disabled={isLoading}>
+                {isLoading ? 'Working…' : 'Enable Notifications'}
+              </button>
+            )}
+            {isSubscribed && (
+              <button className="settings-btn secondary" onClick={handleTest} disabled={testing}>
+                {testing ? 'Sending…' : 'Send test notification'}
+              </button>
+            )}
+            {actionError && <span className="settings-status-msg" style={{ color: 'var(--red)' }}>{actionError}</span>}
+            {testMsg && <span className="settings-status-msg">{testMsg}</span>}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ── Notifications tab ─────────────────────────────────────────────────────────
 
 function NotificationsTab() {
@@ -366,14 +468,7 @@ function NotificationsTab() {
       </section>
 
       {/* Web Push */}
-      <section className="settings-section">
-        <div className="section-header">
-          <span className="section-title">Web Push</span>
-        </div>
-        <div className="settings-placeholder" style={{ fontStyle: 'italic' }}>
-          Push notifications — coming soon
-        </div>
-      </section>
+      <WebPushSection />
 
       {/* Digest Schedule */}
       <section className="settings-section">

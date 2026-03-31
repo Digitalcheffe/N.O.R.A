@@ -566,3 +566,32 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Web Push section ─────────────────────────────────────────────────────── */
+
+.push-status-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.push-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-family: var(--sans);
+  padding: 4px 0;
+}
+
+.push-status-dot {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.push-status-dot--on  { color: var(--green, #4ade80); }
+.push-status-dot--off { color: var(--text2); }
+
+.push-status--on   { color: var(--text); }
+.push-status--off  { color: var(--text2); }
+.push-status--unsupported { color: var(--text2); font-style: italic; }
+.push-status--denied { color: var(--orange, #fb923c); }
