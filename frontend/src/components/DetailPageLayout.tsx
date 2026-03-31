@@ -36,6 +36,8 @@ export interface DetailPageLayoutProps {
   sourceType?: string
   /** Required for EventFeed at the bottom */
   sourceId: string
+  /** Optional custom title for the EventFeed section (defaults to "RECENT EVENTS") */
+  eventFeedTitle?: string
   /** Unique content section — rendered between dividers */
   children: React.ReactNode
 }
@@ -62,6 +64,7 @@ export function DetailPageLayout({
   headerExtra,
   sourceType,
   sourceId,
+  eventFeedTitle,
   children,
 }: DetailPageLayoutProps) {
   const navigate = useNavigate()
@@ -128,7 +131,7 @@ export function DetailPageLayout({
         <div className="dpl-divider" />
 
         {/* ── Event feed — always at the bottom, not configurable ── */}
-        <EventFeed sourceType={sourceType} sourceId={sourceId} />
+        <EventFeed sourceType={sourceType} sourceId={sourceId} title={eventFeedTitle} />
 
       </div>
     </>

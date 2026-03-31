@@ -369,6 +369,7 @@ export type ComponentType =
   | 'generic_host'
   | 'docker_engine'
   | 'traefik'
+  | 'portainer'
 
 export type CollectionMethod =
   | 'proxmox_api'
@@ -376,6 +377,7 @@ export type CollectionMethod =
   | 'snmp'
   | 'docker_socket'
   | 'traefik_api'
+  | 'portainer_api'
   | 'none'
 
 export interface InfrastructureComponent {
@@ -747,4 +749,37 @@ export interface JobRunResult {
   status: 'ok' | 'error'
   error?: string
   duration_ms: number
+}
+
+// ── Portainer (DD-8) ─────────────────────────────────────────────────────────
+
+export interface PortainerEndpoint {
+  id: number
+  name: string
+  type: number
+}
+
+export interface PortainerEndpointSummary {
+  containers_running: number
+  containers_stopped: number
+  images_total: number
+  images_dangling: number
+  images_disk_bytes: number
+  volumes_total: number
+  volumes_unused: number
+  volumes_disk_bytes: number
+  networks_total: number
+}
+
+export interface PortainerContainerResource {
+  id: string
+  name: string
+  image: string
+  state: string
+  cpu_percent: number
+  mem_bytes: number
+  mem_limit_bytes: number
+  mem_percent: number
+  image_update_available: boolean
+  stack?: string
 }

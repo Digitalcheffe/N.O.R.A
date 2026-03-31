@@ -263,7 +263,7 @@ func (w *PortainerEnrichmentWorker) emitImageUpdateEvent(
 		ID:         uuid.NewString(),
 		Level:      "info",
 		SourceName: comp.Name,
-		SourceType: "infrastructure",
+		SourceType: "docker_engine",
 		SourceID:   comp.ID,
 		Title:      fmt.Sprintf("Image update available — %s (%s)", containerName, image),
 		Payload:    string(payload),

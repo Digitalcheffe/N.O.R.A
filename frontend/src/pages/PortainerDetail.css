@@ -1,0 +1,290 @@
+/* ── Portainer Detail Page ────────────────────────────────────────────────── */
+
+/* ── Loading / Error states ──────────────────────────────────────────────── */
+
+.pt-loading {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text2);
+  padding: 24px 0;
+}
+
+.pt-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--red);
+  padding: 16px 0;
+}
+
+.pt-retry-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.pt-retry-btn:hover {
+  border-color: var(--text2);
+  color: var(--text);
+}
+
+.pt-empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  padding: 8px 0;
+}
+
+/* ── Stat cards grid ─────────────────────────────────────────────────────── */
+
+.pt-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.pt-stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.pt-stat-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+
+.pt-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 0;
+}
+
+.pt-stat-label {
+  color: var(--text2);
+}
+
+.pt-stat-value {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.pt-stat-highlight .pt-stat-value {
+  color: var(--yellow, #eab308);
+}
+
+/* ── Dismissible notice ──────────────────────────────────────────────────── */
+
+.pt-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 5px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.pt-notice-icon {
+  color: var(--yellow, #eab308);
+  flex-shrink: 0;
+}
+
+.pt-notice-text {
+  color: var(--text);
+  flex: 1;
+}
+
+.pt-notice-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text3);
+  font-size: 12px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pt-notice-dismiss:hover {
+  color: var(--text);
+}
+
+/* ── Endpoint tabs ───────────────────────────────────────────────────────── */
+
+.pt-tabs-container {
+  margin-bottom: 4px;
+}
+
+.pt-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.pt-tab {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text2);
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  padding: 5px 14px;
+  cursor: pointer;
+  margin-bottom: -1px;
+  position: relative;
+}
+
+.pt-tab:hover {
+  color: var(--text);
+}
+
+.pt-tab-active {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg, var(--surface));
+  border-bottom-color: var(--bg, var(--surface));
+}
+
+/* ── Section title ───────────────────────────────────────────────────────── */
+
+.pt-section-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Container resource table ────────────────────────────────────────────── */
+
+.pt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.pt-table th {
+  text-align: left;
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 10px 8px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.pt-table td {
+  padding: 8px 10px 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.pt-table tr:last-child td {
+  border-bottom: none;
+}
+
+.pt-th-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.pt-th-sortable:hover {
+  color: var(--text2);
+}
+
+.pt-row-stopped td {
+  opacity: 0.55;
+}
+
+.pt-cell-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pt-stack-badge {
+  font-size: 10px;
+  color: var(--accent, #6366f1);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pt-cell-mono {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pt-cell-image {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text2);
+}
+
+/* ── Image update badges ─────────────────────────────────────────────────── */
+
+.pt-update-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  border-radius: 3px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.pt-update-ok {
+  color: var(--green);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.pt-update-warn {
+  color: var(--yellow, #eab308);
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+/* ── Endpoint view wrapper ───────────────────────────────────────────────── */
+
+.pt-endpoint-view {
+  /* no extra padding — parent dpl-content handles it */
+}
