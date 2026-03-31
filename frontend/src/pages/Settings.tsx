@@ -1,26 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push } from '../api/client'
+import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push, notifyRules } from '../api/client'
 import { usePushSubscription } from '../hooks/usePushSubscription'
 import type {
   AppTemplate,
+  CreateRuleInput,
   CustomProfile,
   DigestFrequency,
   DigestSchedule,
   InstanceMetrics,
+  Rule,
+  RuleCondition,
+  RuleConditionLogic,
+  RuleSource,
+  Severity,
   SMTPSettings,
   User,
 } from '../api/types'
 
 import './Settings.css'
 
-type Tab = 'apps' | 'notifications' | 'metrics' | 'users'
+type Tab = 'apps' | 'notifications' | 'notify_rules' | 'metrics' | 'users'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'apps', label: 'Apps' },
   { id: 'notifications', label: 'Notifications' },
+  { id: 'notify_rules', label: 'Notify Rules' },
   { id: 'metrics', label: 'Instance Metrics' },
   { id: 'users', label: 'Users' },
 ]
@@ -823,11 +830,478 @@ function UsersTab() {
   )
 }
 
+// ── Notify Rules tab ──────────────────────────────────────────────────────────
+
+const SEVERITY_OPTIONS: Severity[] = ['debug', 'info', 'warn', 'error', 'critical']
+const FIELD_OPTIONS = ['display_text', 'severity', 'source_name', 'event_type']
+const OPERATOR_OPTIONS = [
+  { value: 'contains', label: 'contains' },
+  { value: 'does_not_contain', label: 'does not contain' },
+  { value: 'is', label: 'is' },
+  { value: 'is_not', label: 'is not' },
+]
+
+function emptyRule(): CreateRuleInput {
+  return {
+    name: '',
+    enabled: true,
+    source_id: null,
+    source_type: null,
+    severity: null,
+    conditions: [],
+    condition_logic: 'AND',
+    delivery_email: false,
+    delivery_push: false,
+    delivery_webhook: false,
+    webhook_url: null,
+    notif_title: '{display_text}',
+    notif_body: 'Severity: {severity}\nSource: {source_name}',
+  }
+}
+
+interface RulePanelProps {
+  rule: CreateRuleInput | null  // null = new rule
+  editingId: string | null
+  sources: RuleSource[]
+  smtpConfigured: boolean
+  hasPushSubscription: boolean
+  onSave: (input: CreateRuleInput) => Promise<void>
+  onClose: () => void
+  saving: boolean
+  saveError: string
+}
+
+function RulePanel({ rule, editingId, sources, smtpConfigured, hasPushSubscription, onSave, onClose, saving, saveError }: RulePanelProps) {
+  const [form, setForm] = useState<CreateRuleInput>(rule ?? emptyRule())
+
+  // Sync form when rule prop changes (e.g. open different rule).
+  useEffect(() => { setForm(rule ?? emptyRule()) }, [rule])
+
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  function addCondition() {
+    setForm(f => ({ ...f, conditions: [...f.conditions, { field: 'display_text', operator: 'contains', value: '' }] }))
+  }
+
+  function removeCondition(i: number) {
+    setForm(f => ({ ...f, conditions: f.conditions.filter((_, idx) => idx !== i) }))
+  }
+
+  function updateCondition(i: number, patch: Partial<RuleCondition>) {
+    setForm(f => ({
+      ...f,
+      conditions: f.conditions.map((c, idx) => idx === i ? { ...c, ...patch } : c),
+    }))
+  }
+
+  function handleSourceChange(val: string) {
+    if (val === '') {
+      setForm(f => ({ ...f, source_id: null, source_type: null }))
+    } else {
+      const src = sources.find(s => (s.id ?? '') === val)
+      if (!src) return
+      if (src.type === 'app') {
+        setForm(f => ({ ...f, source_id: src.id, source_type: 'app' }))
+      } else {
+        setForm(f => ({ ...f, source_id: null, source_type: src.type }))
+      }
+    }
+  }
+
+  const sourceValue = form.source_type === 'app' ? (form.source_id ?? '') : (form.source_type ?? '')
+
+  return (
+    <div className="rule-panel-overlay" onClick={onClose}>
+      <div className="rule-panel" ref={panelRef} onClick={e => e.stopPropagation()}>
+        <div className="rule-panel-header">
+          <span className="rule-panel-title">{editingId ? 'Edit Rule' : 'New Rule'}</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="rule-panel-body">
+          <div className="settings-field-row">
+            <label className="settings-label">Rule Name</label>
+            <input className="settings-input" placeholder="e.g. Sonarr download failures"
+              value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          </div>
+
+          <div className="settings-field-row">
+            <label className="settings-label">Source</label>
+            <select className="settings-input settings-select" value={sourceValue}
+              onChange={e => handleSourceChange(e.target.value)}>
+              {sources.map(s => (
+                <option key={s.id ?? ''} value={s.id ?? ''}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="settings-field-row">
+            <label className="settings-label">Severity</label>
+            <select className="settings-input settings-select"
+              value={form.severity ?? ''}
+              onChange={e => setForm(f => ({ ...f, severity: (e.target.value as Severity) || null }))}>
+              <option value="">Any severity</option>
+              {SEVERITY_OPTIONS.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="settings-field-row">
+            <label className="settings-label">Conditions</label>
+            <button className="settings-btn secondary settings-btn--sm" onClick={addCondition}>+ Add condition</button>
+          </div>
+          {form.conditions.length > 0 && (
+            <div className="rule-conditions-list">
+              {form.conditions.map((c, i) => (
+                <div key={i} className="rule-condition-row">
+                  <select className="settings-input settings-select rule-cond-field"
+                    value={c.field} onChange={e => updateCondition(i, { field: e.target.value })}>
+                    {FIELD_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <select className="settings-input settings-select rule-cond-op"
+                    value={c.operator} onChange={e => updateCondition(i, { operator: e.target.value as RuleCondition['operator'] })}>
+                    {OPERATOR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <input className="settings-input rule-cond-value" placeholder="value"
+                    value={c.value} onChange={e => updateCondition(i, { value: e.target.value })} />
+                  <button className="settings-btn danger settings-btn--sm" onClick={() => removeCondition(i)}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {form.conditions.length > 1 && (
+            <div className="rule-logic-row">
+              <span className="settings-label">Match:</span>
+              <label className="rule-logic-option">
+                <input type="radio" name="logic" value="AND"
+                  checked={form.condition_logic === 'AND'}
+                  onChange={() => setForm(f => ({ ...f, condition_logic: 'AND' as RuleConditionLogic }))} />
+                ALL conditions (AND)
+              </label>
+              <label className="rule-logic-option">
+                <input type="radio" name="logic" value="OR"
+                  checked={form.condition_logic === 'OR'}
+                  onChange={() => setForm(f => ({ ...f, condition_logic: 'OR' as RuleConditionLogic }))} />
+                ANY condition (OR)
+              </label>
+            </div>
+          )}
+
+          <div className="settings-field-row">
+            <label className="settings-label">Delivery</label>
+            <div className="rule-delivery-pills">
+            <button
+              type="button"
+              className={`rule-delivery-pill${form.delivery_email ? ' rule-delivery-pill--on' : ''}${!smtpConfigured ? ' rule-delivery-pill--disabled' : ''}`}
+              disabled={!smtpConfigured}
+              title={!smtpConfigured ? 'Configure SMTP on the Notifications tab to enable email delivery.' : undefined}
+              onClick={() => smtpConfigured && setForm(f => ({ ...f, delivery_email: !f.delivery_email }))}>
+              Email
+            </button>
+            <button
+              type="button"
+              className={`rule-delivery-pill${form.delivery_push ? ' rule-delivery-pill--on' : ''}${!hasPushSubscription ? ' rule-delivery-pill--disabled' : ''}`}
+              disabled={!hasPushSubscription}
+              title={!hasPushSubscription ? 'No active push subscriptions. Subscribe from a browser first.' : undefined}
+              onClick={() => hasPushSubscription && setForm(f => ({ ...f, delivery_push: !f.delivery_push }))}>
+              Web Push
+            </button>
+            <button
+              type="button"
+              className={`rule-delivery-pill${form.delivery_webhook ? ' rule-delivery-pill--on' : ''}`}
+              onClick={() => setForm(f => ({ ...f, delivery_webhook: !f.delivery_webhook }))}>
+              Webhook
+            </button>
+            </div>
+          </div>
+          {form.delivery_webhook && (
+            <div className="settings-field-row">
+              <label className="settings-label">URL</label>
+              <input className="settings-input" placeholder="https://hooks.example.com/..."
+                value={form.webhook_url ?? ''}
+                onChange={e => setForm(f => ({ ...f, webhook_url: e.target.value || null }))} />
+            </div>
+          )}
+
+          <div className="settings-field-row" style={{ marginBottom: 0 }}>
+            <label className="settings-label">Notification</label>
+          </div>
+          <div className="settings-field-row">
+            <label className="settings-label">Title</label>
+            <input className="settings-input" value={form.notif_title}
+              onChange={e => setForm(f => ({ ...f, notif_title: e.target.value }))} />
+          </div>
+          <div className="settings-field-row">
+            <label className="settings-label">Body</label>
+            <textarea className="settings-input rule-body-textarea" rows={3} value={form.notif_body}
+              onChange={e => setForm(f => ({ ...f, notif_body: e.target.value }))} />
+          </div>
+          <div className="rule-tokens-hint">
+            Available tokens: <code>{'{display_text}'}</code> <code>{'{severity}'}</code> <code>{'{source_name}'}</code>
+          </div>
+        </div>
+        {form.delivery_email && !smtpConfigured && (
+          <div className="rule-delivery-warning" style={{ margin: '0 20px 0' }}>
+            Email delivery requires SMTP to be configured. Go to the Notifications tab to set it up.
+          </div>
+        )}
+        <div className="rule-panel-footer">
+          {saveError && <span className="settings-status-msg" style={{ color: 'var(--red)' }}>{saveError}</span>}
+          <button className="settings-btn secondary" onClick={onClose}>Cancel</button>
+          <button className="settings-btn primary" onClick={() => onSave(form)}
+            disabled={saving || (form.delivery_email && !smtpConfigured)}>
+            {saving ? 'Saving…' : 'Save Rule'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface NotifyRulesTabProps {
+  smtpConfigured: boolean
+}
+
+function NotifyRulesTab({ smtpConfigured }: NotifyRulesTabProps) {
+  const [ruleList, setRuleList] = useState<Rule[]>([])
+  const [sources, setSources] = useState<RuleSource[]>([{ id: null, label: 'Any source', type: null }])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [search, setSearch] = useState('')
+
+  // Panel state
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [editingRule, setEditingRule] = useState<Rule | null>(null)
+  const [prefillInput, setPrefillInput] = useState<CreateRuleInput | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  const { isSubscribed } = usePushSubscription()
+
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([notifyRules.list(), notifyRules.sources()])
+      .then(([listRes, srcRes]) => {
+        setRuleList(listRes.data ?? [])
+        setSources(srcRes.sources)
+      })
+      .catch(() => setLoadError('Failed to load rules'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  // Handle prefill from URL params (triggered by "Save as rule" in EventRow).
+  useEffect(() => {
+    const prefill = searchParams.get('prefill')
+    if (prefill) {
+      try {
+        const data = JSON.parse(decodeURIComponent(prefill)) as CreateRuleInput
+        setPrefillInput(data)
+        setEditingRule(null)
+        setPanelOpen(true)
+        // Clear the prefill param so re-renders don't reopen the panel.
+        const next = new URLSearchParams(searchParams)
+        next.delete('prefill')
+        setSearchParams(next, { replace: true })
+      } catch {
+        // ignore malformed prefill
+      }
+    }
+  }, [searchParams, setSearchParams])
+
+  const openNew = () => {
+    setEditingRule(null)
+    setPrefillInput(null)
+    setSaveError('')
+    setPanelOpen(true)
+  }
+
+  const openEdit = (rule: Rule) => {
+    setEditingRule(rule)
+    setPrefillInput(null)
+    setSaveError('')
+    setPanelOpen(true)
+  }
+
+  const closePanel = () => {
+    setPanelOpen(false)
+    setEditingRule(null)
+    setPrefillInput(null)
+    setSaveError('')
+  }
+
+  const handleSave = async (input: CreateRuleInput) => {
+    if (!input.name.trim()) {
+      setSaveError('Name is required.')
+      return
+    }
+    setSaving(true)
+    setSaveError('')
+    try {
+      if (editingRule) {
+        const updated = await notifyRules.update(editingRule.id, input)
+        setRuleList(prev => prev.map(r => r.id === updated.id ? updated : r))
+      } else {
+        const created = await notifyRules.create(input)
+        setRuleList(prev => [...prev, created])
+      }
+      closePanel()
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggle = async (rule: Rule) => {
+    try {
+      const updated = await notifyRules.toggle(rule.id)
+      setRuleList(prev => prev.map(r => r.id === updated.id ? updated : r))
+    } catch {
+      // leave list unchanged
+    }
+  }
+
+  const handleDelete = async (rule: Rule) => {
+    try {
+      await notifyRules.delete(rule.id)
+      setRuleList(prev => prev.filter(r => r.id !== rule.id))
+    } catch {
+      // leave list unchanged
+    }
+  }
+
+  const sourceName = (rule: Rule) => {
+    if (!rule.source_id && !rule.source_type) return 'Any source'
+    const src = sources.find(s =>
+      rule.source_type === 'app' ? s.id === rule.source_id : s.id === rule.source_type
+    )
+    return src?.label ?? rule.source_id ?? rule.source_type ?? 'Unknown'
+  }
+
+  const conditionSummary = (rule: Rule) => {
+    if (!rule.conditions || rule.conditions.length === 0) return '(no conditions — fires on gate match only)'
+    return rule.conditions.map(c => `${c.field} ${c.operator.replace('_', ' ')} "${c.value}"`).join(` ${rule.condition_logic} `)
+  }
+
+  const deliveryLabels = (rule: Rule) => {
+    const labels = []
+    if (rule.delivery_email) labels.push('Email')
+    if (rule.delivery_push) labels.push('Push')
+    if (rule.delivery_webhook) labels.push('Webhook')
+    return labels.join(' · ') || 'None'
+  }
+
+  // Build the panel form input from the editing rule.
+  const panelInput: CreateRuleInput | null = editingRule ? {
+    name: editingRule.name,
+    enabled: editingRule.enabled,
+    source_id: editingRule.source_id,
+    source_type: editingRule.source_type,
+    severity: editingRule.severity,
+    conditions: editingRule.conditions,
+    condition_logic: editingRule.condition_logic,
+    delivery_email: editingRule.delivery_email,
+    delivery_push: editingRule.delivery_push,
+    delivery_webhook: editingRule.delivery_webhook,
+    webhook_url: editingRule.webhook_url,
+    notif_title: editingRule.notif_title,
+    notif_body: editingRule.notif_body,
+  } : prefillInput
+
+  const filtered = ruleList.filter(r =>
+    !search || r.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div className="tab-content">
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Notify Rules</span>
+        </div>
+        <p className="settings-placeholder" style={{ marginBottom: 16 }}>
+          Rules fire outbound notifications when an incoming event matches your conditions.
+          Every event is evaluated in real time as it enters NORA.
+        </p>
+        <div className="rule-list-toolbar">
+          <button className="settings-btn primary" onClick={openNew}>+ New Rule</button>
+          <input className="settings-input" placeholder="Search rules…" style={{ maxWidth: 240 }}
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+
+        {loading ? (
+          <div className="settings-placeholder">Loading…</div>
+        ) : loadError ? (
+          <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{loadError}</div>
+        ) : filtered.length === 0 ? (
+          <div className="settings-placeholder">
+            {search ? 'No rules match your search.' : 'No rules yet. Create your first rule to start getting notified.'}
+          </div>
+        ) : (
+          <div className="rule-list">
+            {filtered.map(rule => (
+              <div key={rule.id} className={`rule-row${rule.enabled ? '' : ' rule-row--disabled'}`}>
+                <div className="rule-row-top">
+                  <span className={`rule-status-dot${rule.enabled ? ' rule-status-dot--on' : ''}`}>
+                    {rule.enabled ? '●' : '○'}
+                  </span>
+                  <span className="rule-row-name">
+                    {rule.name}
+                    {!rule.enabled && <span className="rule-disabled-label"> (disabled)</span>}
+                  </span>
+                  <span className="rule-row-meta">
+                    {rule.severity ? `${rule.severity} · ` : ''}{sourceName(rule)}
+                  </span>
+                </div>
+                <div className="rule-row-bottom">
+                  <span className="rule-row-conditions">{conditionSummary(rule)}</span>
+                  <span className="rule-row-delivery">{deliveryLabels(rule)}</span>
+                </div>
+                <div className="rule-row-actions">
+                  <button className="settings-btn secondary settings-btn--sm" onClick={() => openEdit(rule)}>Edit</button>
+                  <button className="settings-btn secondary settings-btn--sm" onClick={() => handleToggle(rule)}>
+                    {rule.enabled ? 'Disable' : 'Enable'}
+                  </button>
+                  <button className="settings-btn danger settings-btn--sm" onClick={() => handleDelete(rule)}>Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {panelOpen && (
+        <RulePanel
+          rule={panelInput}
+          editingId={editingRule?.id ?? null}
+          sources={sources}
+          smtpConfigured={smtpConfigured}
+          hasPushSubscription={isSubscribed}
+          onSave={handleSave}
+          onClose={closePanel}
+          saving={saving}
+          saveError={saveError}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = (searchParams.get('tab') as Tab) || 'apps'
+  const [smtpConfigured, setSmtpConfigured] = useState(false)
+
+  useEffect(() => {
+    smtpSettings.get()
+      .then(s => setSmtpConfigured(!!s.host))
+      .catch(() => {/* not configured */})
+  }, [])
 
   return (
     <>
@@ -846,6 +1320,7 @@ export function Settings() {
       <div className="content">
         {activeTab === 'apps' && <AppsTab />}
         {activeTab === 'notifications' && <NotificationsTab />}
+        {activeTab === 'notify_rules' && <NotifyRulesTab smtpConfigured={smtpConfigured} />}
         {activeTab === 'metrics' && <MetricsTab />}
         {activeTab === 'users' && <UsersTab />}
       </div>

@@ -23,6 +23,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/monitor"
 	"github.com/digitalcheffe/nora/internal/push"
 	"github.com/digitalcheffe/nora/internal/repo"
+	"github.com/digitalcheffe/nora/internal/rules"
 	"github.com/digitalcheffe/nora/internal/scanner"
 	"github.com/digitalcheffe/nora/internal/scanner/discovery"
 	noraMetrics "github.com/digitalcheffe/nora/internal/scanner/metrics"
@@ -82,6 +83,7 @@ func main() {
 	discoveredRouteRepo := repo.NewDiscoveredRouteRepo(db)
 	webPushSubscriptionRepo := repo.NewWebPushSubscriptionRepo(db)
 	snapshotRepo := repo.NewSnapshotRepo(db)
+	ruleRepo := repo.NewRuleRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
@@ -91,6 +93,7 @@ func main() {
 		discoveredContainerRepo, discoveredRouteRepo,
 		webPushSubscriptionRepo,
 		snapshotRepo,
+		ruleRepo,
 	)
 
 	// Startup event — written once so users can see when NORA last started.
@@ -98,6 +101,14 @@ func main() {
 
 	// Push notification sender
 	pushSender := push.NewSender(cfg, store)
+
+	// Rules engine — evaluates every incoming event against enabled rules.
+	// Must be wired before the notifying event repo wrapper below.
+	rulesEngine := rules.NewEngine(store, pushSender, cfg)
+	// Wrap the event repo so every successful Create fires the rules engine
+	// asynchronously. All existing call sites (ingest, docker, monitor, etc.)
+	// automatically trigger rule evaluation with no per-callsite changes.
+	store.Events = rules.NewNotifyingEventRepo(store.Events, rulesEngine)
 
 	// App template registry — load all bundled YAML app templates
 	registry, err := apptemplate.NewRegistry(noraappprofiles.Files)
@@ -299,6 +310,7 @@ func main() {
 		api.NewUsersHandler(userRepo).Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
+		api.NewRulesHandler(store, rulesEngine).Routes(r)
 	})
 
 	// Frontend — serve embedded React app, SPA fallback to index.html

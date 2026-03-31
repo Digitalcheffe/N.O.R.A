@@ -44,6 +44,7 @@ func newSNMPTestStore(t *testing.T) *repo.Store {
 		repo.NewDiscoveredRouteRepo(db),
 		nil,
 		nil,
+		nil,
 	)
 }
 

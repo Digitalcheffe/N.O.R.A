@@ -17,9 +17,13 @@ var retentionWindows = map[string]time.Duration{
 	"critical": 90 * 24 * time.Hour,
 }
 
+// ruleExecutionRetention is the retention window for rule_executions rows.
+const ruleExecutionRetention = 30 * 24 * time.Hour
+
 // RunEventRetention purges events whose created_at is older than the
 // configured retention window for their level. Rollup rows are never
-// touched by this function.
+// touched by this function. Rule execution logs older than 30 days are
+// also purged here.
 func RunEventRetention(ctx context.Context, store *repo.Store) error {
 	now := time.Now().UTC()
 	for level, window := range retentionWindows {
@@ -32,6 +36,17 @@ func RunEventRetention(ctx context.Context, store *repo.Store) error {
 			log.Printf("retention: deleted %d %s events older than %s", n, level, window)
 		}
 	}
+
+	if store.Rules != nil {
+		cutoff := now.Add(-ruleExecutionRetention)
+		n, err := store.Rules.DeleteExecutionsBefore(ctx, cutoff)
+		if err != nil {
+			log.Printf("retention: rule executions cleanup error: %v", err)
+		} else if n > 0 {
+			log.Printf("retention: deleted %d rule executions older than 30 days", n)
+		}
+	}
+
 	return nil
 }
 
