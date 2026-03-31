@@ -503,11 +503,17 @@ function MetricsTab() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    setLoading(true)
-    metrics.instance()
-      .then(setData)
-      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load metrics'))
-      .finally(() => setLoading(false))
+    void (async () => {
+      setLoading(true)
+      try {
+        const data = await metrics.instance()
+        setData(data)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load metrics')
+      } finally {
+        setLoading(false)
+      }
+    })()
   }, [])
 
   return (

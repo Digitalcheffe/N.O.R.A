@@ -272,7 +272,7 @@ export function TopologyTree() {
   function togglePhysical(id: string) {
     setExpandedPhysical(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
     setAddTarget(null)
@@ -283,7 +283,7 @@ export function TopologyTree() {
   function toggleVirtual(id: string) {
     setExpandedVirtual(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
     setAddTarget(null)
@@ -294,7 +294,7 @@ export function TopologyTree() {
   function toggleDocker(id: string) {
     setExpandedDocker(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
   }

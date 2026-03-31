@@ -4,7 +4,7 @@ import type { Event } from '../api/types'
 import { formatEventTime } from '../utils/formatTime'
 import './EventRow.css'
 
-export function getSourceName(event: Event, appName?: string): string {
+function getSourceName(event: Event, appName?: string): string {
   if (appName) return appName
   if (event.source_name) return event.source_name
   return 'NORA System'

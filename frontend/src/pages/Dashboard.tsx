@@ -25,19 +25,23 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      dashboardApi.summary(timeFilter),
-      eventsApi.list({ limit: 5 }),
-      infraApi.list().catch(() => ({ data: [], total: 0 })),
-    ])
-      .then(([summary, evts, hosts]) => {
+    void (async () => {
+      setLoading(true)
+      try {
+        const [summary, evts, hosts] = await Promise.all([
+          dashboardApi.summary(timeFilter),
+          eventsApi.list({ limit: 5 }),
+          infraApi.list().catch(() => ({ data: [], total: 0 })),
+        ])
         setData(summary)
         setRecentEvents(evts.data)
         setPhysicalHosts(hosts.data)
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false))
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setLoading(false)
+      }
+    })()
   }, [timeFilter, tick])
 
   const topbarStatus =

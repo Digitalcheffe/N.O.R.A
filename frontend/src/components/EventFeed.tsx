@@ -46,7 +46,7 @@ export function EventFeed({ sourceType, sourceId, title = 'RECENT EVENTS' }: Pro
   }
 
   useEffect(() => {
-    fetchEvents(0, false)
+    void (async () => { fetchEvents(0, false) })()
   }, [sourceType, sourceId, tick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasMore = eventList.length < total
