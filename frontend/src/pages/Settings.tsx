@@ -946,8 +946,8 @@ function RulePanel({ rule, editingId, sources, smtpConfigured, hasPushSubscripti
             </select>
           </div>
 
-          <div className="rule-conditions-header">
-            <span className="settings-label">Conditions</span>
+          <div className="settings-field-row">
+            <label className="settings-label">Conditions</label>
             <button className="settings-btn secondary settings-btn--sm" onClick={addCondition}>+ Add condition</button>
           </div>
           {form.conditions.length > 0 && (
@@ -987,29 +987,32 @@ function RulePanel({ rule, editingId, sources, smtpConfigured, hasPushSubscripti
             </div>
           )}
 
-          <div className="rule-section-title">Delivery</div>
-          <div className="rule-delivery-row">
-            <label className={`rule-delivery-check${!smtpConfigured ? ' disabled' : ''}`}>
-              <input type="checkbox" checked={form.delivery_email} disabled={!smtpConfigured}
-                onChange={e => setForm(f => ({ ...f, delivery_email: e.target.checked }))} />
+          <div className="settings-field-row">
+            <label className="settings-label">Delivery</label>
+            <div className="rule-delivery-pills">
+            <button
+              type="button"
+              className={`rule-delivery-pill${form.delivery_email ? ' rule-delivery-pill--on' : ''}${!smtpConfigured ? ' rule-delivery-pill--disabled' : ''}`}
+              disabled={!smtpConfigured}
+              title={!smtpConfigured ? 'Configure SMTP on the Notifications tab to enable email delivery.' : undefined}
+              onClick={() => smtpConfigured && setForm(f => ({ ...f, delivery_email: !f.delivery_email }))}>
               Email
-            </label>
-            {!smtpConfigured && <span className="rule-delivery-hint">Configure SMTP on the Notifications tab to enable email delivery.</span>}
-          </div>
-          <div className="rule-delivery-row">
-            <label className={`rule-delivery-check${!hasPushSubscription ? ' disabled' : ''}`}>
-              <input type="checkbox" checked={form.delivery_push} disabled={!hasPushSubscription}
-                onChange={e => setForm(f => ({ ...f, delivery_push: e.target.checked }))} />
+            </button>
+            <button
+              type="button"
+              className={`rule-delivery-pill${form.delivery_push ? ' rule-delivery-pill--on' : ''}${!hasPushSubscription ? ' rule-delivery-pill--disabled' : ''}`}
+              disabled={!hasPushSubscription}
+              title={!hasPushSubscription ? 'No active push subscriptions. Subscribe from a browser first.' : undefined}
+              onClick={() => hasPushSubscription && setForm(f => ({ ...f, delivery_push: !f.delivery_push }))}>
               Web Push
-            </label>
-            {!hasPushSubscription && <span className="rule-delivery-hint">No active push subscriptions. Subscribe from a browser first.</span>}
-          </div>
-          <div className="rule-delivery-row">
-            <label className="rule-delivery-check">
-              <input type="checkbox" checked={form.delivery_webhook}
-                onChange={e => setForm(f => ({ ...f, delivery_webhook: e.target.checked }))} />
+            </button>
+            <button
+              type="button"
+              className={`rule-delivery-pill${form.delivery_webhook ? ' rule-delivery-pill--on' : ''}`}
+              onClick={() => setForm(f => ({ ...f, delivery_webhook: !f.delivery_webhook }))}>
               Webhook
-            </label>
+            </button>
+            </div>
           </div>
           {form.delivery_webhook && (
             <div className="settings-field-row">
@@ -1020,7 +1023,9 @@ function RulePanel({ rule, editingId, sources, smtpConfigured, hasPushSubscripti
             </div>
           )}
 
-          <div className="rule-section-title">Notification</div>
+          <div className="settings-field-row" style={{ marginBottom: 0 }}>
+            <label className="settings-label">Notification</label>
+          </div>
           <div className="settings-field-row">
             <label className="settings-label">Title</label>
             <input className="settings-input" value={form.notif_title}
@@ -1035,10 +1040,16 @@ function RulePanel({ rule, editingId, sources, smtpConfigured, hasPushSubscripti
             Available tokens: <code>{'{display_text}'}</code> <code>{'{severity}'}</code> <code>{'{source_name}'}</code>
           </div>
         </div>
+        {form.delivery_email && !smtpConfigured && (
+          <div className="rule-delivery-warning" style={{ margin: '0 20px 0' }}>
+            Email delivery requires SMTP to be configured. Go to the Notifications tab to set it up.
+          </div>
+        )}
         <div className="rule-panel-footer">
           {saveError && <span className="settings-status-msg" style={{ color: 'var(--red)' }}>{saveError}</span>}
           <button className="settings-btn secondary" onClick={onClose}>Cancel</button>
-          <button className="settings-btn primary" onClick={() => onSave(form)} disabled={saving}>
+          <button className="settings-btn primary" onClick={() => onSave(form)}
+            disabled={saving || (form.delivery_email && !smtpConfigured)}>
             {saving ? 'Saving…' : 'Save Rule'}
           </button>
         </div>
