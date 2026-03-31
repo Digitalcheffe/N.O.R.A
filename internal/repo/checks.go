@@ -48,6 +48,7 @@ const selectCheckCols = `
 	       COALESCE(skip_tls_verify,0) AS skip_tls_verify,
 	       COALESCE(dns_record_type,'') AS dns_record_type,
 	       COALESCE(dns_expected_value,'') AS dns_expected_value,
+	       COALESCE(dns_resolver,'') AS dns_resolver,
 	       enabled,
 	       last_checked_at, COALESCE(last_status,'') AS last_status,
 	       COALESCE(last_result,'') AS last_result, created_at
@@ -70,8 +71,8 @@ func (r *sqliteCheckRepo) Create(ctx context.Context, check *models.MonitorCheck
 		INSERT INTO monitor_checks
 		  (id, app_id, name, type, target, interval_secs, expected_status,
 		   ssl_warn_days, ssl_crit_days, ssl_source, integration_id, skip_tls_verify,
-		   dns_record_type, dns_expected_value, enabled)
-		VALUES (?, NULLIF(?,?), ?, ?, ?, ?, NULLIF(?,0), ?, ?, ?, ?, ?, NULLIF(?,?), NULLIF(?,?), ?)`,
+		   dns_record_type, dns_expected_value, dns_resolver, enabled)
+		VALUES (?, NULLIF(?,?), ?, ?, ?, ?, NULLIF(?,0), ?, ?, ?, ?, ?, NULLIF(?,?), NULLIF(?,?), NULLIF(?,?), ?)`,
 		check.ID, check.AppID, check.AppID,
 		check.Name, check.Type, check.Target, check.IntervalSecs,
 		check.ExpectedStatus,
@@ -80,6 +81,7 @@ func (r *sqliteCheckRepo) Create(ctx context.Context, check *models.MonitorCheck
 		check.SkipTLSVerify,
 		check.DNSRecordType, check.DNSRecordType,
 		check.DNSExpectedValue, check.DNSExpectedValue,
+		check.DNSResolver, check.DNSResolver,
 		check.Enabled)
 	if err != nil {
 		return fmt.Errorf("create check: %w", err)
@@ -106,6 +108,7 @@ func (r *sqliteCheckRepo) Update(ctx context.Context, check *models.MonitorCheck
 		    expected_status=NULLIF(?,0), ssl_warn_days=?, ssl_crit_days=?,
 		    ssl_source=?, integration_id=?, skip_tls_verify=?,
 		    dns_record_type=NULLIF(?,?), dns_expected_value=NULLIF(?,?),
+		    dns_resolver=NULLIF(?,?),
 		    enabled=?
 		WHERE id=?`,
 		check.AppID, check.AppID,
@@ -116,6 +119,7 @@ func (r *sqliteCheckRepo) Update(ctx context.Context, check *models.MonitorCheck
 		check.SkipTLSVerify,
 		check.DNSRecordType, check.DNSRecordType,
 		check.DNSExpectedValue, check.DNSExpectedValue,
+		check.DNSResolver, check.DNSResolver,
 		check.Enabled,
 		check.ID)
 	if err != nil {

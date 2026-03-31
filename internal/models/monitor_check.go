@@ -24,8 +24,11 @@ type MonitorCheck struct {
 	// Use for internal services with self-signed certificates.
 	SkipTLSVerify bool `db:"skip_tls_verify" json:"skip_tls_verify"`
 	// DNS check fields.
-	DNSRecordType     string `db:"dns_record_type"     json:"dns_record_type,omitempty"`
-	DNSExpectedValue  string `db:"dns_expected_value"  json:"dns_expected_value,omitempty"`
+	DNSRecordType    string `db:"dns_record_type"    json:"dns_record_type,omitempty"`
+	DNSExpectedValue string `db:"dns_expected_value" json:"dns_expected_value,omitempty"`
+	// DNSResolver is an optional custom resolver address (e.g. "8.8.8.8" or "10.96.96.22").
+	// When empty, the container's default resolver is used.
+	DNSResolver string `db:"dns_resolver" json:"dns_resolver,omitempty"`
 	Enabled        bool    `db:"enabled"         json:"enabled"`
 	LastCheckedAt  *time.Time `db:"last_checked_at" json:"last_checked_at,omitempty"`
 	LastStatus     string     `db:"last_status"     json:"last_status,omitempty"`

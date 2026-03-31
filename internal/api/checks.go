@@ -53,8 +53,9 @@ type checkRequest struct {
 	IntegrationID    *string `json:"integration_id"`  // required when ssl_source == "traefik"
 	Enabled          *bool   `json:"enabled"`          // nil = no change, false = disable, true = enable
 	SkipTLSVerify    *bool   `json:"skip_tls_verify"`  // nil = no change; for url checks only
-	DNSRecordType    string  `json:"dns_record_type"`  // A | AAAA | MX | CNAME | TXT
+	DNSRecordType    string  `json:"dns_record_type"`    // A | AAAA | MX | CNAME | TXT
 	DNSExpectedValue string  `json:"dns_expected_value"` // optional substring match
+	DNSResolver      string  `json:"dns_resolver"`       // optional custom resolver e.g. "8.8.8.8"
 }
 
 type listChecksResponse struct {
@@ -159,6 +160,7 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		SkipTLSVerify:    skipTLS,
 		DNSRecordType:    strings.ToUpper(req.DNSRecordType),
 		DNSExpectedValue: req.DNSExpectedValue,
+		DNSResolver:      req.DNSResolver,
 		Enabled:          true,
 		CreatedAt:        time.Now().UTC(),
 	}
@@ -172,7 +174,7 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// baseline so the monitor knows what "good" looks like from day one.
 	if check.Type == "dns" {
 		dnsCtx, dnsCancel := context.WithTimeout(r.Context(), 10*time.Second)
-		result := monitor.RunDNS(dnsCtx, check.Target, check.DNSRecordType, "")
+		result := monitor.RunDNS(dnsCtx, check.Target, check.DNSRecordType, "", check.DNSResolver)
 		dnsCancel()
 
 		var det struct {
@@ -272,6 +274,9 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.DNSExpectedValue != "" {
 		existing.DNSExpectedValue = req.DNSExpectedValue
 	}
+	if req.DNSResolver != "" {
+		existing.DNSResolver = req.DNSResolver
+	}
 
 	// Re-validate the merged state. Include SSLSource so Traefik-mode checks
 	// are not incorrectly rejected for using a bare domain target.
@@ -337,7 +342,7 @@ func (h *ChecksHandler) Run(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays, check.SkipTLSVerify, check.DNSRecordType, check.DNSExpectedValue)
+	result, runErr := monitor.Run(ctx, check.Type, check.Target, check.ExpectedStatus, check.SSLWarnDays, check.SSLCritDays, check.SkipTLSVerify, check.DNSRecordType, check.DNSExpectedValue, check.DNSResolver)
 	if runErr != nil {
 		writeError(w, http.StatusInternalServerError, runErr.Error())
 		return

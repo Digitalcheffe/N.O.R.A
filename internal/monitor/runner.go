@@ -194,13 +194,30 @@ func RunSSL(ctx context.Context, target string, warnDays, critDays int) Result {
 // If expectedValue is non-empty, at least one resolved record must contain it as
 // a substring for the check to be "up". Returns "down" on lookup failure or
 // when the expected value is not found.
-func RunDNS(ctx context.Context, target, recordType, expectedValue string) Result {
+// resolver is an optional custom DNS server address (e.g. "8.8.8.8" or "10.96.96.22");
+// port 53 is appended automatically if no port is specified.
+func RunDNS(ctx context.Context, target, recordType, expectedValue, resolver string) Result {
 	now := time.Now().UTC()
 	if recordType == "" {
 		recordType = "A"
 	}
 
-	r := &net.Resolver{}
+	var r *net.Resolver
+	if resolver != "" {
+		addr := resolver
+		if !strings.Contains(addr, ":") {
+			addr = addr + ":53"
+		}
+		r = &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				d := net.Dialer{}
+				return d.DialContext(ctx, "udp", addr)
+			},
+		}
+	} else {
+		r = &net.Resolver{}
+	}
 	start := time.Now()
 
 	var records []string
@@ -273,7 +290,7 @@ func RunDNS(ctx context.Context, target, recordType, expectedValue string) Resul
 // expectedStatus is used for url checks; warnDays/critDays for ssl checks;
 // dnsRecordType/dnsExpectedValue for dns checks.
 // skipTLSVerify applies only to url checks.
-func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays, critDays int, skipTLSVerify bool, dnsRecordType, dnsExpectedValue string) (Result, error) {
+func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays, critDays int, skipTLSVerify bool, dnsRecordType, dnsExpectedValue, dnsResolver string) (Result, error) {
 	switch checkType {
 	case "ping":
 		return RunPing(ctx, target), nil
@@ -282,7 +299,7 @@ func Run(ctx context.Context, checkType, target string, expectedStatus, warnDays
 	case "ssl":
 		return RunSSL(ctx, target, warnDays, critDays), nil
 	case "dns":
-		return RunDNS(ctx, target, dnsRecordType, dnsExpectedValue), nil
+		return RunDNS(ctx, target, dnsRecordType, dnsExpectedValue, dnsResolver), nil
 	default:
 		return Result{}, fmt.Errorf("unknown check type: %s", checkType)
 	}

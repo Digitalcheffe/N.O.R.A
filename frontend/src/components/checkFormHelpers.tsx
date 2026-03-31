@@ -17,6 +17,7 @@ export type FormFields = {
   skip_tls_verify: string   // 'true' | 'false'
   dns_record_type: DNSRecordType
   dns_expected_value: string
+  dns_resolver: string
 }
 
 export const defaultForm: FormFields = {
@@ -33,6 +34,7 @@ export const defaultForm: FormFields = {
   skip_tls_verify: 'false',
   dns_record_type: 'A',
   dns_expected_value: '',
+  dns_resolver: '',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,6 +84,7 @@ export function checkToForm(check: MonitorCheck): FormFields {
     skip_tls_verify: check.skip_tls_verify ? 'true' : 'false',
     dns_record_type: (check.dns_record_type ?? 'A') as DNSRecordType,
     dns_expected_value: check.dns_expected_value ?? '',
+    dns_resolver: check.dns_resolver ?? '',
   }
 }
 
@@ -110,6 +113,9 @@ export function formToInput(form: FormFields, integrationID?: string): CreateChe
     input.dns_record_type = form.dns_record_type
     if (form.dns_expected_value.trim()) {
       input.dns_expected_value = form.dns_expected_value.trim()
+    }
+    if (form.dns_resolver.trim()) {
+      input.dns_resolver = form.dns_resolver.trim()
     }
   }
   return input

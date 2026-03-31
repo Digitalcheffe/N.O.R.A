@@ -176,6 +176,15 @@ export function CheckForm({
                 ))}
               </div>
             </div>
+            <div className="form-field">
+              <div className="form-label">Resolver <span style={{fontWeight: 400, opacity: 0.6}}>(optional)</span></div>
+              <input
+                className="form-input"
+                value={form.dns_resolver}
+                onChange={e => onChange('dns_resolver', e.target.value)}
+                placeholder="e.g. 8.8.8.8 or 10.96.96.22"
+              />
+            </div>
             <div className="form-field form-field-full">
               <div className="ssl-standalone-warning">
                 The current DNS value will be captured on creation and used as the baseline.

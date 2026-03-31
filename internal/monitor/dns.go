@@ -15,7 +15,7 @@ import (
 // DNSChecker executes DNS resolution checks and persists results via the store.
 type DNSChecker struct {
 	store   *repo.Store
-	resolve func(ctx context.Context, target, recordType, expectedValue string) Result
+	resolve func(ctx context.Context, target, recordType, expectedValue, resolver string) Result
 }
 
 // NewDNSChecker returns a DNSChecker backed by store.
@@ -28,7 +28,7 @@ func NewDNSChecker(store *repo.Store) *DNSChecker {
 // baseline so future runs can detect changes. On a status transition an event is created.
 func (d *DNSChecker) Run(ctx context.Context, check *models.MonitorCheck) error {
 	runCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	result := d.resolve(runCtx, check.Target, check.DNSRecordType, check.DNSExpectedValue)
+	result := d.resolve(runCtx, check.Target, check.DNSRecordType, check.DNSExpectedValue, check.DNSResolver)
 	cancel()
 
 	now := time.Now().UTC()

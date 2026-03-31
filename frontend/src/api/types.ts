@@ -135,6 +135,7 @@ export interface MonitorCheck {
   skip_tls_verify: boolean
   dns_record_type: DNSRecordType | null
   dns_expected_value: string | null
+  dns_resolver: string | null
   enabled: boolean
   last_checked_at: string | null
   last_status: CheckStatus | null
@@ -156,6 +157,7 @@ export interface CreateCheckInput {
   skip_tls_verify?: boolean
   dns_record_type?: DNSRecordType
   dns_expected_value?: string
+  dns_resolver?: string
   enabled?: boolean
 }
 
