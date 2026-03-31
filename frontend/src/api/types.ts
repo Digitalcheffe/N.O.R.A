@@ -553,6 +553,8 @@ export interface DiscoveredContainer {
   cpu_percent: number | null
   mem_percent: number | null
   last_seen_at: string
+  image_update_available: boolean
+  image_last_checked_at: string | null
 }
 
 export interface LinkAppInput {

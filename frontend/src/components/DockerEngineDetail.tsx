@@ -201,7 +201,11 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
     )
   }
 
+  const checked = containers.filter(c => c.image_last_checked_at !== null)
+  const updatesAvailable = checked.filter(c => c.image_update_available)
+
   return (
+    <div className="de-wrapper">
     <div className="de-card-grid">
       {containers.map(c => {
         const isLinked   = !!c.app_id
@@ -236,6 +240,9 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
                 )}
                 {isUnlinked && (
                   <span className="de-image">{c.image}</span>
+                )}
+                {c.image_update_available && (
+                  <span className="de-update-badge">Update available</span>
                 )}
               </div>
 
@@ -391,6 +398,58 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
           </div>
         )
       })}
+    </div>
+
+    {/* ── Image Updates section ── */}
+    <div className="de-updates-section">
+      <div className="de-updates-header">
+        <span className="de-updates-title">Image Updates</span>
+        {checked.length === 0 ? (
+          <span className="de-updates-meta">Not yet checked — runs every hour</span>
+        ) : (
+          <span className="de-updates-meta">
+            {updatesAvailable.length > 0
+              ? `${updatesAvailable.length} update${updatesAvailable.length !== 1 ? 's' : ''} available`
+              : 'All images up to date'}
+          </span>
+        )}
+      </div>
+
+      {checked.length === 0 ? (
+        <div className="de-updates-empty">
+          The image update check runs every hour alongside container discovery.<br />
+          Results will appear here after the first pass completes.
+        </div>
+      ) : (
+        <table className="de-updates-table">
+          <thead>
+            <tr>
+              <th>Container</th>
+              <th>Image</th>
+              <th>Status</th>
+              <th>Last checked</th>
+            </tr>
+          </thead>
+          <tbody>
+            {checked.map(c => (
+              <tr key={c.id}>
+                <td className="de-updates-name">{c.container_name}</td>
+                <td className="de-updates-image">{c.image}</td>
+                <td>
+                  {c.image_update_available
+                    ? <span className="de-update-badge">Update available</span>
+                    : <span className="de-uptodate-badge">Up to date</span>
+                  }
+                </td>
+                <td className="de-updates-checked">
+                  {c.image_last_checked_at ? timeAgo(c.image_last_checked_at) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
     </div>
   )
 }

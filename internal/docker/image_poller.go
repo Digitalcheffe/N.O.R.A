@@ -250,6 +250,37 @@ func extractRepoDigest(repoDigests []string, imageName string) string {
 	return ""
 }
 
+// StartEvery runs the image update poller on the given interval.  It waits 60 s
+// before the first run (same startup gate as Start), then fires every interval.
+// Use this when the caller wants the check to align with another scan cadence
+// (e.g. the hourly discovery pass) rather than the default daily 02:00 UTC schedule.
+func (p *ImageUpdatePoller) StartEvery(ctx context.Context, interval time.Duration) {
+	log.Printf("image update poller: starting on %s interval (60s startup delay)", interval)
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(60 * time.Second):
+	}
+
+	if err := p.Run(ctx); err != nil && ctx.Err() == nil {
+		log.Printf("image update poller: startup run error: %v", err)
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := p.Run(ctx); err != nil && ctx.Err() == nil {
+				log.Printf("image update poller: run error: %v", err)
+			}
+		}
+	}
+}
+
 // imagePollerDurationUntilNext2AM returns the duration from now until the next
 // 02:00 UTC.  Mirrors jobs.durationUntilNext2AM without importing the jobs package.
 func imagePollerDurationUntilNext2AM() time.Duration {
