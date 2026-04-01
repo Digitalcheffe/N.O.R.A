@@ -652,7 +652,7 @@
 .icd-edit-btn {
   font-family: var(--mono);
   font-size: 12px;
-  background: var(--surface1);
+  background: var(--bg4);
   color: var(--text2);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -662,7 +662,7 @@
 }
 
 .icd-edit-btn:hover {
-  background: var(--surface2);
+  background: var(--border);
   color: var(--text);
 }
 
@@ -681,8 +681,8 @@
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 201;
-  background: var(--surface1);
-  border: 1px solid var(--border);
+  background: var(--bg3);
+  border: 1px solid var(--border2);
   border-radius: 10px;
   padding: 24px;
   width: min(520px, calc(100vw - 40px));
@@ -744,8 +744,8 @@
 .icd-edit-input {
   font-family: var(--mono);
   font-size: 13px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
+  background: var(--bg4);
+  border: 1px solid var(--border2);
   border-radius: 5px;
   padding: 6px 8px;
   color: var(--text);

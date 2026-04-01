@@ -291,8 +291,8 @@ function InlineEditPanel({ component, allComponents, saving, onSave, onCancel }:
 
   return (
     <>
-      {/* Backdrop — click outside to cancel */}
-      <div className="icd-edit-overlay" onClick={onCancel} />
+      {/* Backdrop — does not dismiss on click; use Cancel or ✕ */}
+      <div className="icd-edit-overlay" />
 
       {/* Modal card */}
       <div className="icd-edit-modal">
