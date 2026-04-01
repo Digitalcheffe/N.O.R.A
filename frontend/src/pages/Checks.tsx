@@ -261,8 +261,8 @@ export function Checks() {
       <div className="content">
 
         {showAddForm && (
-          <div className="modal-backdrop" onClick={closeAddForm}>
-            <div className="modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
+          <div className="modal-backdrop">
+            <div className="modal" style={{ width: 560 }}>
               <CheckForm
                 form={addForm}
                 onChange={handleAddChange}

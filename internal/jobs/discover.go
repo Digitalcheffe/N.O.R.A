@@ -41,6 +41,8 @@ func discoveryScanner(store *repo.Store, c *models.InfrastructureComponent) scan
 		return discovery.NewSynologyDiscoveryScanner(store)
 	case "opnsense":
 		return discovery.NewOPNsenseDiscoveryScanner(store)
+	case "portainer":
+		return discovery.NewPortainerDiscoveryScanner(store)
 	}
 	// Fallback: collection_method-based dispatch.
 	if c.CollectionMethod == "snmp" {

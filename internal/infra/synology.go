@@ -69,9 +69,12 @@ type SynologyDisk struct {
 }
 
 // SynologyUpdate is the DSM update state in SynologyMeta.
+// Checked is true only when the API call to SYNO.Core.Upgrade succeeded;
+// false means the device was unreachable and the update state is unknown.
 type SynologyUpdate struct {
 	Available bool   `json:"available"`
 	Version   string `json:"version"`
+	Checked   bool   `json:"checked"`
 }
 
 // SynologyPoller polls a single Synology DSM instance, writing resource_readings
@@ -797,6 +800,7 @@ func (p *SynologyPoller) fetchUpdates(ctx context.Context, store *repo.Store, me
 	meta.Update = SynologyUpdate{
 		Available: upgrade.Available,
 		Version:   upgrade.Version,
+		Checked:   true,
 	}
 
 	// Fire one info event when a new available version is first seen.

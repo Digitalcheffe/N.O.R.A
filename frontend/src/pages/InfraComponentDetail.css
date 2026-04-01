@@ -646,3 +646,141 @@
 }
 
 .icd-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Edit button (actions area) ─────────────────────────────────────────────── */
+
+.icd-edit-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg4);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.icd-edit-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* ── Edit modal overlay ─────────────────────────────────────────────────────── */
+
+.icd-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 200;
+}
+
+.icd-edit-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 201;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 24px;
+  width: min(520px, calc(100vw - 40px));
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.icd-edit-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.icd-edit-modal-title {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.icd-edit-modal-close {
+  font-family: var(--mono);
+  font-size: 14px;
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.icd-edit-modal-close:hover { color: var(--text); }
+
+.icd-edit-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.icd-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.icd-edit-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.icd-edit-input {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 6px 8px;
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.icd-edit-input:focus {
+  outline: none;
+  border-color: var(--accent, #3b82f6);
+}
+
+.icd-edit-field-full {
+  grid-column: 1 / -1;
+}
+
+.icd-edit-check-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  margin-top: 20px; /* align with inputs */
+}
+
+.icd-edit-check-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.icd-edit-actions {
+  display: flex;
+  gap: 8px;
+}

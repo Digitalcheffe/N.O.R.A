@@ -78,8 +78,8 @@ function EditModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+    <div className="modal-backdrop">
+      <div className="modal">
         <div className="modal-header">
           <div className="modal-title">Edit Check</div>
           <div className="modal-subtitle">{check.name}</div>

@@ -45,8 +45,8 @@ function ConfirmDeleteModal({ appName, onCancel, onConfirm, deleting, error }: C
   }, [onCancel])
 
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" style={{ width: 400 }} onClick={e => e.stopPropagation()}>
+    <div className="modal-backdrop">
+      <div className="modal" style={{ width: 400 }}>
         <div className="modal-header">
           <div className="modal-title modal-title-danger">Delete App</div>
           <div className="modal-subtitle">
@@ -166,8 +166,8 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+    <div className="modal-backdrop">
+      <div className="modal">
 
         {step === 'setup' && (
           <>

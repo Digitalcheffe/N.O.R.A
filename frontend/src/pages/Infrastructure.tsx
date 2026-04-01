@@ -504,7 +504,7 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/traefik/${c.id}`)}>
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -527,14 +527,7 @@ export function Infrastructure() {
           </div>
           <div className="infra-card-actions">
             <button
-              className="infra-card-btn accent"
-              onClick={() => navigate(`/infrastructure/traefik/${c.id}`)}
-              disabled={isDeleting || isScanning}
-            >
-              View Detail
-            </button>
-            <button
-              className="infra-card-btn accent"
+              className="infra-card-btn"
               onClick={() => void handleScan(c.id)}
               disabled={isDeleting || isScanning || scanningId !== null}
             >
@@ -629,7 +622,7 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/portainer/${c.id}`)}>
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -652,11 +645,11 @@ export function Infrastructure() {
           </div>
           <div className="infra-card-actions">
             <button
-              className="infra-card-btn accent"
-              onClick={() => navigate(`/infrastructure/portainer/${c.id}`)}
-              disabled={isDeleting || isScanning}
+              className="infra-card-btn"
+              onClick={() => void handleScan(c.id)}
+              disabled={isDeleting || isScanning || scanningId !== null}
             >
-              View Detail
+              {isScanning ? 'Discovering…' : 'Discover Now'}
             </button>
             <button
               className="infra-card-btn"
@@ -688,9 +681,7 @@ export function Infrastructure() {
     const isScanning = scanningId === c.id
     const canScan = c.collection_method !== 'none'
 
-    const detailPath = c.type === 'proxmox_node'
-      ? `/infrastructure/proxmox/${c.id}`
-      : `/infrastructure/${c.id}`
+    const detailPath = `/infrastructure/${c.id}`
 
     return (
       <div key={c.id} className="infra-card">

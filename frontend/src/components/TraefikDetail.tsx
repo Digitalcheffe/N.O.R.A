@@ -1,13 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
-import { Topbar } from '../components/Topbar'
-import { DetailPageLayout } from '../components/DetailPageLayout'
-import { DiscoverNowButton } from '../components/DiscoverNowButton'
-import {
-  infrastructure as infraApi,
-  traefik as traefikApi,
-} from '../api/client'
+import { traefik as traefikApi } from '../api/client'
 import type {
   InfrastructureComponent,
   TraefikOverview,
@@ -18,19 +11,6 @@ import './TraefikDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function timeAgo(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (secs < 60)   return `${secs}s ago`
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
-  return `${Math.floor(secs / 86400)}d ago`
-}
-
-/**
- * Parse the first Host(`...`) value from a Traefik rule string.
- * Falls back to the raw rule if no Host() is found.
- */
 function parseDomain(rule: string): string {
   const m = rule.match(/Host\(`([^`]+)`\)/)
   if (m) return m[1]
@@ -43,16 +23,11 @@ function parseEntryPoints(ep: string | null): string[] {
     const parsed = JSON.parse(ep)
     if (Array.isArray(parsed)) return parsed
   } catch {
-    // non-JSON — treat as single value
     return [ep]
   }
   return []
 }
 
-/**
- * Parse server_status_json into a map of { url → state }.
- * Returns {} on any parse failure.
- */
 function parseServerStatus(json: string): Record<string, string> {
   try {
     return JSON.parse(json) as Record<string, string>
@@ -177,18 +152,16 @@ function RoutersSection({
   error: string | null
   onRetry: () => void
   sectionRef: React.RefObject<HTMLDivElement | null>
-  serviceHealthMap: Record<string, string>  // service_name → health label
+  serviceHealthMap: Record<string, string>
 }) {
-  const [statusFilter, setStatusFilter] = useState<RouterStatusFilter>('all')
+  const [statusFilter,   setStatusFilter]   = useState<RouterStatusFilter>('all')
   const [providerFilter, setProviderFilter] = useState<string>('all')
-  const [tooltipFor, setTooltipFor] = useState<string | null>(null)
+  const [tooltipFor,     setTooltipFor]     = useState<string | null>(null)
 
-  // Collect unique providers from data
   const providers = Array.from(
     new Set(routers.map(r => r.provider).filter((p): p is string => !!p))
   ).sort()
 
-  // Sort: disabled first, then by router_name
   const sorted = [...routers].sort((a, b) => {
     const aDisabled = a.router_status !== 'enabled'
     const bDisabled = b.router_status !== 'enabled'
@@ -198,9 +171,9 @@ function RoutersSection({
   })
 
   const filtered = sorted.filter(r => {
-    if (statusFilter === 'active'   && r.router_status !== 'enabled')  return false
-    if (statusFilter === 'disabled' && r.router_status === 'enabled')  return false
-    if (providerFilter !== 'all' && r.provider !== providerFilter)     return false
+    if (statusFilter === 'active'   && r.router_status !== 'enabled') return false
+    if (statusFilter === 'disabled' && r.router_status === 'enabled') return false
+    if (providerFilter !== 'all' && r.provider !== providerFilter)    return false
     return true
   })
 
@@ -269,11 +242,11 @@ function RoutersSection({
             ) : (
               filtered.map(r => {
                 const isEnabled = r.router_status === 'enabled'
-                const domain = r.domain || parseDomain(r.rule)
-                const svcName = r.service_name || r.backend_service || '—'
-                const eps = parseEntryPoints(r.entry_points)
-                const ep0 = eps[0] ?? '—'
-                const health = serviceHealthMap[svcName]
+                const domain    = r.domain || parseDomain(r.rule)
+                const svcName   = r.service_name || r.backend_service || '—'
+                const eps       = parseEntryPoints(r.entry_points)
+                const ep0       = eps[0] ?? '—'
+                const health    = serviceHealthMap[svcName]
 
                 return (
                   <tr key={r.id} className={isEnabled ? '' : 'tk-row-disabled'}>
@@ -337,7 +310,6 @@ function ServicesSection({
 }) {
   const [statusFilter, setStatusFilter] = useState<ServiceStatusFilter>('all')
 
-  // Sort: all-down first, then partial-down, then healthy
   const sorted = [...services].sort((a, b) => {
     const aDown = a.servers_down
     const bDown = b.servers_down
@@ -403,48 +375,31 @@ function ServicesSection({
               </tr>
             ) : (
               filtered.map(s => {
-                const serverMap = parseServerStatus(s.server_status_json)
+                const serverMap    = parseServerStatus(s.server_status_json)
                 const serverEntries = Object.entries(serverMap)
-                const first = serverEntries[0]
-                const extra = serverEntries.length > 1 ? serverEntries.length - 1 : 0
+                const first        = serverEntries[0]
+                const extra        = serverEntries.length > 1 ? serverEntries.length - 1 : 0
 
-                const allDown = s.server_count > 0 && s.servers_down === s.server_count
+                const allDown  = s.server_count > 0 && s.servers_down === s.server_count
                 const someDown = s.servers_down > 0 && !allDown
-
                 const dotClass = allDown ? 'offline' : someDown ? 'degraded' : 'online'
-
-                const healthFraction = s.server_count > 0
-                  ? `${s.servers_up}/${s.server_count} UP`
-                  : '—'
+                const healthFraction = s.server_count > 0 ? `${s.servers_up}/${s.server_count} UP` : '—'
 
                 return (
-                  <tr
-                    key={s.id}
-                    className={s.servers_down > 0 ? 'tk-row-error' : ''}
-                  >
-                    <td>
-                      <span className={`tk-status-dot ${dotClass}`} />
-                    </td>
+                  <tr key={s.id} className={s.servers_down > 0 ? 'tk-row-error' : ''}>
+                    <td><span className={`tk-status-dot ${dotClass}`} /></td>
                     <td className="tk-svc-name">{s.service_name}</td>
-                    <td>
-                      <span className="tk-badge-muted">{s.service_type}</span>
-                    </td>
+                    <td><span className="tk-badge-muted">{s.service_type}</span></td>
                     <td className={allDown ? 'tk-health-down' : someDown ? 'tk-health-partial' : 'tk-health-up'}>
                       {healthFraction}
                     </td>
                     <td className="tk-endpoints-cell">
                       {first ? (
                         <>
-                          <span className={
-                            first[1].toUpperCase() === 'DOWN'
-                              ? 'tk-endpoint-down'
-                              : 'tk-endpoint'
-                          }>
+                          <span className={first[1].toUpperCase() === 'DOWN' ? 'tk-endpoint-down' : 'tk-endpoint'}>
                             {first[0]}
                           </span>
-                          {extra > 0 && (
-                            <span className="tk-muted"> +{extra}</span>
-                          )}
+                          {extra > 0 && <span className="tk-muted"> +{extra}</span>}
                         </>
                       ) : (
                         <span className="tk-muted">—</span>
@@ -461,55 +416,42 @@ function ServicesSection({
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── TraefikContent ────────────────────────────────────────────────────────────
+// Content-only component rendered inside InfraComponentDetail's DetailPageLayout
+// shell. Exposes key data points via onOverviewLoaded so the parent can show
+// them in the header.
 
-export function TraefikDetail() {
-  const { componentId } = useParams<{ componentId: string }>()
-  const navigate = useNavigate()
+interface TraefikContentProps {
+  component: InfrastructureComponent
+  onOverviewLoaded?: (overview: TraefikOverview | null) => void
+}
+
+export function TraefikContent({ component, onOverviewLoaded }: TraefikContentProps) {
   const { tick } = useAutoRefresh()
-
+  const componentId = component.id
   const routersSectionRef = useRef<HTMLDivElement>(null)
 
-  // Top-level component
-  const [component,    setComponent]    = useState<InfrastructureComponent | null>(null)
-  const [topLoading,   setTopLoading]   = useState(true)
-  const [topError,     setTopError]     = useState<string | null>(null)
-
-  // Overview
   const [overview,        setOverview]        = useState<TraefikOverview | null>(null)
   const [overviewLoading, setOverviewLoading] = useState(true)
   const [overviewError,   setOverviewError]   = useState<string | null>(null)
 
-  // Routers
   const [routers,        setRouters]        = useState<DiscoveredRoute[]>([])
   const [routersLoading, setRoutersLoading] = useState(true)
   const [routersError,   setRoutersError]   = useState<string | null>(null)
 
-  // Services
   const [services,        setServices]        = useState<TraefikServiceDetail[]>([])
   const [servicesLoading, setServicesLoading] = useState(true)
   const [servicesError,   setServicesError]   = useState<string | null>(null)
 
-  const loadTop = useCallback(() => {
-    if (!componentId) return
-    setTopLoading(true)
-    infraApi.get(componentId)
-      .then(comp => { setComponent(comp); setTopError(null) })
-      .catch(err => setTopError(err instanceof Error ? err.message : 'Failed to load component'))
-      .finally(() => setTopLoading(false))
-  }, [componentId])
-
   const loadOverview = useCallback(() => {
-    if (!componentId) return
     setOverviewLoading(true)
     traefikApi.getOverview(componentId)
-      .then(ov => { setOverview(ov); setOverviewError(null) })
-      .catch(err => setOverviewError(err instanceof Error ? err.message : 'Failed to load overview'))
+      .then(ov => { setOverview(ov); setOverviewError(null); onOverviewLoaded?.(ov) })
+      .catch(err => { setOverviewError(err instanceof Error ? err.message : 'Failed to load overview'); onOverviewLoaded?.(null) })
       .finally(() => setOverviewLoading(false))
-  }, [componentId])
+  }, [componentId, onOverviewLoaded])
 
   const loadRouters = useCallback(() => {
-    if (!componentId) return
     setRoutersLoading(true)
     traefikApi.getRouters(componentId)
       .then(r => { setRouters(r.data); setRoutersError(null) })
@@ -518,7 +460,6 @@ export function TraefikDetail() {
   }, [componentId])
 
   const loadServices = useCallback(() => {
-    if (!componentId) return
     setServicesLoading(true)
     traefikApi.getServices(componentId)
       .then(r => { setServices(r.data); setServicesError(null) })
@@ -527,72 +468,18 @@ export function TraefikDetail() {
   }, [componentId])
 
   useEffect(() => {
-    void (async () => {
-      loadTop()
-      loadOverview()
-      loadRouters()
-      loadServices()
-    })()
-  }, [loadTop, loadOverview, loadRouters, loadServices, tick])
+    loadOverview()
+    loadRouters()
+    loadServices()
+  }, [loadOverview, loadRouters, loadServices, tick])
 
-  // Build service health map for router cross-reference tooltip
   const serviceHealthMap: Record<string, string> = {}
   for (const s of services) {
     serviceHealthMap[s.service_name] = `${s.servers_up}/${s.server_count} UP`
   }
 
-  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
-    if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'warning'
-    if (s === 'offline')  return 'offline'
-    return 'unknown'
-  }
-
-  if (!topLoading && (topError || !component)) {
-    return (
-      <>
-        <Topbar title="Traefik" />
-        <div className="content">
-          <div className="tk-fullpage-error">
-            {topError ?? 'Component not found'}
-          </div>
-          <button className="tk-back-btn" onClick={() => navigate(-1)}>
-            ← Infrastructure
-          </button>
-        </div>
-      </>
-    )
-  }
-
-  const keyDataPoints = [
-    { label: 'Version',  value: overview?.version ?? '—' },
-    { label: 'Routers',  value: overview ? String(overview.routers_total) : '—' },
-    { label: 'Services', value: overview ? String(overview.services_total) : '—' },
-  ]
-
   return (
-    <DetailPageLayout
-      breadcrumb="Infrastructure"
-      breadcrumbPath="/infrastructure"
-      name={topLoading ? '…' : (component?.name ?? 'Traefik')}
-      status={component ? { status: dplStatus(component.last_status) } : undefined}
-      lastPolled={overview?.updated_at ? `Polled ${timeAgo(overview.updated_at)}` : undefined}
-      keyDataPoints={overviewLoading ? [] : keyDataPoints}
-      actions={
-        <DiscoverNowButton
-          entityType="traefik"
-          entityId={componentId!}
-          onSuccess={() => {
-            loadTop()
-            loadOverview()
-            loadRouters()
-            loadServices()
-          }}
-        />
-      }
-      sourceId={componentId!}
-    >
-      {/* Overview */}
+    <>
       <OverviewSection
         overview={overviewLoading ? null : overview}
         loading={overviewLoading}
@@ -600,8 +487,6 @@ export function TraefikDetail() {
         onRetry={loadOverview}
         routersRef={routersSectionRef}
       />
-
-      {/* Routers */}
       <RoutersSection
         routers={routers}
         loading={routersLoading}
@@ -610,14 +495,26 @@ export function TraefikDetail() {
         sectionRef={routersSectionRef}
         serviceHealthMap={serviceHealthMap}
       />
-
-      {/* Services */}
       <ServicesSection
         services={services}
         loading={servicesLoading}
         error={servicesError}
         onRetry={loadServices}
       />
-    </DetailPageLayout>
+    </>
   )
 }
+
+// Backward compat alias — App.tsx still imports TraefikDetail for the old route
+// which will be removed in this same cleanup pass.
+export { TraefikContent as TraefikDetail }
+
+// Helper used by InfraComponentDetail to build key data points from the overview.
+export function traefikKeyDataPoints(overview: TraefikOverview | null): { label: string; value: string }[] {
+  return [
+    { label: 'Version',  value: overview?.version ?? '—' },
+    { label: 'Routers',  value: overview ? String(overview.routers_total) : '—' },
+    { label: 'Services', value: overview ? String(overview.services_total) : '—' },
+  ]
+}
+

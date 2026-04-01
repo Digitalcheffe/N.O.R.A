@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
+import { PortainerContent } from '../components/PortainerDetail'
+import { ProxmoxContent } from '../components/ProxmoxDetail'
+import { SynologyContent } from '../components/SynologyDetail'
+import { TraefikContent } from '../components/TraefikDetail'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
@@ -14,19 +18,11 @@ import type {
   ResourceRollupPoint,
   SNMPDetail,
   SNMPDisk,
+  SynologyDetail,
+  TraefikOverview,
 } from '../api/types'
+import { timeAgo, formatBytes } from '../utils/format'
 import './InfraComponentDetail.css'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (secs < 60) return `${secs}s ago`
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
-  return `${Math.floor(secs / 86400)}d ago`
-}
 
 const TYPE_LABEL: Record<string, string> = {
   proxmox_node:  'Proxmox Node',
@@ -137,14 +133,6 @@ function ResourceSection({ resources, history }: { resources: ResourceSummary | 
 }
 
 // ── SNMP section ──────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`
-  if (bytes >= 1e9)  return `${(bytes / 1e9).toFixed(1)} GB`
-  if (bytes >= 1e6)  return `${(bytes / 1e6).toFixed(1)} MB`
-  return `${(bytes / 1e3).toFixed(0)} KB`
-}
 
 function snmpBarColor(pct: number): string {
   if (pct >= 90) return 'var(--red)'
@@ -272,6 +260,219 @@ function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
   )
 }
 
+// ── Inline edit panel ─────────────────────────────────────────────────────────
+// Shown when the user clicks Edit on any detail page. Lets you change name, IP,
+// parent component, notes, and enabled state without touching credentials.
+
+interface EditFields {
+  name: string
+  ip: string
+  parent_id: string | null
+  notes: string
+  enabled: boolean
+}
+
+interface InlineEditPanelProps {
+  component: InfrastructureComponent
+  allComponents: InfrastructureComponent[]
+  saving: boolean
+  onSave: (fields: EditFields) => void
+  onCancel: () => void
+}
+
+function InlineEditPanel({ component, allComponents, saving, onSave, onCancel }: InlineEditPanelProps) {
+  const [name,     setName]     = useState(component.name)
+  const [ip,       setIP]       = useState(component.ip)
+  const [parentId, setParentId] = useState(component.parent_id ?? '')
+  const [notes,    setNotes]    = useState(component.notes)
+  const [enabled,  setEnabled]  = useState(component.enabled)
+
+  const available = allComponents.filter(c => c.id !== component.id)
+
+  return (
+    <>
+      {/* Backdrop — does not dismiss on click; use Cancel or ✕ */}
+      <div className="icd-edit-overlay" />
+
+      {/* Modal card */}
+      <div className="icd-edit-modal">
+        <div className="icd-edit-modal-header">
+          <span className="icd-edit-modal-title">Edit Component</span>
+          <button className="icd-edit-modal-close" onClick={onCancel}>✕</button>
+        </div>
+
+        <div className="icd-edit-fields">
+          <div className="icd-edit-field">
+            <div className="icd-edit-label">Name</div>
+            <input className="icd-edit-input" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div className="icd-edit-field">
+            <div className="icd-edit-label">IP / Host</div>
+            <input className="icd-edit-input" value={ip} onChange={e => setIP(e.target.value)} placeholder="192.168.1.x" />
+          </div>
+          <div className="icd-edit-field icd-edit-field-full">
+            <div className="icd-edit-label">Parent Component</div>
+            <select className="icd-edit-input" value={parentId} onChange={e => setParentId(e.target.value)}>
+              <option value="">None</option>
+              {available.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="icd-edit-field icd-edit-field-full">
+            <div className="icd-edit-label">Notes</div>
+            <input className="icd-edit-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
+          </div>
+          <div className="icd-edit-field">
+            <label className="icd-edit-check-label">
+              <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+              {' '}Enabled
+            </label>
+          </div>
+        </div>
+
+        <div className="icd-edit-actions">
+          <button
+            className="icd-link-btn"
+            disabled={saving || !name.trim()}
+            onClick={() => onSave({ name: name.trim(), ip: ip.trim(), parent_id: parentId || null, notes, enabled })}
+          >
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button className="icd-unlink-btn" onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Shell edit props ──────────────────────────────────────────────────────────
+// Passed into TraefikShell / SynologyShell so they can render the Edit button
+// and inline panel despite being module-level components.
+
+interface ShellEditProps {
+  allComponents: InfrastructureComponent[]
+  editOpen: boolean
+  editSaving: boolean
+  onEditOpen: () => void
+  onEditSave: (fields: EditFields) => void
+  onEditCancel: () => void
+}
+
+// ── Traefik shell ─────────────────────────────────────────────────────────────
+
+function TraefikShell({ component, ep }: { component: InfrastructureComponent; ep: ShellEditProps }) {
+  const [overview, setOverview] = useState<TraefikOverview | null>(null)
+
+  const keyDataPoints = [
+    { label: 'Version',  value: overview?.version ?? '—' },
+    { label: 'Routers',  value: overview ? String(overview.routers_total)  : '—' },
+    { label: 'Services', value: overview ? String(overview.services_total) : '—' },
+  ]
+
+  return (
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/infrastructure"
+      name={component.name}
+      status={{ status: dplStatus(component.last_status) }}
+      lastPolled={overview?.updated_at ? `Polled ${timeAgo(overview.updated_at)}` : undefined}
+      keyDataPoints={keyDataPoints}
+      actions={
+        <>
+          <button className="icd-edit-btn" onClick={ep.onEditOpen}>Edit</button>
+          <DiscoverNowButton
+            entityType="traefik"
+            entityId={component.id}
+            onSuccess={() => { /* TraefikContent auto-refreshes via tick */ }}
+          />
+        </>
+      }
+      sourceId={component.id}
+    >
+      {ep.editOpen && (
+        <InlineEditPanel
+          component={component}
+          allComponents={ep.allComponents}
+          saving={ep.editSaving}
+          onSave={ep.onEditSave}
+          onCancel={ep.onEditCancel}
+        />
+      )}
+      <TraefikContent component={component} onOverviewLoaded={setOverview} />
+    </DetailPageLayout>
+  )
+}
+
+// ── Synology shell ────────────────────────────────────────────────────────────
+// Wraps SynologyContent in the shared DetailPageLayout, lifting the key data
+// points out of the content component via the onDetailLoaded callback.
+
+function SynologyShell({ component, ep }: { component: InfrastructureComponent; ep: ShellEditProps }) {
+  const [synDetail, setSynDetail] = useState<SynologyDetail | null>(null)
+  const [synNoData, setSynNoData] = useState(false)
+
+  const handleDetailLoaded = useCallback(
+    (detail: SynologyDetail | null, noData: boolean) => {
+      setSynDetail(detail)
+      setSynNoData(noData)
+    },
+    [],
+  )
+
+  const totalStorageBytes = synDetail?.volumes.reduce((sum, v) => sum + v.total_bytes, 0) ?? 0
+  const keyDataPoints = [
+    { label: 'Type', value: 'Synology NAS' },
+    ...(component.ip ? [{ label: 'IP', value: component.ip }] : []),
+    ...(!synNoData ? [
+      { label: 'Model',   value: synDetail?.model       || '—' },
+      { label: 'DSM',     value: synDetail?.dsm_version || '—' },
+      { label: 'Storage', value: totalStorageBytes > 0 ? formatBytes(totalStorageBytes) : '—' },
+      { label: 'Uptime',  value: synDetail?.uptime      || '—' },
+    ] : []),
+  ]
+
+  return (
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/infrastructure"
+      name={component.name}
+      status={{ status: dplStatus(component.last_status) }}
+      lastPolled={synDetail?.polled_at ? `Polled ${timeAgo(synDetail.polled_at)}` : undefined}
+      keyDataPoints={keyDataPoints}
+      actions={
+        <>
+          <button className="icd-edit-btn" onClick={ep.onEditOpen}>Edit</button>
+          <DiscoverNowButton
+            entityType="synology"
+            entityId={component.id}
+            onSuccess={() => { /* SynologyContent auto-refreshes via tick */ }}
+          />
+        </>
+      }
+      sourceId={component.id}
+    >
+      {ep.editOpen && (
+        <InlineEditPanel
+          component={component}
+          allComponents={ep.allComponents}
+          saving={ep.editSaving}
+          onSave={ep.onEditSave}
+          onCancel={ep.onEditCancel}
+        />
+      )}
+      <SynologyContent component={component} onDetailLoaded={handleDetailLoaded} />
+    </DetailPageLayout>
+  )
+}
+
+function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
+  if (s === 'online')                   return 'online'
+  if (s === 'degraded')                 return 'warning'
+  if (s === 'offline' || s === 'down')  return 'offline'
+  return 'unknown'
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function InfraComponentDetail() {
@@ -279,18 +480,21 @@ export function InfraComponentDetail() {
   const navigate = useNavigate()
   const { tick } = useAutoRefresh()
 
-  const [component,     setComponent]     = useState<InfrastructureComponent | null>(null)
-  const [resources,     setResources]     = useState<ResourceSummary | null>(null)
-  const [history,       setHistory]       = useState<ResourceHistory | null>(null)
-  const [snmpDetail,    setSnmpDetail]    = useState<SNMPDetail | null>(null)
-  const [children,      setChildren]      = useState<InfrastructureComponent[]>([])
-  const [linkedApps,    setLinkedApps]    = useState<App[]>([])
-  const [allApps,       setAllApps]       = useState<App[]>([])
-  const [linkingAppId,  setLinkingAppId]  = useState('')
-  const [linkBusy,      setLinkBusy]      = useState(false)
-  const [dockerCounts,  setDockerCounts]  = useState({ total: 0, running: 0 })
-  const [loading,       setLoading]       = useState(true)
-  const [error,         setError]         = useState<string | null>(null)
+  const [component,        setComponent]        = useState<InfrastructureComponent | null>(null)
+  const [resources,        setResources]        = useState<ResourceSummary | null>(null)
+  const [history,          setHistory]          = useState<ResourceHistory | null>(null)
+  const [snmpDetail,       setSnmpDetail]       = useState<SNMPDetail | null>(null)
+  const [linkedApps,       setLinkedApps]       = useState<App[]>([])
+  const [allApps,          setAllApps]          = useState<App[]>([])
+  const [allComponents,    setAllComponents]    = useState<InfrastructureComponent[]>([])
+  const [linkingAppId,     setLinkingAppId]     = useState('')
+  const [linkBusy,         setLinkBusy]         = useState(false)
+  const [dockerCounts,     setDockerCounts]     = useState({ total: 0, running: 0 })
+  const [portainerCounts,  setPortainerCounts]  = useState({ total: 0, running: 0 })
+  const [editOpen,         setEditOpen]         = useState(false)
+  const [editSaving,       setEditSaving]       = useState(false)
+  const [loading,          setLoading]          = useState(true)
+  const [error,            setError]            = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -299,17 +503,17 @@ export function InfraComponentDetail() {
       infraApi.get(id),
       infraApi.resources(id, 'hour'),
       infraApi.resourceHistory(id, 'hour', 24),
-      infraApi.children(id),
       infraApi.linkedApps(id),
       appsApi.list(),
+      infraApi.list(),
     ])
-      .then(([comp, res, hist, ch, linked, allA]) => {
+      .then(([comp, res, hist, linked, allA, allComps]) => {
         setComponent(comp)
         setResources(res)
         setHistory(hist)
-        setChildren(ch.data)
         setLinkedApps(linked.data)
         setAllApps(allA.data)
+        setAllComponents(allComps.data)
         const extras: Promise<unknown>[] = []
         if (comp.collection_method === 'snmp') {
           extras.push(infraApi.snmpDetail(id).then(det => setSnmpDetail(det)))
@@ -353,11 +557,26 @@ export function InfraComponentDetail() {
     setLinkedApps(prev => prev.filter(a => a.id !== appId))
   }
 
-  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
-    if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'warning'
-    if (s === 'offline')  return 'offline'
-    return 'unknown'
+  async function handleEditSave(fields: {
+    name: string; ip: string; parent_id: string | null; notes: string; enabled: boolean
+  }) {
+    if (!id || !component) return
+    setEditSaving(true)
+    try {
+      const updated = await infraApi.update(id, {
+        name: fields.name,
+        ip: fields.ip,
+        type: component.type,
+        collection_method: component.collection_method,
+        parent_id: fields.parent_id,
+        notes: fields.notes,
+        enabled: fields.enabled,
+      })
+      setComponent(updated)
+      setEditOpen(false)
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   if (loading) {
@@ -381,16 +600,149 @@ export function InfraComponentDetail() {
     )
   }
 
-  // Traefik components have their own detail page.
-  if (component.type === 'traefik') {
-    navigate(`/infrastructure/traefik/${component.id}`, { replace: true })
-    return null
+  // Portainer: render content inline — no redirect needed.
+  if (component.type === 'portainer') {
+    const baseURL: string = (component.credential_meta?.base_url as string | undefined) ?? ''
+
+    const portainerLinkedAppsHeader = (
+      <div className="dpl-linked-apps-compact">
+        <span className="dpl-linked-apps-label">Linked Apps</span>
+        {linkedApps.map(app => (
+          <span key={app.id} className="dpl-linked-app-chip">
+            {app.name}
+            <button onClick={() => void handleUnlinkApp(app.id)} title="Unlink">×</button>
+          </span>
+        ))}
+        {allApps.filter(a => !linkedApps.find(l => l.id === a.id)).length > 0 && (
+          <>
+            <select
+              className="dpl-linked-apps-select"
+              value={linkingAppId}
+              onChange={e => setLinkingAppId(e.target.value)}
+            >
+              <option value="">— link app —</option>
+              {allApps
+                .filter(a => !linkedApps.find(l => l.id === a.id))
+                .map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <button
+              className="dpl-linked-apps-link-btn"
+              disabled={!linkingAppId || linkBusy}
+              onClick={() => void handleLinkApp()}
+            >
+              {linkBusy ? 'Linking…' : 'Link'}
+            </button>
+          </>
+        )}
+        {linkedApps.length === 0 && allApps.filter(a => !linkedApps.find(l => l.id === a.id)).length === 0 && (
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>None</span>
+        )}
+      </div>
+    )
+
+    return (
+      <DetailPageLayout
+        breadcrumb="Infrastructure"
+        breadcrumbPath="/infrastructure"
+        name={component.name}
+        status={{ status: dplStatus(component.last_status) }}
+        lastPolled={component.last_polled_at ? `Last synced: ${timeAgo(component.last_polled_at)}` : undefined}
+        keyDataPoints={[
+          { label: 'Type', value: 'Portainer' },
+          ...(baseURL ? [{ label: 'URL', value: baseURL }] : []),
+          ...(portainerCounts.total > 0 ? [
+            { label: 'Containers', value: `${portainerCounts.running} running / ${portainerCounts.total} total` },
+          ] : []),
+        ]}
+        headerExtra={portainerLinkedAppsHeader}
+        actions={
+          <>
+            <button className="icd-edit-btn" onClick={() => setEditOpen(true)}>Edit</button>
+            <DiscoverNowButton
+              entityType="portainer"
+              entityId={component.id}
+              onSuccess={() => void infraApi.get(component.id)}
+            />
+          </>
+        }
+        sourceId={component.id}
+      >
+        {editOpen && (
+          <InlineEditPanel
+            component={component}
+            allComponents={allComponents}
+            saving={editSaving}
+            onSave={(fields) => void handleEditSave(fields)}
+            onCancel={() => setEditOpen(false)}
+          />
+        )}
+        <PortainerContent
+          component={component}
+          onCountsLoaded={(total, running) => setPortainerCounts({ total, running })}
+        />
+      </DetailPageLayout>
+    )
   }
 
-  // Synology components have their own detail page.
+  // Proxmox: render content inline using the shared shell.
+  if (component.type === 'proxmox_node') {
+    return (
+      <DetailPageLayout
+        breadcrumb="Infrastructure"
+        breadcrumbPath="/infrastructure"
+        name={component.name}
+        status={{ status: dplStatus(component.last_status) }}
+        lastPolled={component.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
+        keyDataPoints={[
+          { label: 'Type', value: 'Proxmox VE' },
+          ...(component.ip ? [{ label: 'IP', value: component.ip }] : []),
+        ]}
+        actions={
+          <>
+            <button className="icd-edit-btn" onClick={() => setEditOpen(true)}>Edit</button>
+            <DiscoverNowButton
+              entityType="proxmox_node"
+              entityId={component.id}
+              onSuccess={() => void infraApi.get(component.id)}
+            />
+          </>
+        }
+        sourceId={component.id}
+      >
+        {editOpen && (
+          <InlineEditPanel
+            component={component}
+            allComponents={allComponents}
+            saving={editSaving}
+            onSave={(fields) => void handleEditSave(fields)}
+            onCancel={() => setEditOpen(false)}
+          />
+        )}
+        <ProxmoxContent component={component} />
+      </DetailPageLayout>
+    )
+  }
+
+  // Traefik: render content inline using the shared shell.
+  if (component.type === 'traefik') {
+    const ep: ShellEditProps = {
+      allComponents, editOpen, editSaving,
+      onEditOpen:  () => setEditOpen(true),
+      onEditSave:  (fields) => void handleEditSave(fields),
+      onEditCancel: () => setEditOpen(false),
+    }
+    return <TraefikShell component={component} ep={ep} />
+  }
+
+  // Synology: render content inline using the shared shell.
   if (component.type === 'synology') {
-    navigate(`/infrastructure/synology/${component.id}`, { replace: true })
-    return null
+    const ep: ShellEditProps = {
+      allComponents, editOpen, editSaving,
+      onEditOpen:  () => setEditOpen(true),
+      onEditSave:  (fields) => void handleEditSave(fields),
+      onEditCancel: () => setEditOpen(false),
+    }
+    return <SynologyShell component={component} ep={ep} />
   }
 
   const keyDataPoints = [
@@ -457,16 +809,29 @@ export function InfraComponentDetail() {
       keyDataPoints={keyDataPoints}
       headerExtra={dockerLinkedAppsHeader}
       actions={
-        component.collection_method !== 'none' ? (
-          <DiscoverNowButton
-            entityType={component.type}
-            entityId={component.id}
-            onSuccess={() => void handleDiscoverSuccess()}
-          />
-        ) : undefined
+        <>
+          <button className="icd-edit-btn" onClick={() => setEditOpen(true)}>Edit</button>
+          {component.collection_method !== 'none' && (
+            <DiscoverNowButton
+              entityType={component.type}
+              entityId={component.id}
+              onSuccess={() => void handleDiscoverSuccess()}
+            />
+          )}
+        </>
       }
       sourceId={component.id}
     >
+      {editOpen && (
+        <InlineEditPanel
+          component={component}
+          allComponents={allComponents}
+          saving={editSaving}
+          onSave={(fields) => void handleEditSave(fields)}
+          onCancel={() => setEditOpen(false)}
+        />
+      )}
+
       {/* SNMP hosts: three-section detail view */}
       {component.collection_method === 'snmp' && (
         <SNMPSection detail={snmpDetail} />
@@ -488,11 +853,6 @@ export function InfraComponentDetail() {
         </div>
       )}
 
-      {/* Discovered VMs & LXC containers (Proxmox nodes) */}
-      {component.type === 'proxmox_node' && (
-        <ProxmoxChildrenSection children={children} onNavigate={navigate} />
-      )}
-
       {/* Linked Applications — only for non-docker types (docker uses headerExtra) */}
       {component.type !== 'docker_engine' && (
         <LinkedAppsSection
@@ -506,93 +866,6 @@ export function InfraComponentDetail() {
         />
       )}
     </DetailPageLayout>
-  )
-}
-
-// ── Proxmox children section ──────────────────────────────────────────────────
-
-function statusDotClass(s: string) {
-  if (s === 'online')   return 'online'
-  if (s === 'degraded') return 'degraded'
-  if (s === 'offline')  return 'offline'
-  return 'unknown'
-}
-
-const CHILD_TYPE_LABEL: Record<string, string> = {
-  vm:  'VM',
-  lxc: 'LXC',
-}
-
-interface ProxmoxChildrenSectionProps {
-  children: InfrastructureComponent[]
-  onNavigate: (path: string) => void
-}
-
-function ProxmoxChildrenSection({ children, onNavigate }: ProxmoxChildrenSectionProps) {
-  const vms  = children.filter(c => c.type === 'vm')
-  const lxcs = children.filter(c => c.type === 'lxc')
-
-  if (children.length === 0) {
-    return (
-      <div className="icd-section">
-        <div className="icd-section-title">Virtual Machines</div>
-        <div className="icd-empty">No VMs or containers discovered yet. Run Discover Now to discover.</div>
-      </div>
-    )
-  }
-
-  return (
-    <>
-      {vms.length > 0 && (
-        <div className="icd-section">
-          <div className="icd-section-title">Virtual Machines</div>
-          <div className="icd-child-grid">
-            {vms.map(c => (
-              <div
-                key={c.id}
-                className="icd-child-card"
-                onClick={() => onNavigate(`/infrastructure/${c.id}`)}
-              >
-                <div className="icd-child-header">
-                  <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
-                  <span className="icd-child-name">{c.name}</span>
-                  <span className="icd-child-type">{CHILD_TYPE_LABEL[c.type] ?? c.type}</span>
-                </div>
-                <div className="icd-child-meta">
-                  {c.ip && <span className="icd-child-ip">{c.ip}</span>}
-                  <span className="icd-child-status">{c.last_status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {lxcs.length > 0 && (
-        <div className="icd-section">
-          <div className="icd-section-title">LXC Containers</div>
-          <div className="icd-child-grid">
-            {lxcs.map(c => (
-              <div
-                key={c.id}
-                className="icd-child-card"
-                onClick={() => onNavigate(`/infrastructure/${c.id}`)}
-              >
-                <div className="icd-child-header">
-                  <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
-                  <span className="icd-child-name">{c.name}</span>
-                  <span className="icd-child-type">{CHILD_TYPE_LABEL[c.type] ?? c.type}</span>
-                </div>
-                <div className="icd-child-meta">
-                  {c.ip && <span className="icd-child-ip">{c.ip}</span>}
-                  <span className="icd-child-status">{c.last_status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
   )
 }
 
