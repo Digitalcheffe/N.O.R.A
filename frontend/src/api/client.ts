@@ -82,6 +82,9 @@ async function request<T>(
   })
 
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      window.dispatchEvent(new CustomEvent('nora:session-expired'))
+    }
     const payload = await res.json().catch(() => ({ error: 'Request failed' }))
     throw new Error(payload.error ?? `HTTP ${res.status}`)
   }

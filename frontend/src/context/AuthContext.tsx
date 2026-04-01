@@ -20,6 +20,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [setupRequired, setSetupRequired] = useState(false)
 
   useEffect(() => {
+    const onExpired = () => setUser(null)
+    window.addEventListener('nora:session-expired', onExpired)
+    return () => window.removeEventListener('nora:session-expired', onExpired)
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
 
     auth.setupRequired()
