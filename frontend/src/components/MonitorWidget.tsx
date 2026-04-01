@@ -24,11 +24,12 @@ function uptimeClass(status: string): string {
 
 interface Props {
   check: CheckSummary
+  onClick?: () => void
 }
 
-export function MonitorWidget({ check }: Props) {
+export function MonitorWidget({ check, onClick }: Props) {
   return (
-    <div className="monitor-widget">
+    <div className="monitor-widget" style={onClick ? { cursor: 'pointer' } : undefined} onClick={onClick}>
       <div className={statusBlockClass(check.status)}>{statusBlockLabel(check)}</div>
       <div className="monitor-info">
         <div className="monitor-name">{check.name}</div>

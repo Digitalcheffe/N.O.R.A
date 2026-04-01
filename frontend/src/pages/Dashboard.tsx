@@ -4,16 +4,84 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SummaryCard } from '../components/SummaryCard'
 import { AppWidget } from '../components/AppWidget'
-import { MonitorWidget } from '../components/MonitorWidget'
 import { SSLRow } from '../components/SSLRow'
 import { EventRow } from '../components/EventRow'
-import { HostWidget } from '../components/HostWidget'
-import type { HostData } from '../components/HostWidget'
 import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
-import type { DashboardSummaryResponse, Event, InfrastructureComponent } from '../api/types'
+import type { DashboardSummaryResponse, Event, InfrastructureComponent, ResourceSummary } from '../api/types'
 import './Dashboard.css'
+import './Infrastructure.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
+
+// ── Infra helpers (mirrors Infrastructure.tsx) ────────────────────────────────
+
+const TYPE_LABEL: Record<string, string> = {
+  proxmox_node:  'Proxmox Node',
+  synology:      'Synology NAS',
+  vm:            'VM',
+  lxc:           'LXC',
+  bare_metal:    'Bare Metal',
+  linux_host:    'Linux Host',
+  windows_host:  'Windows Host',
+  generic_host:  'Generic Host',
+  docker_engine: 'Docker Engine',
+  traefik:       'Traefik',
+  portainer:     'Portainer',
+}
+
+const NO_RESOURCE_BARS = new Set(['traefik', 'portainer', 'docker_engine'])
+
+function statusClass(s: string): string {
+  if (s === 'online')   return 'online'
+  if (s === 'degraded') return 'degraded'
+  if (s === 'offline')  return 'offline'
+  return 'unknown'
+}
+
+function statusLabel(s: string): string {
+  if (s === 'online')   return 'Online'
+  if (s === 'degraded') return 'Degraded'
+  if (s === 'offline')  return 'Offline'
+  return 'Unknown'
+}
+
+function barClass(value: number, isDisk: boolean): string {
+  if (!isDisk) return ''
+  if (value > 95) return ' crit'
+  if (value > 85) return ' warn'
+  return ''
+}
+
+function ResBar({
+  label, value, isDisk, noData,
+}: { label: string; value: number; isDisk?: boolean; noData?: boolean }) {
+  const cls = noData ? '' : barClass(value, !!isDisk)
+  return (
+    <div className="infra-res-row">
+      <span className="infra-res-label">{label}</span>
+      <div className="infra-res-track">
+        <div
+          className={`infra-res-fill${cls}${noData ? ' no-data' : ''}`}
+          style={{ width: noData ? '0%' : `${Math.min(value, 100)}%` }}
+        />
+      </div>
+      <span className={`infra-res-pct${noData ? ' no-data' : ''}`}>
+        {noData ? 'Collecting…' : `${Math.round(value)}%`}
+      </span>
+    </div>
+  )
+}
+
+// ── Event severity counts type ────────────────────────────────────────────────
+
+interface EventCounts {
+  info: number
+  warn: number
+  error: number
+  critical: number
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -21,21 +89,50 @@ export function Dashboard() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [data, setData] = useState<DashboardSummaryResponse | null>(null)
   const [recentEvents, setRecentEvents] = useState<Event[]>([])
-  const [physicalHosts, setPhysicalHosts] = useState<InfrastructureComponent[]>([])
+  const [eventCounts, setEventCounts] = useState<EventCounts | null>(null)
+  const [infraComponents, setInfraComponents] = useState<InfrastructureComponent[]>([])
+  const [resourcesMap, setResourcesMap] = useState<Record<string, ResourceSummary>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     void (async () => {
       setLoading(true)
       try {
-        const [summary, evts, hosts] = await Promise.all([
+        const periodMs = timeFilter === 'day' ? 86_400_000 : timeFilter === 'week' ? 7 * 86_400_000 : 30 * 86_400_000
+        const sinceFilter = new Date(Date.now() - periodMs).toISOString()
+
+        const [summary, evts, hosts, infoRes, warnRes, errorRes, critRes] = await Promise.all([
           dashboardApi.summary(timeFilter),
           eventsApi.list({ limit: 5 }),
           infraApi.list().catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'info',     from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'warn',     from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'error',    from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'critical', from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
         ])
+
         setData(summary)
         setRecentEvents(evts.data)
-        setPhysicalHosts(hosts.data)
+        setInfraComponents(hosts.data)
+        setEventCounts({
+          info:     infoRes.total,
+          warn:     warnRes.total,
+          error:    errorRes.total,
+          critical: critRes.total,
+        })
+
+        // Poll resource summaries for components that expose them
+        const pollable = hosts.data.filter(c => !NO_RESOURCE_BARS.has(c.type))
+        if (pollable.length > 0) {
+          const results = await Promise.allSettled(
+            pollable.map(c => infraApi.resources(c.id, 'hour').then(r => ({ id: c.id, data: r })))
+          )
+          const resMap: Record<string, ResourceSummary> = {}
+          for (const r of results) {
+            if (r.status === 'fulfilled') resMap[r.value.id] = r.value.data
+          }
+          setResourcesMap(resMap)
+        }
       } catch (e) {
         console.error(e)
       } finally {
@@ -82,7 +179,7 @@ export function Dashboard() {
   }
 
   // ── Empty state ───────────────────────────────────────────────────────────
-  if (!data || (data.apps.length === 0 && data.checks.length === 0 && physicalHosts.length === 0)) {
+  if (!data || (data.apps.length === 0 && data.checks.length === 0 && infraComponents.length === 0)) {
     return (
       <>
         <Topbar title="Dashboard" timeFilter={timeFilter} onTimeFilter={setTimeFilter} />
@@ -132,6 +229,46 @@ export function Dashboard() {
     appNameMap[a.id] = a.name
   })
 
+  // ── Infra card renderer (read-only, links to detail) ─────────────────────
+  function renderInfraCard(host: InfrastructureComponent) {
+    const res = resourcesMap[host.id]
+    const noData = !res || res.no_data
+    const needsResBar = !NO_RESOURCE_BARS.has(host.type)
+
+    return (
+      <div
+        key={host.id}
+        className="infra-card"
+        style={{ cursor: 'pointer' }}
+        onClick={() => navigate(`/infrastructure/${host.id}`)}
+      >
+        <div className="infra-card-header">
+          <div className="infra-card-title-group">
+            <div className="infra-card-name">
+              {host.name}
+              <span className="infra-card-nav-arrow" aria-hidden="true"> ›</span>
+            </div>
+            <div className="infra-card-meta">
+              {TYPE_LABEL[host.type] ?? host.type} · {host.ip || '—'}
+            </div>
+          </div>
+          <div className="infra-card-status-group">
+            <span className={`infra-status-dot ${statusClass(host.last_status)}`} />
+            <span className="infra-status-label">{statusLabel(host.last_status)}</span>
+          </div>
+        </div>
+
+        {needsResBar && (
+          <div className="infra-res-bars">
+            <ResBar label="CPU" value={noData ? 0 : res!.cpu_percent} noData={noData} />
+            <ResBar label="MEM" value={noData ? 0 : res!.mem_percent} noData={noData} />
+            <ResBar label="DSK" value={noData ? 0 : res!.disk_percent} isDisk noData={noData} />
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // ── Full dashboard ────────────────────────────────────────────────────────
   return (
     <>
@@ -144,7 +281,7 @@ export function Dashboard() {
       />
       <div className="content">
 
-        {/* Summary Bar — only when there are digest categories */}
+        {/* Summary Bar */}
         {data.summary_bar.length > 0 && (
           <div className="summary-bar">
             {data.summary_bar.map(item => (
@@ -189,7 +326,39 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Recent Events */}
+            {/* Events (24h) — severity counts */}
+            {eventCounts !== null && (
+              <div>
+                <div className="section-header">
+                  <div className="section-title">
+                    Events ({timeFilter === 'day' ? '24h' : timeFilter === 'week' ? '7d' : '30d'})
+                  </div>
+                  <button className="section-action" onClick={() => navigate('/events')}>
+                    View all →
+                  </button>
+                </div>
+                <div className="event-counts-row">
+                  <div className="event-count-card info">
+                    <div className="event-count-value">{eventCounts.info}</div>
+                    <div className="event-count-label">Info</div>
+                  </div>
+                  <div className="event-count-card warn">
+                    <div className="event-count-value">{eventCounts.warn}</div>
+                    <div className="event-count-label">Warn</div>
+                  </div>
+                  <div className="event-count-card error">
+                    <div className="event-count-value">{eventCounts.error}</div>
+                    <div className="event-count-label">Error</div>
+                  </div>
+                  <div className="event-count-card critical">
+                    <div className="event-count-value">{eventCounts.critical}</div>
+                    <div className="event-count-label">Critical</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Recent Events (below counts) */}
             {recentEvents.length > 0 && (
               <div>
                 <div className="section-header">
@@ -215,33 +384,54 @@ export function Dashboard() {
           {/* ── RIGHT COLUMN ── */}
           <div className="col-right">
 
-            {/* Monitor Checks */}
-            {data.checks.length > 0 && (
-              <div>
-                <div className="section-header">
-                  <div className="section-title">Monitor Checks</div>
-                  <button className="section-action" onClick={() => navigate('/checks')}>
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Add check
-                  </button>
+            {/* Monitor Checks — rollup by type */}
+            {data.checks.length > 0 && (() => {
+              // Group checks by type and compute average uptime + status
+              const groups: Record<string, { total: number; upPctSum: number; down: number }> = {}
+              for (const c of data.checks) {
+                if (!groups[c.type]) groups[c.type] = { total: 0, upPctSum: 0, down: 0 }
+                groups[c.type].total++
+                groups[c.type].upPctSum += c.uptime_pct
+                if (c.status === 'down' || c.status === 'critical') groups[c.type].down++
+              }
+              const rollup = Object.entries(groups).map(([type, g]) => ({
+                type,
+                total: g.total,
+                avgUptime: g.upPctSum / g.total,
+                down: g.down,
+              }))
+
+              return (
+                <div>
+                  <div className="section-header">
+                    <div className="section-title">Monitor Checks</div>
+                    <button className="section-action" onClick={() => navigate('/checks')}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Add check
+                    </button>
+                  </div>
+                  <div className="check-rollup-grid">
+                    {rollup.map(r => (
+                      <div
+                        key={r.type}
+                        className={`check-rollup-card ${r.down > 0 ? 'down' : 'up'}`}
+                        onClick={() => navigate('/checks')}
+                      >
+                        <div className="check-rollup-type">{r.type.toUpperCase()}</div>
+                        <div className="check-rollup-uptime">{r.avgUptime.toFixed(1)}%</div>
+                        <div className="check-rollup-meta">
+                          {r.total} check{r.total !== 1 ? 's' : ''}
+                          {r.down > 0 && <span className="check-rollup-down"> · {r.down} down</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {data.checks.map(check => (
-                    <MonitorWidget key={check.id} check={check} />
-                  ))}
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* SSL Certificates */}
             {data.ssl_certs.length > 0 && (
@@ -257,43 +447,24 @@ export function Dashboard() {
               </div>
             )}
 
-            {/* Infrastructure — only shown when hosts are configured */}
-            {physicalHosts.length > 0 && (
-              <div>
-                <div className="section-header">
-                  <div className="section-title">Infrastructure</div>
-                  <button className="section-action" onClick={() => navigate('/infrastructure')}>
-                    View all →
-                  </button>
-                </div>
-                <div className="widget-grid">
-                  {physicalHosts.map(host => {
-                    const hostData: HostData = {
-                      id:        host.id,
-                      name:      host.name,
-                      type:      host.type === 'proxmox_node' ? 'Proxmox Node' : 'Bare Metal',
-                      ip:        host.ip,
-                      status:    'unknown',
-                      resources: [
-                        { label: 'CPU', pct: 0 },
-                        { label: 'MEM', pct: 0 },
-                        { label: 'DSK', pct: 0 },
-                      ],
-                    }
-                    return (
-                      <HostWidget
-                        key={host.id}
-                        host={hostData}
-                        onClick={() => navigate('/infrastructure')}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
           </div>
         </div>
+
+        {/* ── INFRASTRUCTURE — full-width below two-col ── */}
+        {infraComponents.length > 0 && (
+          <div>
+            <div className="section-header">
+              <div className="section-title">Infrastructure</div>
+              <button className="section-action" onClick={() => navigate('/infrastructure')}>
+                View all →
+              </button>
+            </div>
+            <div className="dash-infra-grid">
+              {infraComponents.map(host => renderInfraCard(host))}
+            </div>
+          </div>
+        )}
+
       </div>
     </>
   )
