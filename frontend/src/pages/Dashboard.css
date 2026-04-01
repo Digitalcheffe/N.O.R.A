@@ -544,6 +544,63 @@
   gap: 20px;
 }
 
+/* ── EVENT SEVERITY COUNTS ── */
+.event-counts-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.event-count-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color 0.15s;
+}
+
+.event-count-card:hover { border-color: var(--border2); }
+
+.event-count-value {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.event-count-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+}
+
+.event-count-card.info    .event-count-value { color: var(--accent); }
+.event-count-card.warn    .event-count-value { color: var(--yellow); }
+.event-count-card.error   .event-count-value { color: var(--red); }
+.event-count-card.critical .event-count-value { color: var(--red); }
+
+.event-count-card.info    { border-left: 3px solid var(--accent); }
+.event-count-card.warn    { border-left: 3px solid var(--yellow); }
+.event-count-card.error   { border-left: 3px solid var(--red); }
+.event-count-card.critical { border-left: 3px solid var(--red); opacity: 0.85; }
+
+/* ── DASHBOARD INFRA GRID ── */
+.dash-infra-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+/* infra-card on the dashboard: no action buttons, so collapse the footer padding */
+.dash-infra-grid .infra-card-footer {
+  display: none;
+}
+
 /* ── SKELETON SHIMMER ── */
 .skeleton {
   border-radius: 8px;
