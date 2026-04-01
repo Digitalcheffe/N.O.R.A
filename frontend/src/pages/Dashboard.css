@@ -589,6 +589,56 @@
 .event-count-card.error   { border-left: 3px solid var(--red); }
 .event-count-card.critical { border-left: 3px solid var(--red); opacity: 0.85; }
 
+/* ── CHECK ROLLUP CARDS ── */
+.check-rollup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.check-rollup-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.check-rollup-card:hover { border-color: var(--border2); transform: translateY(-1px); }
+
+.check-rollup-card.up   { border-top: 3px solid var(--green); }
+.check-rollup-card.down { border-top: 3px solid var(--red); }
+
+.check-rollup-type {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.check-rollup-uptime {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+}
+
+.check-rollup-card.down .check-rollup-uptime { color: var(--red); }
+
+.check-rollup-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+}
+
+.check-rollup-down { color: var(--red); }
+
 /* ── DASHBOARD INFRA GRID ── */
 .dash-infra-grid {
   display: grid;

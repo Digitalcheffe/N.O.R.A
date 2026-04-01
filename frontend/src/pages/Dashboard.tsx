@@ -4,7 +4,6 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SummaryCard } from '../components/SummaryCard'
 import { AppWidget } from '../components/AppWidget'
-import { MonitorWidget } from '../components/MonitorWidget'
 import { SSLRow } from '../components/SSLRow'
 import { EventRow } from '../components/EventRow'
 import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
@@ -99,16 +98,17 @@ export function Dashboard() {
     void (async () => {
       setLoading(true)
       try {
-        const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const periodMs = timeFilter === 'day' ? 86_400_000 : timeFilter === 'week' ? 7 * 86_400_000 : 30 * 86_400_000
+        const sinceFilter = new Date(Date.now() - periodMs).toISOString()
 
         const [summary, evts, hosts, infoRes, warnRes, errorRes, critRes] = await Promise.all([
           dashboardApi.summary(timeFilter),
           eventsApi.list({ limit: 5 }),
           infraApi.list().catch(() => ({ data: [], total: 0 })),
-          eventsApi.list({ level: 'info',     from: since24h, limit: 1 }).catch(() => ({ data: [], total: 0 })),
-          eventsApi.list({ level: 'warn',     from: since24h, limit: 1 }).catch(() => ({ data: [], total: 0 })),
-          eventsApi.list({ level: 'error',    from: since24h, limit: 1 }).catch(() => ({ data: [], total: 0 })),
-          eventsApi.list({ level: 'critical', from: since24h, limit: 1 }).catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'info',     from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'warn',     from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'error',    from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
+          eventsApi.list({ level: 'critical', from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
         ])
 
         setData(summary)
@@ -330,7 +330,9 @@ export function Dashboard() {
             {eventCounts !== null && (
               <div>
                 <div className="section-header">
-                  <div className="section-title">Events (24h)</div>
+                  <div className="section-title">
+                    Events ({timeFilter === 'day' ? '24h' : timeFilter === 'week' ? '7d' : '30d'})
+                  </div>
                   <button className="section-action" onClick={() => navigate('/events')}>
                     View all →
                   </button>
@@ -382,37 +384,54 @@ export function Dashboard() {
           {/* ── RIGHT COLUMN ── */}
           <div className="col-right">
 
-            {/* Monitor Checks */}
-            {data.checks.length > 0 && (
-              <div>
-                <div className="section-header">
-                  <div className="section-title">Monitor Checks</div>
-                  <button className="section-action" onClick={() => navigate('/checks')}>
-                    <svg
-                      width="10"
-                      height="10"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Add check
-                  </button>
+            {/* Monitor Checks — rollup by type */}
+            {data.checks.length > 0 && (() => {
+              // Group checks by type and compute average uptime + status
+              const groups: Record<string, { total: number; upPctSum: number; down: number }> = {}
+              for (const c of data.checks) {
+                if (!groups[c.type]) groups[c.type] = { total: 0, upPctSum: 0, down: 0 }
+                groups[c.type].total++
+                groups[c.type].upPctSum += c.uptime_pct
+                if (c.status === 'down' || c.status === 'critical') groups[c.type].down++
+              }
+              const rollup = Object.entries(groups).map(([type, g]) => ({
+                type,
+                total: g.total,
+                avgUptime: g.upPctSum / g.total,
+                down: g.down,
+              }))
+
+              return (
+                <div>
+                  <div className="section-header">
+                    <div className="section-title">Monitor Checks</div>
+                    <button className="section-action" onClick={() => navigate('/checks')}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Add check
+                    </button>
+                  </div>
+                  <div className="check-rollup-grid">
+                    {rollup.map(r => (
+                      <div
+                        key={r.type}
+                        className={`check-rollup-card ${r.down > 0 ? 'down' : 'up'}`}
+                        onClick={() => navigate('/checks')}
+                      >
+                        <div className="check-rollup-type">{r.type.toUpperCase()}</div>
+                        <div className="check-rollup-uptime">{r.avgUptime.toFixed(1)}%</div>
+                        <div className="check-rollup-meta">
+                          {r.total} check{r.total !== 1 ? 's' : ''}
+                          {r.down > 0 && <span className="check-rollup-down"> · {r.down} down</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {data.checks.map(check => (
-                    <MonitorWidget
-                      key={check.id}
-                      check={check}
-                      onClick={() => navigate(`/checks/${check.id}`)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* SSL Certificates */}
             {data.ssl_certs.length > 0 && (
