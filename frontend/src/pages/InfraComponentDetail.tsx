@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
@@ -7,6 +7,7 @@ import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
 import { PortainerContent } from './PortainerDetail'
 import { ProxmoxContent } from './ProxmoxDetail'
+import { SynologyContent } from './SynologyDetail'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
@@ -16,8 +17,9 @@ import type {
   ResourceRollupPoint,
   SNMPDetail,
   SNMPDisk,
+  SynologyDetail,
 } from '../api/types'
-import { timeAgo } from '../utils/format'
+import { timeAgo, formatBytes } from '../utils/format'
 import './InfraComponentDetail.css'
 
 const TYPE_LABEL: Record<string, string> = {
@@ -129,14 +131,6 @@ function ResourceSection({ resources, history }: { resources: ResourceSummary | 
 }
 
 // ── SNMP section ──────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`
-  if (bytes >= 1e9)  return `${(bytes / 1e9).toFixed(1)} GB`
-  if (bytes >= 1e6)  return `${(bytes / 1e6).toFixed(1)} MB`
-  return `${(bytes / 1e3).toFixed(0)} KB`
-}
 
 function snmpBarColor(pct: number): string {
   if (pct >= 90) return 'var(--red)'
@@ -264,6 +258,59 @@ function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
   )
 }
 
+// ── Synology shell ────────────────────────────────────────────────────────────
+// Wraps SynologyContent in the shared DetailPageLayout, lifting the key data
+// points out of the content component via the onDetailLoaded callback.
+
+function SynologyShell({ component }: { component: InfrastructureComponent }) {
+  const [synDetail, setSynDetail] = useState<SynologyDetail | null>(null)
+  const [synNoData, setSynNoData] = useState(false)
+
+  const handleDetailLoaded = useCallback(
+    (detail: SynologyDetail | null, noData: boolean) => {
+      setSynDetail(detail)
+      setSynNoData(noData)
+    },
+    [],
+  )
+
+  const totalStorageBytes = synDetail?.volumes.reduce((sum, v) => sum + v.total_bytes, 0) ?? 0
+  const keyDataPoints = synNoData ? [] : [
+    { label: 'Model',   value: synDetail?.model       || '—' },
+    { label: 'DSM',     value: synDetail?.dsm_version || '—' },
+    { label: 'Storage', value: totalStorageBytes > 0 ? formatBytes(totalStorageBytes) : '—' },
+    { label: 'Uptime',  value: synDetail?.uptime      || '—' },
+  ]
+
+  return (
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/infrastructure"
+      name={component.name}
+      status={{ status: dplStatus(component.last_status) }}
+      lastPolled={synDetail?.polled_at ? `Polled ${timeAgo(synDetail.polled_at)}` : undefined}
+      keyDataPoints={keyDataPoints}
+      actions={
+        <DiscoverNowButton
+          entityType="synology"
+          entityId={component.id}
+          onSuccess={() => { /* SynologyContent auto-refreshes via tick */ }}
+        />
+      }
+      sourceId={component.id}
+    >
+      <SynologyContent component={component} onDetailLoaded={handleDetailLoaded} />
+    </DetailPageLayout>
+  )
+}
+
+function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
+  if (s === 'online')                   return 'online'
+  if (s === 'degraded')                 return 'warning'
+  if (s === 'offline' || s === 'down')  return 'offline'
+  return 'unknown'
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function InfraComponentDetail() {
@@ -340,13 +387,6 @@ export function InfraComponentDetail() {
     if (!id) return
     await infraApi.unlinkApp(id, appId)
     setLinkedApps(prev => prev.filter(a => a.id !== appId))
-  }
-
-  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
-    if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'warning'
-    if (s === 'offline')  return 'offline'
-    return 'unknown'
   }
 
   if (loading) {
@@ -431,10 +471,9 @@ export function InfraComponentDetail() {
     return null
   }
 
-  // Synology: redirect to dedicated page (to be migrated in a future cleanup).
+  // Synology: render content inline using the shared shell.
   if (component.type === 'synology') {
-    navigate(`/infrastructure/synology/${component.id}`, { replace: true })
-    return null
+    return <SynologyShell component={component} />
   }
 
   const keyDataPoints = [

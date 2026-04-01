@@ -1,10 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
-import { Topbar } from '../components/Topbar'
-import { DetailPageLayout } from '../components/DetailPageLayout'
-import { DiscoverNowButton } from '../components/DiscoverNowButton'
-import { infrastructure as infraApi, synology as synologyApi } from '../api/client'
+import { synology as synologyApi } from '../api/client'
+import { formatBytes } from '../utils/format'
 import type {
   InfrastructureComponent,
   SynologyDetail,
@@ -15,25 +12,6 @@ import './InfraComponentDetail.css'
 import './SynologyDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 B'
-  const tb = bytes / 1_099_511_627_776
-  if (tb >= 1) return `${tb.toFixed(1)} TB`
-  const gb = bytes / 1_073_741_824
-  if (gb >= 1) return `${gb.toFixed(1)} GB`
-  const mb = bytes / 1_048_576
-  return `${mb.toFixed(0)} MB`
-}
-
-function timeAgo(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (secs < 60) return `${secs}s ago`
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
-  return `${Math.floor(secs / 86400)}d ago`
-}
 
 function tempColor(c: number): string {
   if (c > 55) return 'var(--red)'
@@ -49,12 +27,12 @@ function barFillColor(pct: number): string {
 
 function statusDotClass(status: string): string {
   switch (status.toLowerCase()) {
-    case 'normal': return 'syn-dot normal'
+    case 'normal':   return 'syn-dot normal'
     case 'degraded':
-    case 'warning': return 'syn-dot warn'
+    case 'warning':  return 'syn-dot warn'
     case 'crashed':
     case 'critical': return 'syn-dot crit'
-    default: return 'syn-dot unknown'
+    default:         return 'syn-dot unknown'
   }
 }
 
@@ -85,7 +63,7 @@ function ResourceBar({
 
 function VolumeRow({ vol }: { vol: SynologyVolume }) {
   const accentClass =
-    vol.status === 'crashed' ? 'syn-row-crit' :
+    vol.status === 'crashed'  ? 'syn-row-crit' :
     vol.status === 'degraded' ? 'syn-row-warn' : ''
   const color = barFillColor(vol.percent)
   return (
@@ -110,7 +88,7 @@ function VolumeRow({ vol }: { vol: SynologyVolume }) {
 function DiskRow({ disk }: { disk: SynologyDisk }) {
   const accentClass =
     disk.status === 'critical' ? 'syn-row-crit' :
-    disk.status === 'warning' ? 'syn-row-warn' : ''
+    disk.status === 'warning'  ? 'syn-row-warn' : ''
   return (
     <div className={`syn-disk-row ${accentClass}`}>
       <div className="syn-disk-slot">Disk {disk.slot}</div>
@@ -126,95 +104,39 @@ function DiskRow({ disk }: { disk: SynologyDisk }) {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── SynologyContent ───────────────────────────────────────────────────────────
+// Content-only component rendered inside InfraComponentDetail's DetailPageLayout
+// shell. Returns both the JSX children and the key data points via callback so
+// the parent shell can display them in the header.
 
-export function SynologyDetail() {
-  const { componentId } = useParams<{ componentId: string }>()
-  const navigate = useNavigate()
+interface SynologyContentProps {
+  component: InfrastructureComponent
+  onDetailLoaded?: (detail: SynologyDetail | null, noData: boolean) => void
+}
+
+export function SynologyContent({ component, onDetailLoaded }: SynologyContentProps) {
   const { tick } = useAutoRefresh()
-
-  const [component, setComponent] = useState<InfrastructureComponent | null>(null)
   const [detail, setDetail] = useState<SynologyDetail | null>(null)
   const [noData, setNoData] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!componentId) return
     try {
-      const [comp, detailResp] = await Promise.all([
-        infraApi.get(componentId),
-        synologyApi.detail(componentId),
-      ])
-      setComponent(comp)
-      setDetail(detailResp.data)
-      setNoData(detailResp.no_data === true)
-      setError(null)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load Synology data')
-    } finally {
-      setLoading(false)
+      const resp = await synologyApi.detail(component.id)
+      setDetail(resp.data)
+      setNoData(resp.no_data === true)
+      onDetailLoaded?.(resp.data, resp.no_data === true)
+    } catch {
+      setDetail(null)
+      onDetailLoaded?.(null, true)
     }
-  }, [componentId])
+  }, [component.id, onDetailLoaded])
 
-  useEffect(() => { load() }, [load, tick])
-
-  if (loading) {
-    return (
-      <>
-        <Topbar title="Synology NAS" />
-        <div className="content"><div className="icd-loading">Loading…</div></div>
-      </>
-    )
-  }
-
-  if (error || !component) {
-    return (
-      <>
-        <Topbar title="Synology NAS" />
-        <div className="content">
-          <div className="icd-error">{error ?? 'Component not found'}</div>
-          <button className="icd-back-btn" onClick={() => navigate('/infrastructure')}>← Back</button>
-        </div>
-      </>
-    )
-  }
+  useEffect(() => { void load() }, [load, tick])
 
   const d = detail
 
-  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
-    if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'warning'
-    if (s === 'offline' || s === 'down') return 'offline'
-    return 'unknown'
-  }
-
-  const totalStorageBytes = d?.volumes.reduce((sum, v) => sum + v.total_bytes, 0) ?? 0
-
-  const keyDataPoints = [
-    { label: 'Model',   value: d?.model        || '—' },
-    { label: 'DSM',     value: d?.dsm_version  || '—' },
-    { label: 'Storage', value: totalStorageBytes > 0 ? formatBytes(totalStorageBytes) : '—' },
-    { label: 'Uptime',  value: d?.uptime       || '—' },
-  ]
-
   return (
-    <DetailPageLayout
-      breadcrumb="Infrastructure"
-      breadcrumbPath="/infrastructure"
-      name={component.name}
-      status={{ status: dplStatus(component.last_status) }}
-      lastPolled={d?.polled_at ? `Polled ${timeAgo(d.polled_at)}` : undefined}
-      keyDataPoints={noData ? [] : keyDataPoints}
-      actions={
-        <DiscoverNowButton
-          entityType="synology"
-          entityId={componentId!}
-          onSuccess={() => void load()}
-        />
-      }
-      sourceId={componentId!}
-    >
+    <>
       {/* Section 1 — System Info */}
       <div className="icd-section">
         <div className="icd-section-title">System Info</div>
@@ -317,6 +239,9 @@ export function SynologyDetail() {
           )}
         </div>
       </div>
-    </DetailPageLayout>
+    </>
   )
 }
+
+// Backward compat alias
+export { SynologyContent as SynologyDetail }
