@@ -532,6 +532,7 @@ export interface SynologyDisk {
 export interface SynologyUpdate {
   available: boolean
   version: string
+  checked: boolean
 }
 
 export interface SynologyDetail {

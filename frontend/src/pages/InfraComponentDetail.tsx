@@ -290,48 +290,59 @@ function InlineEditPanel({ component, allComponents, saving, onSave, onCancel }:
   const available = allComponents.filter(c => c.id !== component.id)
 
   return (
-    <div className="icd-section icd-edit-panel">
-      <div className="icd-section-title">Edit Component</div>
-      <div className="icd-edit-fields">
-        <div className="icd-edit-field">
-          <div className="icd-edit-label">Name</div>
-          <input className="icd-edit-input" value={name} onChange={e => setName(e.target.value)} />
+    <>
+      {/* Backdrop — click outside to cancel */}
+      <div className="icd-edit-overlay" onClick={onCancel} />
+
+      {/* Modal card */}
+      <div className="icd-edit-modal">
+        <div className="icd-edit-modal-header">
+          <span className="icd-edit-modal-title">Edit Component</span>
+          <button className="icd-edit-modal-close" onClick={onCancel}>✕</button>
         </div>
-        <div className="icd-edit-field">
-          <div className="icd-edit-label">IP / Host</div>
-          <input className="icd-edit-input" value={ip} onChange={e => setIP(e.target.value)} placeholder="192.168.1.x" />
+
+        <div className="icd-edit-fields">
+          <div className="icd-edit-field">
+            <div className="icd-edit-label">Name</div>
+            <input className="icd-edit-input" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div className="icd-edit-field">
+            <div className="icd-edit-label">IP / Host</div>
+            <input className="icd-edit-input" value={ip} onChange={e => setIP(e.target.value)} placeholder="192.168.1.x" />
+          </div>
+          <div className="icd-edit-field icd-edit-field-full">
+            <div className="icd-edit-label">Parent Component</div>
+            <select className="icd-edit-input" value={parentId} onChange={e => setParentId(e.target.value)}>
+              <option value="">None</option>
+              {available.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="icd-edit-field icd-edit-field-full">
+            <div className="icd-edit-label">Notes</div>
+            <input className="icd-edit-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
+          </div>
+          <div className="icd-edit-field">
+            <label className="icd-edit-check-label">
+              <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+              {' '}Enabled
+            </label>
+          </div>
         </div>
-        <div className="icd-edit-field">
-          <div className="icd-edit-label">Parent Component</div>
-          <select className="icd-edit-input" value={parentId} onChange={e => setParentId(e.target.value)}>
-            <option value="">None</option>
-            {available.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="icd-edit-field">
-          <div className="icd-edit-label">Notes</div>
-          <input className="icd-edit-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
-        </div>
-        <div className="icd-edit-field">
-          <label className="icd-edit-check-label">
-            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-            {' '}Enabled
-          </label>
+
+        <div className="icd-edit-actions">
+          <button
+            className="icd-link-btn"
+            disabled={saving || !name.trim()}
+            onClick={() => onSave({ name: name.trim(), ip: ip.trim(), parent_id: parentId || null, notes, enabled })}
+          >
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button className="icd-unlink-btn" onClick={onCancel}>Cancel</button>
         </div>
       </div>
-      <div className="icd-edit-actions">
-        <button
-          className="icd-link-btn"
-          disabled={saving || !name.trim()}
-          onClick={() => onSave({ name: name.trim(), ip: ip.trim(), parent_id: parentId || null, notes, enabled })}
-        >
-          {saving ? 'Saving…' : 'Save Changes'}
-        </button>
-        <button className="icd-unlink-btn" onClick={onCancel}>Cancel</button>
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -410,11 +421,15 @@ function SynologyShell({ component, ep }: { component: InfrastructureComponent; 
   )
 
   const totalStorageBytes = synDetail?.volumes.reduce((sum, v) => sum + v.total_bytes, 0) ?? 0
-  const keyDataPoints = synNoData ? [] : [
-    { label: 'Model',   value: synDetail?.model       || '—' },
-    { label: 'DSM',     value: synDetail?.dsm_version || '—' },
-    { label: 'Storage', value: totalStorageBytes > 0 ? formatBytes(totalStorageBytes) : '—' },
-    { label: 'Uptime',  value: synDetail?.uptime      || '—' },
+  const keyDataPoints = [
+    { label: 'Type', value: 'Synology NAS' },
+    ...(component.ip ? [{ label: 'IP', value: component.ip }] : []),
+    ...(!synNoData ? [
+      { label: 'Model',   value: synDetail?.model       || '—' },
+      { label: 'DSM',     value: synDetail?.dsm_version || '—' },
+      { label: 'Storage', value: totalStorageBytes > 0 ? formatBytes(totalStorageBytes) : '—' },
+      { label: 'Uptime',  value: synDetail?.uptime      || '—' },
+    ] : []),
   ]
 
   return (

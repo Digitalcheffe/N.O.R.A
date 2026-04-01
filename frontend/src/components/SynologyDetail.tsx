@@ -218,9 +218,9 @@ export function SynologyContent({ component, onDetailLoaded }: SynologyContentPr
         <div className="icd-section-title">Updates</div>
         <div className="syn-update-row">
           <span className="syn-update-label">DSM</span>
-          {!d ? (
+          {!d || !d.update?.checked ? (
             <span className="syn-update-value muted">—</span>
-          ) : d.update?.available ? (
+          ) : d.update.available ? (
             <>
               <span className="syn-update-arrow">↑</span>
               <span className="syn-update-value available">{d.update.version} available</span>
