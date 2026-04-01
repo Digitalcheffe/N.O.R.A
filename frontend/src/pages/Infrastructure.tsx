@@ -652,11 +652,11 @@ export function Infrastructure() {
           </div>
           <div className="infra-card-actions">
             <button
-              className="infra-card-btn accent"
-              onClick={() => navigate(`/infrastructure/${c.id}`)}
-              disabled={isDeleting || isScanning}
+              className="infra-card-btn"
+              onClick={() => void handleScan(c.id)}
+              disabled={isDeleting || isScanning || scanningId !== null}
             >
-              View Detail
+              {isScanning ? 'Discovering…' : 'Discover Now'}
             </button>
             <button
               className="infra-card-btn"
