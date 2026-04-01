@@ -629,7 +629,7 @@ export function Infrastructure() {
 
     return (
       <div key={c.id} className="infra-card">
-        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/portainer/${c.id}`)}>
+        <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/${c.id}`)}>
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -653,7 +653,7 @@ export function Infrastructure() {
           <div className="infra-card-actions">
             <button
               className="infra-card-btn accent"
-              onClick={() => navigate(`/infrastructure/portainer/${c.id}`)}
+              onClick={() => navigate(`/infrastructure/${c.id}`)}
               disabled={isDeleting || isScanning}
             >
               View Detail

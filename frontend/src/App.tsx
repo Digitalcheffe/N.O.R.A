@@ -17,7 +17,6 @@ import { InfraComponentDetail } from './pages/InfraComponentDetail'
 import { ProxmoxDetail } from './pages/ProxmoxDetail'
 import { SynologyDetail } from './pages/SynologyDetail'
 import { TraefikDetail } from './pages/TraefikDetail'
-import { PortainerDetail } from './pages/PortainerDetail'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
 import { Profile } from './pages/Profile'
@@ -47,8 +46,7 @@ export default function App() {
               <Route path="infrastructure/proxmox/:componentId" element={<ProxmoxDetail />} />
               <Route path="infrastructure/synology/:componentId" element={<SynologyDetail />} />
               <Route path="infrastructure/traefik/:componentId" element={<TraefikDetail />} />
-              <Route path="infrastructure/portainer/:componentId" element={<PortainerDetail />} />
-              <Route path="infrastructure/:id" element={<InfraComponentDetail />} />
+<Route path="infrastructure/:id" element={<InfraComponentDetail />} />
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<Profile />} />
               <Route path="app-templates/new" element={<AppTemplateEditor />} />

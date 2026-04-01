@@ -5,6 +5,7 @@ import { Topbar } from '../components/Topbar'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
+import { PortainerContent } from './PortainerDetail'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
@@ -15,18 +16,8 @@ import type {
   SNMPDetail,
   SNMPDisk,
 } from '../api/types'
+import { timeAgo } from '../utils/format'
 import './InfraComponentDetail.css'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (secs < 60) return `${secs}s ago`
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
-  return `${Math.floor(secs / 86400)}d ago`
-}
 
 const TYPE_LABEL: Record<string, string> = {
   proxmox_node:  'Proxmox Node',
@@ -381,13 +372,42 @@ export function InfraComponentDetail() {
     )
   }
 
-  // Traefik components have their own detail page.
+  // Portainer: render content inline — no redirect needed.
+  if (component.type === 'portainer') {
+    const baseURL: string = (component.credential_meta?.base_url as string | undefined) ?? ''
+    return (
+      <DetailPageLayout
+        breadcrumb="Infrastructure"
+        breadcrumbPath="/infrastructure"
+        name={component.name}
+        status={{ status: dplStatus(component.last_status) }}
+        lastPolled={component.last_polled_at ? `Last synced: ${timeAgo(component.last_polled_at)}` : undefined}
+        keyDataPoints={[
+          { label: 'Type', value: 'Portainer' },
+          ...(baseURL ? [{ label: 'URL', value: baseURL }] : []),
+        ]}
+        actions={
+          <DiscoverNowButton
+            entityType="portainer"
+            entityId={component.id}
+            onSuccess={() => void infraApi.get(component.id)}
+          />
+        }
+        sourceId={component.id}
+        eventFeedTitle="Image Update Events"
+      >
+        <PortainerContent component={component} />
+      </DetailPageLayout>
+    )
+  }
+
+  // Traefik: redirect to dedicated page (to be migrated in a future cleanup).
   if (component.type === 'traefik') {
     navigate(`/infrastructure/traefik/${component.id}`, { replace: true })
     return null
   }
 
-  // Synology components have their own detail page.
+  // Synology: redirect to dedicated page (to be migrated in a future cleanup).
   if (component.type === 'synology') {
     navigate(`/infrastructure/synology/${component.id}`, { replace: true })
     return null

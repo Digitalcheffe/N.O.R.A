@@ -1,11 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
-import { DetailPageLayout } from '../components/DetailPageLayout'
-import {
-  infrastructure as infraApi,
-  portainer as portainerApi,
-} from '../api/client'
+import { portainer as portainerApi } from '../api/client'
+import { formatBytes } from '../utils/format'
 import type {
   InfrastructureComponent,
   PortainerEndpoint,
@@ -13,37 +9,6 @@ import type {
   PortainerContainerResource,
 } from '../api/types'
 import './PortainerDetail.css'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (secs < 60) return `${secs}s ago`
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
-  return `${Math.floor(secs / 86400)}d ago`
-}
-
-function formatBytes(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 B'
-  const tb = bytes / 1_099_511_627_776
-  if (tb >= 1) return `${tb.toFixed(1)} TB`
-  const gb = bytes / 1_073_741_824
-  if (gb >= 1) return `${gb.toFixed(1)} GB`
-  const mb = bytes / 1_048_576
-  if (mb >= 1) return `${mb.toFixed(0)} MB`
-  const kb = bytes / 1_024
-  return `${kb.toFixed(0)} KB`
-}
-
-function formatCPU(pct: number): string {
-  return `${pct.toFixed(1)}%`
-}
-
-function formatMem(bytes: number): string {
-  return formatBytes(bytes)
-}
 
 // ── Sort types ────────────────────────────────────────────────────────────────
 
@@ -162,7 +127,6 @@ function EndpointView({
 
   return (
     <div className="pt-endpoint-view">
-      {/* ── Summary stat cards ── */}
       {summary && (
         <div className="pt-stat-grid">
           <StatCard
@@ -197,7 +161,6 @@ function EndpointView({
         </div>
       )}
 
-      {/* ── Dismissible notices ── */}
       {summary && summary.images_dangling > 0 && !danglingDismissed && (
         <DismissibleNotice
           message={`${summary.images_dangling} dangling image${summary.images_dangling !== 1 ? 's' : ''} found — ${formatBytes(summary.images_disk_bytes)} of disk space can be reclaimed`}
@@ -211,7 +174,6 @@ function EndpointView({
         />
       )}
 
-      {/* ── Container resource table ── */}
       <div className="pt-section-title">Containers</div>
       {sorted.length === 0 ? (
         <div className="pt-empty">No containers found on this endpoint.</div>
@@ -219,30 +181,10 @@ function EndpointView({
         <table className="pt-table">
           <thead>
             <tr>
-              <th
-                className="pt-th-sortable"
-                onClick={() => toggleSort('name')}
-              >
-                NAME{sortIcon('name')}
-              </th>
-              <th
-                className="pt-th-sortable"
-                onClick={() => toggleSort('cpu_percent')}
-              >
-                CPU%{sortIcon('cpu_percent')}
-              </th>
-              <th
-                className="pt-th-sortable"
-                onClick={() => toggleSort('mem_bytes')}
-              >
-                MEM{sortIcon('mem_bytes')}
-              </th>
-              <th
-                className="pt-th-sortable"
-                onClick={() => toggleSort('mem_percent')}
-              >
-                MEM%{sortIcon('mem_percent')}
-              </th>
+              <th className="pt-th-sortable" onClick={() => toggleSort('name')}>NAME{sortIcon('name')}</th>
+              <th className="pt-th-sortable" onClick={() => toggleSort('cpu_percent')}>CPU%{sortIcon('cpu_percent')}</th>
+              <th className="pt-th-sortable" onClick={() => toggleSort('mem_bytes')}>MEM{sortIcon('mem_bytes')}</th>
+              <th className="pt-th-sortable" onClick={() => toggleSort('mem_percent')}>MEM%{sortIcon('mem_percent')}</th>
               <th>IMAGE</th>
               <th>IMAGE STATUS</th>
             </tr>
@@ -254,15 +196,9 @@ function EndpointView({
                   {c.name}
                   {c.stack && <span className="pt-stack-badge">{c.stack}</span>}
                 </td>
-                <td className="pt-cell-mono">
-                  {c.state === 'running' ? formatCPU(c.cpu_percent) : '—'}
-                </td>
-                <td className="pt-cell-mono">
-                  {c.state === 'running' ? formatMem(c.mem_bytes) : '—'}
-                </td>
-                <td className="pt-cell-mono">
-                  {c.state === 'running' ? `${c.mem_percent.toFixed(1)}%` : '—'}
-                </td>
+                <td className="pt-cell-mono">{c.state === 'running' ? `${c.cpu_percent.toFixed(1)}%` : '—'}</td>
+                <td className="pt-cell-mono">{c.state === 'running' ? formatBytes(c.mem_bytes) : '—'}</td>
+                <td className="pt-cell-mono">{c.state === 'running' ? `${c.mem_percent.toFixed(1)}%` : '—'}</td>
                 <td className="pt-cell-image" title={c.image}>{c.image}</td>
                 <td>
                   {c.image_update_available ? (
@@ -280,109 +216,77 @@ function EndpointView({
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── PortainerContent ──────────────────────────────────────────────────────────
+// Content-only component — rendered as children inside InfraComponentDetail's
+// DetailPageLayout shell. Manages its own endpoint data but not the base
+// component or page layout.
 
-export function PortainerDetail() {
-  const { componentId } = useParams<{ componentId: string }>()
-  const { tick } = useAutoRefresh()
+interface PortainerContentProps {
+  component: InfrastructureComponent
+}
 
-  const [comp, setComp] = useState<InfrastructureComponent | null>(null)
+export function PortainerContent({ component }: PortainerContentProps) {
   const [endpoints, setEndpoints] = useState<PortainerEndpoint[]>([])
   const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(0)
+  const { tick } = useAutoRefresh()
 
-  const loadComponent = useCallback(() => {
-    if (!componentId) return
+  const load = useCallback(() => {
     setLoading(true)
     setLoadError('')
-    Promise.all([
-      infraApi.get(componentId),
-      portainerApi.listEndpoints(componentId),
-    ])
-      .then(([c, eps]) => {
-        setComp(c)
-        setEndpoints(eps.data)
-        setActiveTab(0)
-      })
+    portainerApi.listEndpoints(component.id)
+      .then(eps => { setEndpoints(eps.data); setActiveTab(0) })
       .catch(err => setLoadError(String(err)))
       .finally(() => setLoading(false))
-  }, [componentId])
+  }, [component.id])
 
-  useEffect(() => { loadComponent() }, [loadComponent, tick])
+  useEffect(() => { load() }, [load, tick])
 
-  if (!componentId) return null
+  if (loading) return <div className="pt-loading">Loading endpoints…</div>
 
-  if (loading) {
+  if (loadError) {
     return (
-      <div className="content">
-        <div className="pt-loading">Loading Portainer component…</div>
+      <div className="pt-error">
+        {loadError}
+        <button className="pt-retry-btn" onClick={load}>Retry</button>
       </div>
     )
   }
-
-  if (loadError || !comp) {
-    return (
-      <div className="content">
-        <div className="pt-error">
-          {loadError || 'Component not found.'}
-          <button className="pt-retry-btn" onClick={loadComponent}>Retry</button>
-        </div>
-      </div>
-    )
-  }
-
-  // Parse base_url from credential_meta (non-secret fields).
-  const baseURL: string = (comp.credential_meta?.base_url as string | undefined) ?? ''
-
-  const statusValue = comp.last_status === 'online' ? 'online'
-    : comp.last_status === 'offline' ? 'offline'
-    : 'unknown'
 
   const activeEndpoint = endpoints[activeTab] ?? null
 
+  if (endpoints.length === 0) {
+    return (
+      <div className="pt-empty">
+        No Portainer endpoints found. Check your Portainer connection and credentials.
+      </div>
+    )
+  }
+
+  if (endpoints.length === 1) {
+    return <EndpointView componentId={component.id} endpoint={endpoints[0]} />
+  }
+
   return (
-    <DetailPageLayout
-      breadcrumb="Infrastructure"
-      breadcrumbPath="/infrastructure"
-      name={comp.name}
-      status={{ status: statusValue as 'online' | 'offline' | 'unknown' }}
-      lastPolled={comp.last_polled_at ? `Last synced: ${timeAgo(comp.last_polled_at)}` : undefined}
-      keyDataPoints={[
-        { label: 'Type', value: 'Portainer' },
-        ...(baseURL ? [{ label: 'URL', value: baseURL }] : []),
-        { label: 'Endpoints', value: `${endpoints.length} endpoint${endpoints.length !== 1 ? 's' : ''}` },
-      ]}
-      sourceId={componentId}
-      eventFeedTitle="Image Update Events"
-    >
-      {/* ── Endpoint tabs (flat if single, tabbed if multiple) ── */}
-      {endpoints.length === 0 ? (
-        <div className="pt-empty">
-          No Portainer endpoints found. Check your Portainer connection and credentials.
-        </div>
-      ) : endpoints.length === 1 ? (
-        // Single endpoint — flat, no tabs.
-        <EndpointView componentId={componentId} endpoint={endpoints[0]} />
-      ) : (
-        // Multiple endpoints — tabbed.
-        <div className="pt-tabs-container">
-          <div className="pt-tabs">
-            {endpoints.map((ep, i) => (
-              <button
-                key={ep.id}
-                className={`pt-tab${activeTab === i ? ' pt-tab-active' : ''}`}
-                onClick={() => setActiveTab(i)}
-              >
-                {ep.name}
-              </button>
-            ))}
-          </div>
-          {activeEndpoint && (
-            <EndpointView componentId={componentId} endpoint={activeEndpoint} />
-          )}
-        </div>
+    <div className="pt-tabs-container">
+      <div className="pt-tabs">
+        {endpoints.map((ep, i) => (
+          <button
+            key={ep.id}
+            className={`pt-tab${activeTab === i ? ' pt-tab-active' : ''}`}
+            onClick={() => setActiveTab(i)}
+          >
+            {ep.name}
+          </button>
+        ))}
+      </div>
+      {activeEndpoint && (
+        <EndpointView componentId={component.id} endpoint={activeEndpoint} />
       )}
-    </DetailPageLayout>
+    </div>
   )
 }
+
+// ── Keep a default export alias so App.tsx import still resolves during migration
+export { PortainerContent as PortainerDetail }
