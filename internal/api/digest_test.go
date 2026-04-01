@@ -40,7 +40,7 @@ func newDigestRouter(t *testing.T) (http.Handler, *repo.Store) {
 		nil,
 		nil,
 	)
-	digestJob := jobs.NewDigestJob(store, &config.Config{})
+	digestJob := jobs.NewDigestJob(store, &config.Config{}, nil)
 	h := api.NewDigestHandler(store, digestJob)
 	r := chi.NewRouter()
 	h.Routes(r)
@@ -80,7 +80,7 @@ func newDigestRouterWithSMTP(t *testing.T) (http.Handler, *repo.Store) {
 		nil,
 		nil,
 	)
-	digestJob2 := jobs.NewDigestJob(store2, cfg)
+	digestJob2 := jobs.NewDigestJob(store2, cfg, nil)
 	h2 := api.NewDigestHandler(store2, digestJob2)
 	r2 := chi.NewRouter()
 	h2.Routes(r2)

@@ -8,8 +8,10 @@ import (
 	"html/template"
 	"log"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/config"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -21,35 +23,120 @@ const digestScheduleKey = "digest_schedule"
 // smtpSettingsKey is the settings table key for SMTP configuration.
 const smtpSettingsKey = "smtp"
 
-// DigestData holds all data passed to the HTML template.
+// ── Data types ────────────────────────────────────────────────────────────────
+
+// DigestData holds all data passed to the HTML templates.
 type DigestData struct {
-	Title      string
-	Period     string
-	TotalDownloads int
-	TotalBackups   int
-	TotalUpdates   int
-	TotalErrors    int
-	UptimePct      float64
-	AppRows    []DigestAppRow
+	// Header
+	Title  string
+	Period string
+
+	// Narrative
+	Headline     string   // "All systems healthy" | "3 items need your attention"
+	HealthStatus string   // "healthy" | "warning" | "critical"
+	Summary      []string // 2–4 plain-English sentences
+	ActionItems  []DigestActionItem
+
+	// Event severity totals for the period
+	EventInfo     int
+	EventWarn     int
+	EventError    int
+	EventCritical int
+
+	// Monitor checks — one entry per check type (url/ssl/dns/ping)
+	CheckGroups []DigestCheckGroup
+
+	// App activity — per app with category labels from template
+	AppSections []DigestAppSection
+
+	// Infrastructure component status summary
+	InfraOnline  int
+	InfraOffline int
+	InfraRows    []DigestInfraRow
+
+	// Container signals
+	ContainersTotal   int
+	ContainersRunning int
+	UpdatesAvailable  int
+	NewContainers     []string // container names new this period
+	StoppedContainers []string // container names currently stopped
+
+	// Resource warnings (high CPU / memory / disk over the period)
+	ResourceWarnings []DigestResourceWarning
+
+	// Legacy fields — kept so existing template paths compile.
+	TotalErrors int
+	AppRows     []DigestAppRow
 }
 
-// DigestAppRow is a per-app summary line in the email.
-type DigestAppRow struct {
-	AppName    string
-	EventType  string
-	Count      int
-	HasErrors  bool
+// DigestActionItem is a single item the recipient should act on or review.
+type DigestActionItem struct {
+	Priority string // "urgent" | "review" | "info"
+	Text     string
 }
+
+// DigestCheckGroup is a rolled-up view of one check type (url, ssl, dns, ping).
+type DigestCheckGroup struct {
+	Type      string
+	Total     int
+	Up        int
+	NotUp     int
+	AvgUptime float64
+	Status    string // "healthy" | "warning" | "down" | "none"
+}
+
+// DigestAppSection groups the digest category counts for one app.
+type DigestAppSection struct {
+	AppName     string
+	ProfileName string
+	Categories  []DigestCategoryRow
+	TotalEvents int
+	HasIssues   bool
+}
+
+// DigestCategoryRow is one category (e.g. "Downloads", "Errors") for an app.
+type DigestCategoryRow struct {
+	Label   string
+	Count   int
+	IsError bool
+}
+
+// DigestInfraRow is one infrastructure component in the infra status section.
+type DigestInfraRow struct {
+	Name   string
+	Type   string
+	Status string
+}
+
+// DigestResourceWarning flags a component with sustained high resource usage.
+type DigestResourceWarning struct {
+	ComponentName string
+	Metric        string  // "CPU" | "Memory" | "Disk"
+	AvgPct        float64 // average over the period
+	MaxPct        float64 // peak over the period
+}
+
+// DigestAppRow is the legacy per-app row (kept so existing tests compile).
+type DigestAppRow struct {
+	AppName   string
+	EventType string
+	Count     int
+	HasErrors bool
+}
+
+// ── DigestJob ─────────────────────────────────────────────────────────────────
 
 // DigestJob generates and sends the NORA digest email.
 type DigestJob struct {
-	store  *repo.Store
-	config *config.Config
+	store    *repo.Store
+	config   *config.Config
+	profiler apptemplate.Loader // optional; nil = no per-app category breakdown
 }
 
 // NewDigestJob creates a DigestJob.
-func NewDigestJob(store *repo.Store, cfg *config.Config) *DigestJob {
-	return &DigestJob{store: store, config: cfg}
+// profiler may be nil — if absent, app category sections are omitted.
+func NewDigestJob(store *repo.Store, cfg *config.Config, profiler apptemplate.Loader) *DigestJob {
+	return &DigestJob{store: store, config: cfg, profiler: profiler}
 }
 
 // Run is called every hour. It reads the stored schedule and decides whether
@@ -58,7 +145,6 @@ func (d *DigestJob) Run(ctx context.Context) error {
 	var schedule models.DigestSchedule
 	err := d.store.Settings.GetJSON(ctx, digestScheduleKey, &schedule)
 	if errors.Is(err, repo.ErrNotFound) {
-		// No schedule stored — use the default (monthly, 1st, 08:00).
 		h := 8
 		schedule = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1, SendHour: &h}
 	} else if err != nil {
@@ -93,11 +179,6 @@ func (d *DigestJob) ShouldSendToday(schedule models.DigestSchedule, on time.Time
 }
 
 // Send generates and emails the digest for the given period label.
-// Period formats:
-//
-//	daily   → "2026-03-27"
-//	weekly  → "2026-W13"
-//	monthly → "2026-03"
 func (d *DigestJob) Send(ctx context.Context, period string) error {
 	log.Printf("digest: generating for period %s", period)
 
@@ -116,7 +197,7 @@ func (d *DigestJob) Send(ctx context.Context, period string) error {
 		return fmt.Errorf("digest: get recipients: %w", err)
 	}
 	if len(recipients) == 0 {
-		log.Printf("digest: no admin users found, skipping send")
+		log.Printf("digest: no recipients found, skipping send")
 		return nil
 	}
 
@@ -129,7 +210,6 @@ func (d *DigestJob) Send(ctx context.Context, period string) error {
 	if err := SendMail(smtp.Host, smtp.Port, smtp.User, smtp.Pass, smtp.From,
 		recipients, data.Title, html); err != nil {
 		log.Printf("digest: smtp error: %v", err)
-		// Do not return error — a failed send should not crash the job.
 		return nil
 	}
 
@@ -151,7 +231,7 @@ func (d *DigestJob) RenderHTML(data *DigestData) (string, error) {
 }
 
 // GenerateReportHTML builds digest data for the given period and renders the
-// print-friendly report HTML. Used by the report export endpoint.
+// print-friendly report HTML.
 func (d *DigestJob) GenerateReportHTML(ctx context.Context, period string) (string, error) {
 	data, err := d.buildDigestData(ctx, period)
 	if err != nil {
@@ -168,98 +248,499 @@ func (d *DigestJob) GenerateReportHTML(ctx context.Context, period string) (stri
 	return buf.String(), nil
 }
 
-// SMTPConfigured returns true if SMTP is configured either in the settings
-// table or via environment-level config.
+// SMTPConfigured returns true if SMTP is reachable.
 func (d *DigestJob) SMTPConfigured(ctx context.Context) bool {
 	_, err := d.smtpSettings(ctx)
 	return err == nil
 }
 
-// buildDigestData queries rollups and assembles DigestData for the given period.
-//
-// For monthly periods it tries the rollups table first (pre-aggregated data from
-// past months) and falls back to querying events live when the month is still in
-// progress. Daily and weekly periods always query events live because the rollup
-// table only stores monthly aggregates.
+// ── buildDigestData ───────────────────────────────────────────────────────────
+
 func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*DigestData, error) {
-	// Fetch app list — needed regardless of data source.
+	since, until := periodTimeRange(period)
+
 	apps, err := d.store.Apps.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	appNames := map[string]string{}
+	appNames := make(map[string]string, len(apps))
 	for _, a := range apps {
 		appNames[a.ID] = a.Name
 	}
 
-	var rollups []models.Rollup
+	data := &DigestData{
+		Title:  subjectLine(period),
+		Period: period,
+	}
 
-	// Monthly periods can use pre-rolled-up data; daily/weekly must go live.
-	isMonthly := isMonthlyPeriod(period)
-	if isMonthly {
-		year, month := periodYearMonth(period)
-		rollups, err = d.store.Rollups.ListByPeriod(ctx, year, month)
+	// ── 1. Event severity counts ───────────────────────────────────────────
+	for _, level := range []string{"info", "warn", "error", "critical"} {
+		n, err := d.store.Events.CountForCategory(ctx, repo.CategoryFilter{
+			MatchLevel: level,
+			Since:      since,
+			Until:      until,
+		})
 		if err != nil {
-			return nil, err
+			log.Printf("digest: count %s events: %v", level, err)
+			continue
+		}
+		switch level {
+		case "info":
+			data.EventInfo = n
+		case "warn":
+			data.EventWarn = n
+		case "error":
+			data.EventError = n
+			data.TotalErrors = n
+		case "critical":
+			data.EventCritical = n
+			data.TotalErrors += n
 		}
 	}
 
-	// No rollup data? Query events directly for the exact period window.
-	if len(rollups) == 0 {
-		since, until := periodTimeRange(period)
-		rollups, err = d.liveRollupsForWindow(ctx, apps, since, until)
+	// ── 2. Monitor check rollup (current snapshot, same logic as dashboard) ──
+	allCheckTypes := []string{"url", "ssl", "dns", "ping"}
+	checks, err := d.store.Checks.List(ctx)
+	if err != nil {
+		log.Printf("digest: list checks: %v", err)
+	}
+	for _, ct := range allCheckTypes {
+		var ofType []models.MonitorCheck
+		for _, c := range checks {
+			if c.Enabled && c.Type == ct {
+				ofType = append(ofType, c)
+			}
+		}
+		g := DigestCheckGroup{Type: ct, Total: len(ofType)}
+		if len(ofType) == 0 {
+			g.Status = "none"
+			data.CheckGroups = append(data.CheckGroups, g)
+			continue
+		}
+		var sumPct float64
+		for _, c := range ofType {
+			pct := statusToUptimePctDigest(c.LastStatus)
+			sumPct += pct
+			if c.LastStatus == "up" {
+				g.Up++
+			} else {
+				g.NotUp++
+			}
+		}
+		g.AvgUptime = sumPct / float64(len(ofType))
+		switch {
+		case g.AvgUptime >= 95:
+			g.Status = "healthy"
+		case g.AvgUptime >= 75:
+			g.Status = "warning"
+		default:
+			g.Status = "down"
+		}
+		data.CheckGroups = append(data.CheckGroups, g)
+	}
+
+	// ── 3. App activity — per-app category breakdown ───────────────────────
+	if d.profiler != nil {
+		for _, app := range apps {
+			if app.ProfileID == "" {
+				continue
+			}
+			profile, err := d.profiler.Get(app.ProfileID)
+			if err != nil || profile == nil {
+				continue
+			}
+			if len(profile.Digest.Categories) == 0 {
+				continue
+			}
+
+			section := DigestAppSection{
+				AppName:     app.Name,
+				ProfileName: profile.Meta.Name,
+			}
+			for _, cat := range profile.Digest.Categories {
+				f := repo.CategoryFilter{
+					SourceIDs:  []string{app.ID},
+					MatchField: cat.MatchField,
+					MatchValue: cat.MatchValue,
+					MatchLevel: cat.MatchSeverity,
+					Since:      since,
+					Until:      until,
+				}
+				n, err := d.store.Events.CountForCategory(ctx, f)
+				if err != nil {
+					log.Printf("digest: count category %q for app %s: %v", cat.Label, app.Name, err)
+					continue
+				}
+				isErr := cat.MatchSeverity == "error" || cat.MatchSeverity == "critical"
+				section.Categories = append(section.Categories, DigestCategoryRow{
+					Label:   cat.Label,
+					Count:   n,
+					IsError: isErr,
+				})
+				section.TotalEvents += n
+				if isErr && n > 0 {
+					section.HasIssues = true
+				}
+			}
+			data.AppSections = append(data.AppSections, section)
+		}
+	} else {
+		// Fallback: use live rollups (legacy behaviour) to populate AppRows.
+		rollups, err := d.liveRollupsForWindow(ctx, apps, since, until)
 		if err != nil {
-			return nil, err
+			log.Printf("digest: live rollups: %v", err)
 		}
-	}
-
-	// Aggregate per (app, event_type).
-	type appKey struct {
-		appID     string
-		eventType string
-	}
-	counts := map[appKey]int{}
-	var totalErrors int
-
-	for _, r := range rollups {
-		counts[appKey{r.AppID, r.EventType}] += r.Count
-		if r.Severity == "error" || r.Severity == "critical" {
-			totalErrors += r.Count
+		type appKey struct{ appID, eventType string }
+		counts := map[appKey]int{}
+		for _, r := range rollups {
+			counts[appKey{r.AppID, r.EventType}] += r.Count
 		}
-	}
-
-	var rows []DigestAppRow
-	for k, count := range counts {
-		rows = append(rows, DigestAppRow{
-			AppName:   appNames[k.appID],
-			EventType: k.eventType,
-			Count:     count,
-			HasErrors: k.eventType == "error" || k.eventType == "critical",
+		for k, count := range counts {
+			data.AppRows = append(data.AppRows, DigestAppRow{
+				AppName:   appNames[k.appID],
+				EventType: k.eventType,
+				Count:     count,
+				HasErrors: k.eventType == "error" || k.eventType == "critical",
+			})
+		}
+		sort.Slice(data.AppRows, func(i, j int) bool {
+			if data.AppRows[i].AppName != data.AppRows[j].AppName {
+				return data.AppRows[i].AppName < data.AppRows[j].AppName
+			}
+			return data.AppRows[i].EventType < data.AppRows[j].EventType
 		})
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].AppName != rows[j].AppName {
-			return rows[i].AppName < rows[j].AppName
-		}
-		return rows[i].EventType < rows[j].EventType
-	})
 
-	title := subjectLine(period)
-	return &DigestData{
-		Title:       title,
-		Period:      period,
-		TotalErrors: totalErrors,
-		AppRows:     rows,
-	}, nil
+	// ── 4. Infrastructure status ───────────────────────────────────────────
+	var infra []models.InfrastructureComponent
+	if d.store.InfraComponents != nil {
+		infra, err = d.store.InfraComponents.List(ctx)
+		if err != nil {
+			log.Printf("digest: list infra: %v", err)
+		}
+	}
+	for _, c := range infra {
+		if !c.Enabled {
+			continue
+		}
+		row := DigestInfraRow{
+			Name:   c.Name,
+			Type:   infraTypeLabel(c.Type),
+			Status: c.LastStatus,
+		}
+		data.InfraRows = append(data.InfraRows, row)
+		if c.LastStatus == "online" {
+			data.InfraOnline++
+		} else {
+			data.InfraOffline++
+		}
+	}
+
+	// ── 5. Container signals ───────────────────────────────────────────────
+	var containers []*models.DiscoveredContainer
+	if d.store.DiscoveredContainers != nil {
+		containers, err = d.store.DiscoveredContainers.ListAllDiscoveredContainers(ctx)
+		if err != nil {
+			log.Printf("digest: list containers: %v", err)
+		}
+	}
+	for _, c := range containers {
+		data.ContainersTotal++
+		if c.Status == "running" {
+			data.ContainersRunning++
+		} else if c.Status == "stopped" || c.Status == "exited" {
+			data.StoppedContainers = append(data.StoppedContainers, trimContainerName(c.ContainerName))
+		}
+		if c.ImageUpdateAvailable == 1 {
+			data.UpdatesAvailable++
+		}
+		// New containers created within the digest period
+		if c.CreatedAt.After(since) && c.CreatedAt.Before(until) {
+			data.NewContainers = append(data.NewContainers, trimContainerName(c.ContainerName))
+		}
+	}
+	// Cap display lists
+	data.StoppedContainers = capList(data.StoppedContainers, 8)
+	data.NewContainers = capList(data.NewContainers, 8)
+
+	// ── 6. Resource warnings (high CPU / memory / disk over the period) ────
+	var aggregates []repo.ResourceAggregate
+	if d.store.ResourceRollups != nil {
+		aggregates, err = d.store.ResourceRollups.AggregateHourlyRollups(ctx, since, until)
+		if err != nil {
+			log.Printf("digest: resource rollups: %v", err)
+		}
+	}
+	// Build a component name map from the infra list.
+	compNameMap := make(map[string]string, len(infra))
+	for _, c := range infra {
+		compNameMap[c.ID] = c.Name
+	}
+	for _, agg := range aggregates {
+		name := compNameMap[agg.SourceID]
+		if name == "" {
+			name = agg.SourceID
+		}
+		var threshold float64
+		var label string
+		switch agg.Metric {
+		case "cpu":
+			threshold, label = 80.0, "CPU"
+		case "mem":
+			threshold, label = 85.0, "Memory"
+		case "disk":
+			threshold, label = 90.0, "Disk"
+		default:
+			continue
+		}
+		if agg.Avg >= threshold || agg.Max >= 95.0 {
+			data.ResourceWarnings = append(data.ResourceWarnings, DigestResourceWarning{
+				ComponentName: name,
+				Metric:        label,
+				AvgPct:        agg.Avg,
+				MaxPct:        agg.Max,
+			})
+		}
+	}
+
+	// ── 7. Build narrative ─────────────────────────────────────────────────
+	data.Headline, data.HealthStatus, data.Summary, data.ActionItems = d.buildNarrative(data)
+
+	return data, nil
 }
 
-// liveRollupsForWindow queries the events table for all apps over [since, until)
-// and returns rollup-equivalent rows. Used when the rollups table has no data.
+// ── Narrative builder ─────────────────────────────────────────────────────────
+
+// buildNarrative generates the headline, health status, plain-English summary
+// sentences, and prioritised action items from the collected digest data.
+func (d *DigestJob) buildNarrative(data *DigestData) (headline, healthStatus string, summary []string, actions []DigestActionItem) {
+	var urgentItems, reviewItems, infoItems []DigestActionItem
+
+	// ── Check issues ───────────────────────────────────────────────────────
+	var downChecks, warnChecks int
+	for _, g := range data.CheckGroups {
+		if g.Status == "down" {
+			downChecks++
+			urgentItems = append(urgentItems, DigestActionItem{
+				Priority: "urgent",
+				Text:     fmt.Sprintf("%s checks are down (%.1f%% avg uptime, %d not up)", strings.ToUpper(g.Type), g.AvgUptime, g.NotUp),
+			})
+		} else if g.Status == "warning" {
+			warnChecks++
+			reviewItems = append(reviewItems, DigestActionItem{
+				Priority: "review",
+				Text:     fmt.Sprintf("%s checks degraded — %d of %d not fully up (%.1f%% avg)", strings.ToUpper(g.Type), g.NotUp, g.Total, g.AvgUptime),
+			})
+		}
+	}
+
+	// ── Event severity issues ──────────────────────────────────────────────
+	if data.EventCritical > 0 {
+		urgentItems = append(urgentItems, DigestActionItem{
+			Priority: "urgent",
+			Text:     fmt.Sprintf("%d critical event%s recorded — review the Events log", data.EventCritical, plural(data.EventCritical)),
+		})
+	}
+	if data.EventError > 0 {
+		reviewItems = append(reviewItems, DigestActionItem{
+			Priority: "review",
+			Text:     fmt.Sprintf("%d error event%s recorded this period", data.EventError, plural(data.EventError)),
+		})
+	}
+
+	// ── App issues ─────────────────────────────────────────────────────────
+	for _, s := range data.AppSections {
+		if s.HasIssues {
+			reviewItems = append(reviewItems, DigestActionItem{
+				Priority: "review",
+				Text:     fmt.Sprintf("%s had error-level activity this period", s.AppName),
+			})
+		}
+	}
+
+	// ── Infra issues ───────────────────────────────────────────────────────
+	for _, r := range data.InfraRows {
+		if r.Status != "online" {
+			reviewItems = append(reviewItems, DigestActionItem{
+				Priority: "review",
+				Text:     fmt.Sprintf("Infrastructure component %q is %s", r.Name, r.Status),
+			})
+		}
+	}
+
+	// ── Container signals ──────────────────────────────────────────────────
+	if data.UpdatesAvailable > 0 {
+		reviewItems = append(reviewItems, DigestActionItem{
+			Priority: "review",
+			Text:     fmt.Sprintf("%d container image update%s available — consider pulling latest", data.UpdatesAvailable, plural(data.UpdatesAvailable)),
+		})
+	}
+	if len(data.NewContainers) > 0 {
+		infoItems = append(infoItems, DigestActionItem{
+			Priority: "info",
+			Text:     fmt.Sprintf("%d new container%s appeared this period: %s", len(data.NewContainers), plural(len(data.NewContainers)), strings.Join(data.NewContainers, ", ")),
+		})
+	}
+	if len(data.StoppedContainers) > 0 {
+		infoItems = append(infoItems, DigestActionItem{
+			Priority: "info",
+			Text:     fmt.Sprintf("%d container%s currently stopped: %s", len(data.StoppedContainers), plural(len(data.StoppedContainers)), strings.Join(data.StoppedContainers, ", ")),
+		})
+	}
+
+	// ── Resource warnings ──────────────────────────────────────────────────
+	for _, rw := range data.ResourceWarnings {
+		reviewItems = append(reviewItems, DigestActionItem{
+			Priority: "review",
+			Text:     fmt.Sprintf("%s on %s averaged %.1f%% (peak %.1f%%) — consider investigating", rw.Metric, rw.ComponentName, rw.AvgPct, rw.MaxPct),
+		})
+	}
+
+	// ── Assemble action items in priority order ────────────────────────────
+	actions = append(urgentItems, append(reviewItems, infoItems...)...)
+
+	// ── Health status and headline ─────────────────────────────────────────
+	totalIssues := len(urgentItems) + len(reviewItems)
+	switch {
+	case len(urgentItems) > 0:
+		healthStatus = "critical"
+		headline = fmt.Sprintf("%d item%s need immediate attention", len(urgentItems)+len(reviewItems), plural(totalIssues))
+	case len(reviewItems) > 0:
+		healthStatus = "warning"
+		headline = fmt.Sprintf("%d item%s worth reviewing", len(reviewItems), plural(len(reviewItems)))
+	default:
+		healthStatus = "healthy"
+		headline = "All systems look healthy"
+	}
+
+	// ── Summary sentences ─────────────────────────────────────────────────
+	// Always start with the overall health sentence.
+	var sb []string
+
+	if healthStatus == "healthy" {
+		sb = append(sb, "Everything looks good across the board this period.")
+	} else {
+		sb = append(sb, fmt.Sprintf("There %s %d item%s flagged for your attention this period.",
+			isAre(totalIssues), totalIssues, plural(totalIssues)))
+	}
+
+	// Monitors sentence
+	totalChecks := 0
+	for _, g := range data.CheckGroups {
+		totalChecks += g.Total
+	}
+	if totalChecks > 0 {
+		if downChecks == 0 && warnChecks == 0 {
+			sb = append(sb, fmt.Sprintf("All %d monitor check%s are passing.", totalChecks, plural(totalChecks)))
+		} else {
+			sb = append(sb, fmt.Sprintf("%d of %d monitor check type%s showing issues.", downChecks+warnChecks, 4, plural(downChecks+warnChecks)))
+		}
+	}
+
+	// Events sentence
+	totalSevere := data.EventError + data.EventCritical
+	totalEvents := data.EventInfo + data.EventWarn + totalSevere
+	if totalEvents > 0 {
+		if totalSevere == 0 {
+			sb = append(sb, fmt.Sprintf("%d event%s recorded — no errors or criticals.", totalEvents, plural(totalEvents)))
+		} else {
+			sb = append(sb, fmt.Sprintf("%d total event%s recorded including %d error/critical %s to review.",
+				totalEvents, plural(totalEvents), totalSevere, nounPlural("event", totalSevere)))
+		}
+	}
+
+	// Containers sentence
+	if data.ContainersTotal > 0 {
+		if data.UpdatesAvailable > 0 {
+			sb = append(sb, fmt.Sprintf("%d/%d container%s running with %d image update%s available.",
+				data.ContainersRunning, data.ContainersTotal, plural(data.ContainersTotal),
+				data.UpdatesAvailable, plural(data.UpdatesAvailable)))
+		} else {
+			sb = append(sb, fmt.Sprintf("%d/%d container%s running, no image updates pending.",
+				data.ContainersRunning, data.ContainersTotal, plural(data.ContainersTotal)))
+		}
+	}
+
+	summary = sb
+	return
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// statusToUptimePctDigest mirrors dashboard.go's statusToUptimePct.
+func statusToUptimePctDigest(status string) float64 {
+	switch status {
+	case "up":
+		return 100.0
+	case "warn":
+		return 75.0
+	default:
+		return 0.0
+	}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+func nounPlural(noun string, n int) string {
+	if n == 1 {
+		return noun
+	}
+	return noun + "s"
+}
+
+func isAre(n int) string {
+	if n == 1 {
+		return "is"
+	}
+	return "are"
+}
+
+func trimContainerName(name string) string {
+	name = strings.TrimPrefix(name, "/")
+	if len(name) > 32 {
+		return name[:32] + "…"
+	}
+	return name
+}
+
+func capList(s []string, max int) []string {
+	if len(s) <= max {
+		return s
+	}
+	return append(s[:max], fmt.Sprintf("…and %d more", len(s)-max))
+}
+
+var infraTypeLabelMap = map[string]string{
+	"proxmox_node":  "Proxmox Node",
+	"synology":      "Synology NAS",
+	"vm":            "VM",
+	"lxc":           "LXC",
+	"bare_metal":    "Bare Metal",
+	"linux_host":    "Linux Host",
+	"windows_host":  "Windows Host",
+	"generic_host":  "Generic Host",
+	"docker_engine": "Docker Engine",
+	"traefik":       "Traefik",
+	"portainer":     "Portainer",
+}
+
+func infraTypeLabel(t string) string {
+	if l, ok := infraTypeLabelMap[t]; ok {
+		return l
+	}
+	return t
+}
+
+// liveRollupsForWindow queries the events table for all apps in [since, until).
+// Used as a fallback when the profiler is unavailable.
 func (d *DigestJob) liveRollupsForWindow(ctx context.Context, apps []models.App, since, until time.Time) ([]models.Rollup, error) {
 	year := since.Year()
 	month := int(since.Month())
-
 	var result []models.Rollup
 	for _, app := range apps {
 		rows, err := d.store.Events.GroupByTypeAndLevel(ctx, app.ID, since, until)
@@ -280,25 +761,19 @@ func (d *DigestJob) liveRollupsForWindow(ctx context.Context, apps []models.App,
 	return result, nil
 }
 
-// isMonthlyPeriod returns true if the period string is in YYYY-MM format.
+// ── Period helpers ────────────────────────────────────────────────────────────
+
 func isMonthlyPeriod(period string) bool {
 	_, err := time.Parse("2006-01", period)
 	return err == nil
 }
 
-// periodTimeRange returns the [since, until) time bounds for any period label.
-//
-//	daily   "2026-04-01"  → [2026-04-01 00:00 UTC, 2026-04-02 00:00 UTC)
-//	weekly  "2026-W14"    → [Monday 00:00 UTC, next Monday 00:00 UTC)
-//	monthly "2026-04"     → [2026-04-01 00:00 UTC, 2026-05-01 00:00 UTC)
 func periodTimeRange(period string) (since, until time.Time) {
-	// Daily
 	if t, err := time.Parse("2006-01-02", period); err == nil {
 		since = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 		until = since.AddDate(0, 0, 1)
 		return
 	}
-	// Weekly "2026-W14" → Monday of that ISO week
 	var year, week int
 	if n, _ := fmt.Sscanf(period, "%d-W%d", &year, &week); n == 2 {
 		jan4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
@@ -308,21 +783,36 @@ func periodTimeRange(period string) (since, until time.Time) {
 		until = monday.AddDate(0, 0, 7)
 		return
 	}
-	// Monthly
 	if t, err := time.Parse("2006-01", period); err == nil {
 		since = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 		until = since.AddDate(0, 1, 0)
 		return
 	}
-	// Fallback: current month
 	now := time.Now().UTC()
 	since = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	until = since.AddDate(0, 1, 0)
 	return
 }
 
+func periodYearMonth(period string) (int, int) {
+	if t, err := time.Parse("2006-01-02", period); err == nil {
+		return t.Year(), int(t.Month())
+	}
+	var year, week int
+	if n, _ := fmt.Sscanf(period, "%d-W%d", &year, &week); n == 2 {
+		jan4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
+		_, w := jan4.ISOWeek()
+		monday := jan4.AddDate(0, 0, (week-w)*7-int(jan4.Weekday())+1)
+		return monday.Year(), int(monday.Month())
+	}
+	if t, err := time.Parse("2006-01", period); err == nil {
+		return t.Year(), int(t.Month())
+	}
+	now := time.Now()
+	return now.Year(), int(now.Month())
+}
+
 // adminEmails returns the digest recipient list.
-// Uses the dedicated "to" address when set, falling back to "from".
 func (d *DigestJob) adminEmails(ctx context.Context) ([]string, error) {
 	smtp, err := d.smtpSettings(ctx)
 	if err != nil {
@@ -337,13 +827,11 @@ func (d *DigestJob) adminEmails(ctx context.Context) ([]string, error) {
 	return nil, nil
 }
 
-// smtpSettings reads SMTP config from the settings table, falling back to
-// environment-level config values.
+// smtpSettings reads SMTP config from the settings table or environment.
 func (d *DigestJob) smtpSettings(ctx context.Context) (*models.SMTPSettings, error) {
 	var s models.SMTPSettings
 	err := d.store.Settings.GetJSON(ctx, smtpSettingsKey, &s)
 	if errors.Is(err, repo.ErrNotFound) {
-		// Fall back to env-configured values.
 		if d.config.SMTPHost == "" {
 			return nil, fmt.Errorf("smtp not configured")
 		}
@@ -364,7 +852,6 @@ func (d *DigestJob) smtpSettings(ctx context.Context) (*models.SMTPSettings, err
 	return &s, nil
 }
 
-// periodLabel returns the period label string for the given frequency and date.
 func periodLabel(frequency string, t time.Time) string {
 	switch frequency {
 	case "daily":
@@ -372,79 +859,44 @@ func periodLabel(frequency string, t time.Time) string {
 	case "weekly":
 		_, week := t.ISOWeek()
 		return fmt.Sprintf("%d-W%02d", t.Year(), week)
-	default: // monthly
+	default:
 		return t.Format("2006-01")
 	}
 }
 
-// periodYearMonth extracts year + month from a period label.
-// Supports all three formats: "2026-03-27", "2026-W13", "2026-03".
-func periodYearMonth(period string) (int, int) {
-	// Try daily: "2026-03-27"
-	if t, err := time.Parse("2006-01-02", period); err == nil {
-		return t.Year(), int(t.Month())
-	}
-	// Try weekly: "2026-W13" → find the Monday of that week.
-	var year, week int
-	if n, _ := fmt.Sscanf(period, "%d-W%d", &year, &week); n == 2 {
-		// Monday of ISO week.
-		jan4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
-		_, w := jan4.ISOWeek()
-		monday := jan4.AddDate(0, 0, (week-w)*7-int(jan4.Weekday())+1)
-		return monday.Year(), int(monday.Month())
-	}
-	// Monthly: "2026-03"
-	if t, err := time.Parse("2006-01", period); err == nil {
-		return t.Year(), int(t.Month())
-	}
-	// Fallback to current month.
-	now := time.Now()
-	return now.Year(), int(now.Month())
-}
-
-// subjectLine returns the email subject for a given period label.
 func subjectLine(period string) string {
-	// Try daily: "2026-03-27"
 	if t, err := time.Parse("2006-01-02", period); err == nil {
-		return "Your Homelab — " + t.Format("Monday, January 2")
+		return "NORA Digest — " + t.Format("Monday, January 2")
 	}
-	// Try weekly: "2026-W13"
 	var year, week int
 	if n, _ := fmt.Sscanf(period, "%d-W%d", &year, &week); n == 2 {
 		jan4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
 		_, w := jan4.ISOWeek()
 		monday := jan4.AddDate(0, 0, (week-w)*7-int(jan4.Weekday())+1)
 		sunday := monday.AddDate(0, 0, 6)
-		return fmt.Sprintf("Your Homelab — Week of %s–%d",
-			monday.Format("January 2"), sunday.Day())
+		return fmt.Sprintf("NORA Digest — Week of %s–%d", monday.Format("January 2"), sunday.Day())
 	}
-	// Monthly: "2026-03"
 	if t, err := time.Parse("2006-01", period); err == nil {
-		return "Your Homelab — " + t.Format("January 2006")
+		return "NORA Digest — " + t.Format("January 2006")
 	}
-	return "Your Homelab Digest"
+	return "NORA Digest"
 }
 
-// StartDigestJob waits until the next whole hour boundary, then calls
-// DigestJob.Run every hour. Run reads the stored send_hour and decides
-// whether this is the right time to fire.
+// StartDigestJob waits until the next whole hour, then runs every hour.
 func StartDigestJob(ctx context.Context, job *DigestJob) {
 	delay := durationUntilNextHour()
 	log.Printf("digest: job waiting %s until next hour boundary", delay.Round(time.Minute))
-
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(delay):
 	}
-
 	run := func() {
 		if err := job.Run(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("digest: job error: %v", err)
 		}
 	}
 	run()
-
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
@@ -457,14 +909,18 @@ func StartDigestJob(ctx context.Context, job *DigestJob) {
 	}
 }
 
-// durationUntilNextHour returns the duration from now until the next whole hour (HH:00:00).
 func durationUntilNextHour() time.Duration {
 	now := time.Now()
 	next := now.Truncate(time.Hour).Add(time.Hour)
 	return next.Sub(now)
 }
 
-// digestHTMLTemplate is the inline-CSS HTML email template.
+// ── HTML Templates ────────────────────────────────────────────────────────────
+
+// statusDot returns an inline coloured circle character for a given status string.
+// Used in both email and report templates via template functions (not needed —
+// the templates handle this via {{if}} blocks instead, which is email-safe).
+
 var digestHTMLTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -472,100 +928,226 @@ var digestHTMLTemplate = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{.Title}}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#0a0c0f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0a0c0f;">
-  <tr>
-    <td align="center" style="padding:24px 16px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+<body style="margin:0;padding:0;background:#0a0c0f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#c8d4e0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0c0f;">
+  <tr><td align="center" style="padding:24px 16px;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
-        <!-- Header -->
+    <!-- Header -->
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-radius:8px 8px 0 0;padding:20px 28px;border-bottom:none;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="background-color:#111318;border-radius:8px 8px 0 0;padding:24px 32px;border-bottom:1px solid #1e2330;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td>
-                  <span style="font-size:18px;font-weight:700;color:#e2e8f0;letter-spacing:0.05em;">NORA</span>
-                </td>
-                <td align="right">
-                  <span style="font-size:13px;color:#64748b;">{{.Period}}</span>
-                </td>
-              </tr>
-            </table>
-            <p style="margin:8px 0 0;font-size:20px;font-weight:600;color:#f1f5f9;">{{.Title}}</p>
+          <td><span style="font-size:14px;font-weight:700;letter-spacing:0.1em;color:#3b82f6;font-family:monospace;">NORA</span></td>
+          <td align="right"><span style="font-size:12px;color:#445566;font-family:monospace;">{{.Period}}</span></td>
+        </tr>
+      </table>
+      <p style="margin:8px 0 0;font-size:20px;font-weight:600;color:#f1f5f9;">{{.Title}}</p>
+    </td></tr>
+
+    <!-- Narrative / Health banner -->
+    <tr><td style="padding:0;">
+      {{if eq .HealthStatus "healthy"}}
+      <div style="background:#14532d;border-left:4px solid #22c55e;padding:16px 28px;border-right:1px solid #1e2530;">
+        <p style="margin:0;font-size:15px;font-weight:600;color:#22c55e;">✓ {{.Headline}}</p>
+      </div>
+      {{else if eq .HealthStatus "warning"}}
+      <div style="background:#713f12;border-left:4px solid #eab308;padding:16px 28px;border-right:1px solid #1e2530;">
+        <p style="margin:0;font-size:15px;font-weight:600;color:#eab308;">⚠ {{.Headline}}</p>
+      </div>
+      {{else}}
+      <div style="background:#7f1d1d;border-left:4px solid #ef4444;padding:16px 28px;border-right:1px solid #1e2530;">
+        <p style="margin:0;font-size:15px;font-weight:600;color:#ef4444;">✗ {{.Headline}}</p>
+      </div>
+      {{end}}
+    </td></tr>
+
+    <!-- Summary sentences -->
+    {{if .Summary}}
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      {{range .Summary}}
+      <p style="margin:0 0 6px;font-size:14px;color:#7a8fa8;line-height:1.6;">{{.}}</p>
+      {{end}}
+    </td></tr>
+    {{end}}
+
+    <!-- Action items -->
+    {{if .ActionItems}}
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:4px 28px 16px;">
+      <p style="margin:0 0 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Action Items</p>
+      {{range .ActionItems}}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:6px;">
+        <tr>
+          <td width="8" style="vertical-align:top;padding-top:2px;">
+            {{if eq .Priority "urgent"}}<span style="color:#ef4444;font-size:12px;">●</span>
+            {{else if eq .Priority "review"}}<span style="color:#eab308;font-size:12px;">●</span>
+            {{else}}<span style="color:#3b82f6;font-size:12px;">●</span>{{end}}
+          </td>
+          <td style="padding-left:8px;font-size:13px;color:#c8d4e0;line-height:1.5;">{{.Text}}</td>
+        </tr>
+      </table>
+      {{end}}
+    </td></tr>
+    {{end}}
+
+    <!-- Divider -->
+    <tr><td style="background:#0f1215;border-left:1px solid #1e2530;border-right:1px solid #1e2530;padding:0 28px;">
+      <div style="height:1px;background:#1e2530;"></div>
+    </td></tr>
+
+    <!-- Event counts -->
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Events This Period</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td align="center" style="padding:0 6px;">
+            <div style="font-size:26px;font-weight:700;color:#3b82f6;font-family:monospace;">{{.EventInfo}}</div>
+            <div style="font-size:10px;color:#445566;text-transform:uppercase;letter-spacing:0.08em;font-family:monospace;margin-top:2px;">Info</div>
+          </td>
+          <td align="center" style="padding:0 6px;">
+            <div style="font-size:26px;font-weight:700;{{if gt .EventWarn 0}}color:#eab308;{{else}}color:#445566;{{end}}font-family:monospace;">{{.EventWarn}}</div>
+            <div style="font-size:10px;color:#445566;text-transform:uppercase;letter-spacing:0.08em;font-family:monospace;margin-top:2px;">Warn</div>
+          </td>
+          <td align="center" style="padding:0 6px;">
+            <div style="font-size:26px;font-weight:700;{{if gt .EventError 0}}color:#ef4444;{{else}}color:#445566;{{end}}font-family:monospace;">{{.EventError}}</div>
+            <div style="font-size:10px;color:#445566;text-transform:uppercase;letter-spacing:0.08em;font-family:monospace;margin-top:2px;">Error</div>
+          </td>
+          <td align="center" style="padding:0 6px;">
+            <div style="font-size:26px;font-weight:700;{{if gt .EventCritical 0}}color:#ef4444;{{else}}color:#445566;{{end}}font-family:monospace;">{{.EventCritical}}</div>
+            <div style="font-size:10px;color:#445566;text-transform:uppercase;letter-spacing:0.08em;font-family:monospace;margin-top:2px;">Critical</div>
           </td>
         </tr>
+      </table>
+    </td></tr>
 
-        <!-- Summary row -->
-        <tr>
-          <td style="background-color:#111318;padding:20px 32px;border-bottom:1px solid #1e2330;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                {{if .TotalErrors}}
-                <td align="center" style="padding:0 8px;">
-                  <div style="font-size:22px;font-weight:700;color:#f87171;">{{.TotalErrors}}</div>
-                  <div style="font-size:11px;color:#94a3b8;margin-top:2px;text-transform:uppercase;letter-spacing:0.08em;">Errors</div>
-                </td>
-                {{end}}
-                <td align="center" style="padding:0 8px;">
-                  <div style="font-size:22px;font-weight:700;color:#38bdf8;">{{len .AppRows}}</div>
-                  <div style="font-size:11px;color:#94a3b8;margin-top:2px;text-transform:uppercase;letter-spacing:0.08em;">Events</div>
-                </td>
-              </tr>
-            </table>
+    <!-- Monitor checks -->
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Monitor Checks</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {{range .CheckGroups}}
+        <tr style="border-bottom:1px solid #1e2530;">
+          <td style="padding:8px 0;font-size:12px;font-weight:600;font-family:monospace;color:#7a8fa8;text-transform:uppercase;width:50px;">{{.Type}}</td>
+          <td style="padding:8px 0;font-size:18px;font-weight:700;font-family:monospace;width:80px;
+            {{if eq .Status "healthy"}}color:#22c55e;
+            {{else if eq .Status "warning"}}color:#eab308;
+            {{else if eq .Status "down"}}color:#ef4444;
+            {{else}}color:#445566;{{end}}">
+            {{if eq .Status "none"}}—{{else}}{{printf "%.1f" .AvgUptime}}%{{end}}
           </td>
-        </tr>
-
-        <!-- Per-app breakdown -->
-        {{if .AppRows}}
-        <tr>
-          <td style="background-color:#111318;padding:20px 32px;border-bottom:1px solid #1e2330;">
-            <p style="margin:0 0 12px;font-size:13px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Activity</p>
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              {{range .AppRows}}
-              <tr>
-                <td style="padding:6px 0;border-bottom:1px solid #1e2330;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td style="font-size:14px;color:#e2e8f0;">{{.AppName}}</td>
-                      <td style="font-size:12px;color:#64748b;text-align:center;">{{.EventType}}</td>
-                      <td align="right">
-                        <span style="font-size:14px;font-weight:600;{{if .HasErrors}}color:#f87171;{{else}}color:#38bdf8;{{end}}">{{.Count}}</span>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-              {{end}}
-            </table>
+          <td style="padding:8px 0;font-size:12px;color:#445566;font-family:monospace;">
+            {{if eq .Status "none"}}no checks configured
+            {{else}}{{.Total}} check{{if ne .Total 1}}s{{end}}{{if gt .NotUp 0}} · {{.NotUp}} not up{{end}}{{end}}
           </td>
-        </tr>
-        {{else}}
-        <tr>
-          <td style="background-color:#111318;padding:20px 32px;border-bottom:1px solid #1e2330;">
-            <p style="margin:0;font-size:14px;color:#64748b;text-align:center;">No activity recorded for this period.</p>
+          <td align="right" style="padding:8px 0;">
+            {{if eq .Status "healthy"}}<span style="color:#22c55e;font-size:14px;">●</span>
+            {{else if eq .Status "warning"}}<span style="color:#eab308;font-size:14px;">▲</span>
+            {{else if eq .Status "down"}}<span style="color:#ef4444;font-size:14px;">✗</span>
+            {{else}}<span style="color:#1e2530;font-size:14px;">○</span>{{end}}
           </td>
         </tr>
         {{end}}
+      </table>
+    </td></tr>
 
-        <!-- Footer -->
+    <!-- App activity -->
+    {{if .AppSections}}
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">App Activity</p>
+      {{range .AppSections}}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
         <tr>
-          <td style="background-color:#0d1117;border-radius:0 0 8px 8px;padding:16px 32px;">
-            <p style="margin:0;font-size:12px;color:#475569;text-align:center;">
-              Sent by NORA &middot;
-              <a href="#" style="color:#38bdf8;text-decoration:none;">Manage digest settings</a>
-            </p>
+          <td colspan="2" style="padding:6px 0 4px;border-bottom:1px solid #1e2530;">
+            <span style="font-size:13px;font-weight:600;color:#c8d4e0;">{{.AppName}}</span>
+            {{if .ProfileName}}<span style="font-size:11px;color:#445566;margin-left:6px;font-family:monospace;">{{.ProfileName}}</span>{{end}}
           </td>
         </tr>
-
+        {{range .Categories}}
+        <tr>
+          <td style="padding:5px 0 5px 12px;font-size:13px;color:#7a8fa8;">{{.Label}}</td>
+          <td align="right" style="padding:5px 0;font-size:14px;font-weight:600;font-family:monospace;{{if and .IsError (gt .Count 0)}}color:#ef4444;{{else if gt .Count 0}}color:#3b82f6;{{else}}color:#445566;{{end}}">{{.Count}}</td>
+        </tr>
+        {{end}}
+        {{if eq .TotalEvents 0}}
+        <tr><td colspan="2" style="padding:5px 0 5px 12px;font-size:12px;color:#445566;font-style:italic;">No activity this period</td></tr>
+        {{end}}
       </table>
-    </td>
-  </tr>
+      {{end}}
+    </td></tr>
+    {{end}}
+
+    <!-- Infrastructure -->
+    {{if .InfraRows}}
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Infrastructure
+        <span style="font-weight:400;color:#22c55e;margin-left:8px;">{{.InfraOnline}} online</span>
+        {{if gt .InfraOffline 0}}<span style="font-weight:400;color:#ef4444;margin-left:8px;">{{.InfraOffline}} offline</span>{{end}}
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {{range .InfraRows}}
+        <tr>
+          <td style="padding:5px 0;font-size:13px;color:#c8d4e0;">{{.Name}}</td>
+          <td style="padding:5px 0;font-size:11px;color:#445566;font-family:monospace;">{{.Type}}</td>
+          <td align="right" style="padding:5px 0;font-size:12px;font-family:monospace;
+            {{if eq .Status "online"}}color:#22c55e;
+            {{else if eq .Status "degraded"}}color:#eab308;
+            {{else}}color:#ef4444;{{end}}">{{.Status}}</td>
+        </tr>
+        {{end}}
+      </table>
+    </td></tr>
+    {{end}}
+
+    <!-- Containers -->
+    {{if gt .ContainersTotal 0}}
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      <p style="margin:0 0 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Containers</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:4px 0;font-size:13px;color:#7a8fa8;">Running</td>
+          <td align="right" style="padding:4px 0;font-size:14px;font-weight:600;font-family:monospace;color:#22c55e;">{{.ContainersRunning}} / {{.ContainersTotal}}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;font-size:13px;color:#7a8fa8;">Image updates available</td>
+          <td align="right" style="padding:4px 0;font-size:14px;font-weight:600;font-family:monospace;{{if gt .UpdatesAvailable 0}}color:#eab308;{{else}}color:#445566;{{end}}">{{.UpdatesAvailable}}</td>
+        </tr>
+        {{if .NewContainers}}
+        <tr>
+          <td colspan="2" style="padding:6px 0 2px;font-size:12px;color:#445566;font-family:monospace;">New this period: {{range $i, $n := .NewContainers}}{{if $i}}, {{end}}{{$n}}{{end}}</td>
+        </tr>
+        {{end}}
+      </table>
+    </td></tr>
+    {{end}}
+
+    <!-- Resource warnings -->
+    {{if .ResourceWarnings}}
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      <p style="margin:0 0 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Resource Warnings</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {{range .ResourceWarnings}}
+        <tr>
+          <td style="padding:5px 0;font-size:13px;color:#c8d4e0;">{{.ComponentName}}</td>
+          <td style="padding:5px 0;font-size:11px;color:#7a8fa8;font-family:monospace;">{{.Metric}}</td>
+          <td align="right" style="padding:5px 0;font-size:12px;font-family:monospace;color:#eab308;">avg {{printf "%.0f" .AvgPct}}% · peak {{printf "%.0f" .MaxPct}}%</td>
+        </tr>
+        {{end}}
+      </table>
+    </td></tr>
+    {{end}}
+
+    <!-- Footer -->
+    <tr><td style="background:#0a0c0f;border:1px solid #1e2530;border-top:none;border-radius:0 0 8px 8px;padding:14px 28px;">
+      <p style="margin:0;font-size:12px;color:#1e2530;text-align:center;font-family:monospace;">
+        NORA · Nexus Operations Recon &amp; Alerts
+      </p>
+    </td></tr>
+
+  </table>
+  </td></tr>
 </table>
 </body>
 </html>`
 
 // reportHTMLTemplate is the browser/print-friendly report template.
-// It includes print CSS and a screen-only print button.
 var reportHTMLTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -573,45 +1155,84 @@ var reportHTMLTemplate = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{.Title}}</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0a0c0f; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 32px 16px; }
-  .report { max-width: 680px; margin: 0 auto; }
-  .report-header { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid #1e2330; margin-bottom: 24px; }
-  .report-brand { font-size: 16px; font-weight: 700; letter-spacing: 0.08em; color: #64748b; }
-  .report-title { font-size: 22px; font-weight: 600; color: #f1f5f9; margin-top: 4px; }
-  .report-period { font-size: 13px; color: #64748b; }
-  .section { margin-bottom: 24px; }
-  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 12px; }
-  .summary-row { display: flex; gap: 24px; margin-bottom: 24px; }
-  .summary-cell { text-align: center; }
-  .summary-value { font-size: 28px; font-weight: 700; }
-  .summary-value.errors { color: #f87171; }
-  .summary-value.events { color: #38bdf8; }
-  .summary-caption { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
-  table.activity { width: 100%; border-collapse: collapse; }
-  table.activity td { padding: 9px 0; border-bottom: 1px solid #1e2330; font-size: 14px; }
-  table.activity td.app { color: #e2e8f0; }
-  table.activity td.type { color: #64748b; text-align: center; font-size: 12px; }
-  table.activity td.count { text-align: right; font-weight: 600; }
-  td.count.err { color: #f87171; }
-  td.count.ok  { color: #38bdf8; }
-  .empty { color: #64748b; font-size: 14px; padding: 12px 0; }
-  .print-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; background: #1e2330; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; font-size: 13px; font-weight: 500; cursor: pointer; margin-bottom: 24px; }
-  .print-btn:hover { background: #263044; }
-  @media print {
-    body { background: #fff; color: #000; padding: 0; }
-    .report-header { border-bottom-color: #ccc; }
-    .report-brand, .report-period { color: #666; }
-    .report-title { color: #000; }
-    .section-label { color: #666; }
-    table.activity td { border-bottom-color: #ddd; }
-    table.activity td.app { color: #000; }
-    table.activity td.type { color: #666; }
-    td.count.err { color: #c0392b; }
-    td.count.ok  { color: #2563eb; }
-    .print-btn { display: none; }
-    .summary-value.errors { color: #c0392b; }
-    .summary-value.events { color: #2563eb; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0a0c0f;color:#c8d4e0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:32px 16px;}
+  .report{max-width:720px;margin:0 auto;}
+  .header{display:flex;align-items:baseline;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid #1e2530;margin-bottom:24px;}
+  .brand{font-size:13px;font-weight:700;letter-spacing:0.1em;color:#3b82f6;font-family:monospace;}
+  .title{font-size:22px;font-weight:600;color:#f1f5f9;margin-top:4px;}
+  .period{font-size:12px;color:#445566;font-family:monospace;}
+  .banner{border-radius:6px;padding:14px 20px;margin-bottom:20px;}
+  .banner.healthy{background:#14532d;border-left:4px solid #22c55e;}
+  .banner.warning{background:#713f12;border-left:4px solid #eab308;}
+  .banner.critical{background:#7f1d1d;border-left:4px solid #ef4444;}
+  .banner-headline{font-size:15px;font-weight:600;margin-bottom:8px;}
+  .banner.healthy .banner-headline{color:#22c55e;}
+  .banner.warning .banner-headline{color:#eab308;}
+  .banner.critical .banner-headline{color:#ef4444;}
+  .summary-text{font-size:13px;color:#7a8fa8;line-height:1.7;margin-bottom:4px;}
+  .section{margin-bottom:28px;}
+  .section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;margin-bottom:12px;}
+  .action-list{list-style:none;}
+  .action-list li{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;font-size:13px;line-height:1.5;}
+  .dot-urgent{color:#ef4444;flex-shrink:0;}
+  .dot-review{color:#eab308;flex-shrink:0;}
+  .dot-info{color:#3b82f6;flex-shrink:0;}
+  .event-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .event-cell{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:14px;text-align:center;}
+  .event-value{font-size:28px;font-weight:700;font-family:monospace;line-height:1;}
+  .event-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;margin-top:4px;}
+  .check-table{width:100%;border-collapse:collapse;}
+  .check-table td{padding:9px 0;border-bottom:1px solid #1e2530;font-size:14px;}
+  .check-type{font-family:monospace;font-weight:600;color:#7a8fa8;text-transform:uppercase;width:50px;}
+  .check-uptime{font-family:monospace;font-weight:700;width:80px;}
+  .check-uptime.healthy{color:#22c55e;}
+  .check-uptime.warning{color:#eab308;}
+  .check-uptime.down{color:#ef4444;}
+  .check-uptime.none{color:#445566;}
+  .check-meta{font-size:12px;color:#445566;font-family:monospace;}
+  .app-section{margin-bottom:20px;background:#0f1215;border:1px solid #1e2530;border-radius:8px;overflow:hidden;}
+  .app-header{padding:10px 16px;border-bottom:1px solid #1e2530;display:flex;align-items:center;gap:10px;}
+  .app-name{font-weight:600;font-size:14px;color:#c8d4e0;}
+  .app-profile{font-size:11px;color:#445566;font-family:monospace;}
+  .cat-row{display:flex;justify-content:space-between;align-items:center;padding:7px 16px;border-bottom:1px solid #1e2530;}
+  .cat-row:last-child{border-bottom:none;}
+  .cat-label{font-size:13px;color:#7a8fa8;}
+  .cat-count{font-family:monospace;font-size:14px;font-weight:600;}
+  .cat-count.has-errors{color:#ef4444;}
+  .cat-count.has-activity{color:#3b82f6;}
+  .cat-count.none{color:#445566;}
+  .infra-table{width:100%;border-collapse:collapse;}
+  .infra-table td{padding:8px 0;border-bottom:1px solid #1e2530;font-size:13px;}
+  .infra-name{color:#c8d4e0;}
+  .infra-type{font-family:monospace;font-size:11px;color:#445566;}
+  .infra-status{font-family:monospace;text-align:right;}
+  .infra-status.online{color:#22c55e;}
+  .infra-status.degraded{color:#eab308;}
+  .infra-status.offline,.infra-status.unknown{color:#ef4444;}
+  .container-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .container-cell{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:14px;}
+  .container-value{font-size:22px;font-weight:700;font-family:monospace;}
+  .container-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;margin-top:4px;}
+  .container-sub{font-size:11px;color:#445566;font-family:monospace;margin-top:6px;line-height:1.5;}
+  .warn-table{width:100%;border-collapse:collapse;}
+  .warn-table td{padding:8px 0;border-bottom:1px solid #1e2530;font-size:13px;}
+  .print-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 18px;background:#1c2028;border:1px solid #1e2530;border-radius:6px;color:#c8d4e0;font-size:13px;cursor:pointer;margin-bottom:24px;}
+  .print-btn:hover{background:#252d38;}
+  @media print{
+    body{background:#fff;color:#000;padding:0;}
+    .print-btn{display:none;}
+    .banner.healthy{background:#d1fae5;border-left-color:#16a34a;}
+    .banner.warning{background:#fef9c3;border-left-color:#ca8a04;}
+    .banner.critical{background:#fee2e2;border-left-color:#dc2626;}
+    .banner.healthy .banner-headline{color:#16a34a;}
+    .banner.warning .banner-headline{color:#ca8a04;}
+    .banner.critical .banner-headline{color:#dc2626;}
+    .app-section,.container-cell,.event-cell{border-color:#ddd;background:#fff;}
+    .section-label,.check-meta,.infra-type,.container-label,.app-profile{color:#666;}
+    .summary-text,.cat-label,.infra-name,.cat-label{color:#333;}
+    .cat-count.none,.check-uptime.none{color:#999;}
+    .event-cell{border-color:#ddd;}
   }
 </style>
 </head>
@@ -619,46 +1240,148 @@ var reportHTMLTemplate = `<!DOCTYPE html>
 <div class="report">
   <button class="print-btn" onclick="window.print()">⎙ Print / Save as PDF</button>
 
-  <div class="report-header">
+  <div class="header">
     <div>
-      <div class="report-brand">NORA</div>
-      <div class="report-title">{{.Title}}</div>
+      <div class="brand">NORA</div>
+      <div class="title">{{.Title}}</div>
     </div>
-    <div class="report-period">{{.Period}}</div>
+    <div class="period">{{.Period}}</div>
   </div>
 
+  <!-- Health banner + narrative -->
+  <div class="banner {{.HealthStatus}}">
+    <div class="banner-headline">{{if eq .HealthStatus "healthy"}}✓{{else if eq .HealthStatus "warning"}}⚠{{else}}✗{{end}} {{.Headline}}</div>
+    {{range .Summary}}<p class="summary-text">{{.}}</p>{{end}}
+  </div>
+
+  <!-- Action items -->
+  {{if .ActionItems}}
   <div class="section">
-    <div class="section-label">Summary</div>
-    <div class="summary-row">
-      {{if .TotalErrors}}
-      <div class="summary-cell">
-        <div class="summary-value errors">{{.TotalErrors}}</div>
-        <div class="summary-caption">Errors</div>
-      </div>
+    <div class="section-label">Action Items</div>
+    <ul class="action-list">
+      {{range .ActionItems}}
+      <li>
+        {{if eq .Priority "urgent"}}<span class="dot-urgent">●</span>
+        {{else if eq .Priority "review"}}<span class="dot-review">●</span>
+        {{else}}<span class="dot-info">●</span>{{end}}
+        <span>{{.Text}}</span>
+      </li>
       {{end}}
-      <div class="summary-cell">
-        <div class="summary-value events">{{len .AppRows}}</div>
-        <div class="summary-caption">Event Types</div>
+    </ul>
+  </div>
+  {{end}}
+
+  <!-- Event counts -->
+  <div class="section">
+    <div class="section-label">Events This Period</div>
+    <div class="event-grid">
+      <div class="event-cell">
+        <div class="event-value" style="color:#3b82f6;">{{.EventInfo}}</div>
+        <div class="event-label">Info</div>
+      </div>
+      <div class="event-cell">
+        <div class="event-value" style="{{if gt .EventWarn 0}}color:#eab308;{{else}}color:#445566;{{end}}">{{.EventWarn}}</div>
+        <div class="event-label">Warn</div>
+      </div>
+      <div class="event-cell">
+        <div class="event-value" style="{{if gt .EventError 0}}color:#ef4444;{{else}}color:#445566;{{end}}">{{.EventError}}</div>
+        <div class="event-label">Error</div>
+      </div>
+      <div class="event-cell">
+        <div class="event-value" style="{{if gt .EventCritical 0}}color:#ef4444;{{else}}color:#445566;{{end}}">{{.EventCritical}}</div>
+        <div class="event-label">Critical</div>
       </div>
     </div>
   </div>
 
+  <!-- Monitor checks -->
   <div class="section">
-    <div class="section-label">Activity</div>
-    {{if .AppRows}}
-    <table class="activity">
-      {{range .AppRows}}
+    <div class="section-label">Monitor Checks</div>
+    <table class="check-table">
+      {{range .CheckGroups}}
       <tr>
-        <td class="app">{{.AppName}}</td>
-        <td class="type">{{.EventType}}</td>
-        <td class="count {{if .HasErrors}}err{{else}}ok{{end}}">{{.Count}}</td>
+        <td class="check-type">{{.Type}}</td>
+        <td class="check-uptime {{.Status}}">{{if eq .Status "none"}}—{{else}}{{printf "%.1f" .AvgUptime}}%{{end}}</td>
+        <td class="check-meta">{{if eq .Status "none"}}no checks configured{{else}}{{.Total}} check{{if ne .Total 1}}s{{end}}{{if gt .NotUp 0}} · {{.NotUp}} not up{{end}}{{end}}</td>
       </tr>
       {{end}}
     </table>
-    {{else}}
-    <p class="empty">No activity recorded for this period.</p>
+  </div>
+
+  <!-- App activity -->
+  {{if .AppSections}}
+  <div class="section">
+    <div class="section-label">App Activity</div>
+    {{range .AppSections}}
+    <div class="app-section">
+      <div class="app-header">
+        <span class="app-name">{{.AppName}}</span>
+        {{if .ProfileName}}<span class="app-profile">{{.ProfileName}}</span>{{end}}
+      </div>
+      {{range .Categories}}
+      <div class="cat-row">
+        <span class="cat-label">{{.Label}}</span>
+        <span class="cat-count {{if and .IsError (gt .Count 0)}}has-errors{{else if gt .Count 0}}has-activity{{else}}none{{end}}">{{.Count}}</span>
+      </div>
+      {{end}}
+      {{if eq .TotalEvents 0}}
+      <div class="cat-row"><span class="cat-label" style="font-style:italic;">No activity this period</span></div>
+      {{end}}
+    </div>
     {{end}}
   </div>
+  {{end}}
+
+  <!-- Infrastructure -->
+  {{if .InfraRows}}
+  <div class="section">
+    <div class="section-label">Infrastructure — {{.InfraOnline}} online{{if gt .InfraOffline 0}}, {{.InfraOffline}} offline{{end}}</div>
+    <table class="infra-table">
+      {{range .InfraRows}}
+      <tr>
+        <td class="infra-name">{{.Name}}</td>
+        <td class="infra-type">{{.Type}}</td>
+        <td class="infra-status {{.Status}}">{{.Status}}</td>
+      </tr>
+      {{end}}
+    </table>
+  </div>
+  {{end}}
+
+  <!-- Containers -->
+  {{if gt .ContainersTotal 0}}
+  <div class="section">
+    <div class="section-label">Containers</div>
+    <div class="container-grid">
+      <div class="container-cell">
+        <div class="container-value" style="color:#22c55e;">{{.ContainersRunning}}<span style="font-size:14px;color:#445566;"> / {{.ContainersTotal}}</span></div>
+        <div class="container-label">Running</div>
+      </div>
+      <div class="container-cell">
+        <div class="container-value" style="{{if gt .UpdatesAvailable 0}}color:#eab308;{{else}}color:#445566;{{end}}">{{.UpdatesAvailable}}</div>
+        <div class="container-label">Updates Available</div>
+        {{if .NewContainers}}<div class="container-sub">New: {{range $i,$n := .NewContainers}}{{if $i}}, {{end}}{{$n}}{{end}}</div>{{end}}
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <!-- Resource warnings -->
+  {{if .ResourceWarnings}}
+  <div class="section">
+    <div class="section-label">Resource Warnings</div>
+    <table class="warn-table">
+      {{range .ResourceWarnings}}
+      <tr>
+        <td style="color:#c8d4e0;">{{.ComponentName}}</td>
+        <td style="font-family:monospace;font-size:11px;color:#7a8fa8;">{{.Metric}}</td>
+        <td align="right" style="font-family:monospace;font-size:12px;color:#eab308;">avg {{printf "%.0f" .AvgPct}}% · peak {{printf "%.0f" .MaxPct}}%</td>
+      </tr>
+      {{end}}
+    </table>
+  </div>
+  {{end}}
+
 </div>
 </body>
 </html>`
