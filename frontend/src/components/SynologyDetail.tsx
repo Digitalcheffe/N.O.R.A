@@ -8,7 +8,7 @@ import type {
   SynologyVolume,
   SynologyDisk,
 } from '../api/types'
-import './InfraComponentDetail.css'
+import '../pages/InfraComponentDetail.css'
 import './SynologyDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

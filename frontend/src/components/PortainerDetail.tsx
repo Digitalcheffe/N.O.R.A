@@ -10,12 +10,28 @@ import type {
 } from '../api/types'
 import './PortainerDetail.css'
 
-// ── Sort types ────────────────────────────────────────────────────────────────
-
-type SortKey = 'name' | 'cpu_percent' | 'mem_bytes' | 'mem_percent'
-type SortDir = 'asc' | 'desc'
-
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function containerDotClass(state: string): string {
+  if (state === 'running') return 'green'
+  if (state === 'exited')  return 'red'
+  return 'grey'
+}
+
+function MiniBar({ value, label }: { value: number | null; label: string }) {
+  const pct    = value ?? 0
+  const noData = value === null
+  const cls    = noData ? 'no-data' : pct >= 90 ? 'crit' : pct >= 70 ? 'warn' : ''
+  return (
+    <div className="pt-res-row">
+      <span className="pt-res-label">{label}</span>
+      <div className="pt-res-track">
+        <div className={`pt-res-fill${cls ? ` ${cls}` : ''}`} style={{ width: noData ? '0%' : `${Math.min(pct, 100)}%` }} />
+      </div>
+      <span className={`pt-res-pct${noData ? ' no-data' : ''}`}>{noData ? '—' : `${Math.round(pct)}%`}</span>
+    </div>
+  )
+}
 
 function StatCard({
   title,
@@ -68,8 +84,6 @@ function EndpointView({
   const [loading, setLoading] = useState(true)
   const [danglingDismissed, setDanglingDismissed] = useState(false)
   const [unusedDismissed, setUnusedDismissed] = useState(false)
-  const [sortKey, setSortKey] = useState<SortKey>('name')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const { tick } = useAutoRefresh()
 
   const load = useCallback(() => {
@@ -89,28 +103,7 @@ function EndpointView({
 
   useEffect(() => { load() }, [load, tick])
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortKey(key)
-      setSortDir('asc')
-    }
-  }
-
-  function sortIcon(key: SortKey) {
-    if (sortKey !== key) return ' ↕'
-    return sortDir === 'asc' ? ' ↑' : ' ↓'
-  }
-
-  const sorted = [...containers].sort((a, b) => {
-    let diff = 0
-    if (sortKey === 'name') diff = a.name.localeCompare(b.name)
-    else if (sortKey === 'cpu_percent') diff = a.cpu_percent - b.cpu_percent
-    else if (sortKey === 'mem_bytes') diff = a.mem_bytes - b.mem_bytes
-    else if (sortKey === 'mem_percent') diff = a.mem_percent - b.mem_percent
-    return sortDir === 'asc' ? diff : -diff
-  })
+  const sorted = [...containers].sort((a, b) => a.name.localeCompare(b.name))
 
   if (loading) {
     return <div className="pt-loading">Loading endpoint data…</div>
@@ -174,43 +167,54 @@ function EndpointView({
         />
       )}
 
-      <div className="pt-section-title">Containers</div>
+      <div className="pt-section-title">
+        Containers
+        {sorted.length > 0 && (
+          <span className="pt-container-count">
+            {sorted.filter(c => c.state === 'running').length} running / {sorted.length} total
+          </span>
+        )}
+      </div>
       {sorted.length === 0 ? (
         <div className="pt-empty">No containers found on this endpoint.</div>
       ) : (
-        <table className="pt-table">
-          <thead>
-            <tr>
-              <th className="pt-th-sortable" onClick={() => toggleSort('name')}>NAME{sortIcon('name')}</th>
-              <th className="pt-th-sortable" onClick={() => toggleSort('cpu_percent')}>CPU%{sortIcon('cpu_percent')}</th>
-              <th className="pt-th-sortable" onClick={() => toggleSort('mem_bytes')}>MEM{sortIcon('mem_bytes')}</th>
-              <th className="pt-th-sortable" onClick={() => toggleSort('mem_percent')}>MEM%{sortIcon('mem_percent')}</th>
-              <th>IMAGE</th>
-              <th>IMAGE STATUS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map(c => (
-              <tr key={c.id} className={c.state !== 'running' ? 'pt-row-stopped' : ''}>
-                <td className="pt-cell-name">
-                  {c.name}
+        <div className="pt-card-grid">
+          {sorted.map(c => {
+            const dotCls = containerDotClass(c.state)
+            return (
+              <div key={c.id} className={`pt-container-card${c.state !== 'running' ? ' stopped' : ''}`}>
+                {/* Header: status dot + name + state */}
+                <div className="pt-card-header">
+                  <span className={`pt-dot ${dotCls}`} />
+                  <span className="pt-card-name">{c.name}</span>
+                  <span className={`pt-card-state ${dotCls}`}>{c.state}</span>
+                </div>
+
+                {/* Meta: stack badge and/or update badge — fixed min-height keeps cards aligned */}
+                <div className="pt-card-meta">
                   {c.stack && <span className="pt-stack-badge">{c.stack}</span>}
-                </td>
-                <td className="pt-cell-mono">{c.state === 'running' ? `${c.cpu_percent.toFixed(1)}%` : '—'}</td>
-                <td className="pt-cell-mono">{c.state === 'running' ? formatBytes(c.mem_bytes) : '—'}</td>
-                <td className="pt-cell-mono">{c.state === 'running' ? `${c.mem_percent.toFixed(1)}%` : '—'}</td>
-                <td className="pt-cell-image" title={c.image}>{c.image}</td>
-                <td>
-                  {c.image_update_available ? (
-                    <span className="pt-update-badge pt-update-warn">Update available</span>
-                  ) : (
-                    <span className="pt-update-badge pt-update-ok">Current</span>
+                  {c.image_update_available && (
+                    <span className="pt-card-update-badge">Update available</span>
                   )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+
+                {/* Resource bars */}
+                <div className="pt-card-res">
+                  <MiniBar label="CPU" value={c.state === 'running' ? c.cpu_percent : null} />
+                  <MiniBar label="MEM" value={c.state === 'running' ? c.mem_percent : null} />
+                </div>
+
+                {/* Footer: image name */}
+                <div className="pt-card-footer">
+                  <span className="pt-card-image" title={c.image}>{c.image}</span>
+                  <span className="pt-card-mem-detail">
+                    {c.state === 'running' ? `${formatBytes(c.mem_bytes)} / ${formatBytes(c.mem_limit_bytes)}` : '—'}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )

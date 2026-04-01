@@ -5,9 +5,9 @@ import { Topbar } from '../components/Topbar'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
-import { PortainerContent } from './PortainerDetail'
-import { ProxmoxContent } from './ProxmoxDetail'
-import { SynologyContent } from './SynologyDetail'
+import { PortainerContent } from '../components/PortainerDetail'
+import { ProxmoxContent } from '../components/ProxmoxDetail'
+import { SynologyContent } from '../components/SynologyDetail'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,

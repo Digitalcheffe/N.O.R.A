@@ -470,6 +470,17 @@ func (h *InfraComponentHandler) Discover(w http.ResponseWriter, r *http.Request)
 
 	result, discErr := jobs.DiscoverOneComponent(discCtx, h.store, c)
 	if discErr != nil {
+		// Write a failure event so the component's event feed reflects the attempt.
+		_ = h.store.Events.Create(discCtx, &models.Event{
+			ID:         uuid.New().String(),
+			Level:      "error",
+			SourceName: c.Name,
+			SourceType: c.Type,
+			SourceID:   c.ID,
+			Title:      fmt.Sprintf("[discovery] Discovery failed — %s", discErr.Error()),
+			Payload:    fmt.Sprintf(`{"bucket":"discovery","component_id":%q,"error":%q}`, c.ID, discErr.Error()),
+			CreatedAt:  time.Now().UTC(),
+		})
 		writeJSON(w, http.StatusOK, discoverResponse{
 			Status:  "error",
 			Error:   discErr.Error(),
