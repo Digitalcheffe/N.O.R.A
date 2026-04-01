@@ -297,15 +297,30 @@ func TestPortainerWinsOverDD9ForImageUpdateAvailable(t *testing.T) {
 
 	store := newPortainerTestStore(t)
 	createPortainerComponent(t, store, "p1", srv.URL)
-	createDockerEngineComponent(t, store, "d1")
 
-	// Create container with DD-9 data: registry says sha256:newermanifest (update available).
-	dc := createDiscoveredContainer(t, store, "d1", "myapp", "myrepo/myapp:latest", 0)
+	// Pre-seed the container under p1 with the Portainer container ID ("ctr1") so
+	// the upsert conflict key matches and the registry_digest is visible to the worker.
+	dc := &models.DiscoveredContainer{
+		InfraComponentID: "p1",
+		ContainerID:      "ctr1",
+		ContainerName:    "myapp",
+		Image:            "myrepo/myapp:latest",
+		Status:           "running",
+		LastSeenAt:       time.Now(),
+		CreatedAt:        time.Now(),
+	}
+	if err := store.DiscoveredContainers.UpsertDiscoveredContainer(context.Background(), dc); err != nil {
+		t.Fatalf("pre-seed container: %v", err)
+	}
+	seeded, err := store.DiscoveredContainers.FindByName(context.Background(), "p1", "myapp")
+	if err != nil {
+		t.Fatalf("find pre-seeded container: %v", err)
+	}
 
 	// Manually store DD-9 registry_digest (different from running manifest → update available).
 	registryDigest := "sha256:newermanifest"
 	if err := store.DiscoveredContainers.UpdateContainerImageCheck(
-		context.Background(), dc.ID, "sha256:localmanifest", registryDigest, false,
+		context.Background(), seeded.ID, "ctr1", registryDigest, false,
 	); err != nil {
 		t.Fatalf("seed DD-9 data: %v", err)
 	}
@@ -316,7 +331,7 @@ func TestPortainerWinsOverDD9ForImageUpdateAvailable(t *testing.T) {
 	}
 
 	// Reload and verify Portainer detected the update (running manifest ≠ registry digest).
-	updated, err := store.DiscoveredContainers.GetDiscoveredContainer(context.Background(), dc.ID)
+	updated, err := store.DiscoveredContainers.GetDiscoveredContainer(context.Background(), seeded.ID)
 	if err != nil {
 		t.Fatalf("get container: %v", err)
 	}
@@ -349,8 +364,24 @@ func TestPortainerEventEmittedOnFalseToTrueTransition(t *testing.T) {
 
 	store := newPortainerTestStore(t)
 	createPortainerComponent(t, store, "p1", srv.URL)
-	createDockerEngineComponent(t, store, "d1")
-	dc := createDiscoveredContainer(t, store, "d1", "webapp", "myrepo/webapp:1.0", 0)
+
+	// Pre-seed the container under p1 with the Portainer container ID ("ctr2").
+	dcRaw := &models.DiscoveredContainer{
+		InfraComponentID: "p1",
+		ContainerID:      "ctr2",
+		ContainerName:    "webapp",
+		Image:            "myrepo/webapp:1.0",
+		Status:           "running",
+		LastSeenAt:       time.Now(),
+		CreatedAt:        time.Now(),
+	}
+	if err := store.DiscoveredContainers.UpsertDiscoveredContainer(context.Background(), dcRaw); err != nil {
+		t.Fatalf("pre-seed container: %v", err)
+	}
+	dc, err := store.DiscoveredContainers.FindByName(context.Background(), "p1", "webapp")
+	if err != nil {
+		t.Fatalf("find pre-seeded container: %v", err)
+	}
 
 	// Seed: DD-9 says there's a newer image.
 	if err := store.DiscoveredContainers.UpdateContainerImageCheck(
