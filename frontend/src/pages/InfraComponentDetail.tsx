@@ -394,7 +394,6 @@ export function InfraComponentDetail() {
           />
         }
         sourceId={component.id}
-        eventFeedTitle="Image Update Events"
       >
         <PortainerContent component={component} />
       </DetailPageLayout>
