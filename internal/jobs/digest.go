@@ -613,51 +613,132 @@ func (d *DigestJob) buildNarrative(data *DigestData) (headline, healthStatus str
 		headline = "All systems look healthy"
 	}
 
-	// ── Summary sentences ─────────────────────────────────────────────────
-	// Always start with the overall health sentence.
+	// ── Summary sentences — flowing prose paragraphs ─────────────────────
 	var sb []string
 
-	if healthStatus == "healthy" {
-		sb = append(sb, "Everything looks good across the board this period.")
+	// ── Sentence 1: Events overview ───────────────────────────────────────
+	totalSevere := data.EventError + data.EventCritical
+	totalEvents := data.EventInfo + data.EventWarn + totalSevere
+	if totalEvents == 0 {
+		if healthStatus == "healthy" {
+			sb = append(sb, "No events were recorded this period — everything has been quiet.")
+		}
+	} else if totalSevere == 0 {
+		sb = append(sb, fmt.Sprintf(
+			"NORA recorded %d event%s this period with no errors or critical alerts — a clean run.",
+			totalEvents, plural(totalEvents)))
 	} else {
-		sb = append(sb, fmt.Sprintf("There %s %d item%s flagged for your attention this period.",
-			isAre(totalIssues), totalIssues, plural(totalIssues)))
+		var parts []string
+		if data.EventInfo > 0 {
+			parts = append(parts, fmt.Sprintf("%d info", data.EventInfo))
+		}
+		if data.EventWarn > 0 {
+			parts = append(parts, fmt.Sprintf("%d warning", data.EventWarn))
+		}
+		if data.EventError > 0 {
+			parts = append(parts, fmt.Sprintf("%d error", data.EventError))
+		}
+		if data.EventCritical > 0 {
+			parts = append(parts, fmt.Sprintf("%d critical", data.EventCritical))
+		}
+		sb = append(sb, fmt.Sprintf(
+			"NORA recorded %d event%s this period (%s) — the error and critical events are worth reviewing.",
+			totalEvents, plural(totalEvents), strings.Join(parts, ", ")))
 	}
 
-	// Monitors sentence
+	// ── Sentence 2: Monitor checks ────────────────────────────────────────
 	totalChecks := 0
 	for _, g := range data.CheckGroups {
 		totalChecks += g.Total
 	}
 	if totalChecks > 0 {
-		if downChecks == 0 && warnChecks == 0 {
-			sb = append(sb, fmt.Sprintf("All %d monitor check%s are passing.", totalChecks, plural(totalChecks)))
-		} else {
-			sb = append(sb, fmt.Sprintf("%d of %d monitor check type%s showing issues.", downChecks+warnChecks, 4, plural(downChecks+warnChecks)))
+		var checkDescs []string
+		for _, g := range data.CheckGroups {
+			if g.Total == 0 {
+				continue
+			}
+			switch g.Status {
+			case "healthy":
+				checkDescs = append(checkDescs, fmt.Sprintf("%s (%d up)", strings.ToUpper(g.Type), g.Total))
+			case "warning":
+				checkDescs = append(checkDescs, fmt.Sprintf("%s at %.0f%% avg with %d of %d not fully up",
+					strings.ToUpper(g.Type), g.AvgUptime, g.NotUp, g.Total))
+			case "down":
+				checkDescs = append(checkDescs, fmt.Sprintf("%s at %.0f%% avg — %d of %d down",
+					strings.ToUpper(g.Type), g.AvgUptime, g.NotUp, g.Total))
+			}
+		}
+		if len(checkDescs) > 0 {
+			if downChecks == 0 && warnChecks == 0 {
+				sb = append(sb, fmt.Sprintf("Monitor checks are all healthy — %s.", strings.Join(checkDescs, ", ")))
+			} else {
+				sb = append(sb, fmt.Sprintf("Monitor checks need attention: %s.", strings.Join(checkDescs, "; ")))
+			}
 		}
 	}
 
-	// Events sentence
-	totalSevere := data.EventError + data.EventCritical
-	totalEvents := data.EventInfo + data.EventWarn + totalSevere
-	if totalEvents > 0 {
-		if totalSevere == 0 {
-			sb = append(sb, fmt.Sprintf("%d event%s recorded — no errors or criticals.", totalEvents, plural(totalEvents)))
+	// ── Sentence 3: Infrastructure ────────────────────────────────────────
+	if len(data.InfraRows) > 0 {
+		var offlineNames []string
+		for _, r := range data.InfraRows {
+			if r.Status != "online" {
+				offlineNames = append(offlineNames, r.Name)
+			}
+		}
+		if len(offlineNames) == 0 {
+			sb = append(sb, fmt.Sprintf(
+				"All %d infrastructure component%s reported online throughout the period.",
+				len(data.InfraRows), plural(len(data.InfraRows))))
 		} else {
-			sb = append(sb, fmt.Sprintf("%d total event%s recorded including %d error/critical %s to review.",
-				totalEvents, plural(totalEvents), totalSevere, nounPlural("event", totalSevere)))
+			sb = append(sb, fmt.Sprintf(
+				"%d of %d infrastructure component%s online — %s %s offline and should be investigated.",
+				data.InfraOnline, len(data.InfraRows), plural(len(data.InfraRows)),
+				strings.Join(offlineNames, ", "), isAre(len(offlineNames))))
 		}
 	}
 
-	// Containers sentence
+	// ── Sentence 4: Containers ────────────────────────────────────────────
 	if data.ContainersTotal > 0 {
 		if data.UpdatesAvailable > 0 {
-			sb = append(sb, fmt.Sprintf("%d/%d container%s running with %d image update%s available.",
+			sb = append(sb, fmt.Sprintf(
+				"%d of %d container%s running with %d image update%s available to pull.",
 				data.ContainersRunning, data.ContainersTotal, plural(data.ContainersTotal),
 				data.UpdatesAvailable, plural(data.UpdatesAvailable)))
 		} else {
-			sb = append(sb, fmt.Sprintf("%d/%d container%s running, no image updates pending.",
+			sb = append(sb, fmt.Sprintf(
+				"%d of %d container%s running with no image updates pending.",
 				data.ContainersRunning, data.ContainersTotal, plural(data.ContainersTotal)))
+		}
+	}
+
+	// ── Sentence 5 (optional): App highlights ────────────────────────────
+	if len(data.AppSections) > 0 {
+		// Find the most active app
+		var topApp *DigestAppSection
+		for i := range data.AppSections {
+			if topApp == nil || data.AppSections[i].TotalEvents > topApp.TotalEvents {
+				topApp = &data.AppSections[i]
+			}
+		}
+		if topApp != nil && topApp.TotalEvents > 0 {
+			var catParts []string
+			for _, c := range topApp.Categories {
+				if c.Count > 0 {
+					catParts = append(catParts, fmt.Sprintf("%d %s", c.Count, strings.ToLower(c.Label)))
+				}
+			}
+			if len(catParts) > 0 {
+				if len(data.AppSections) == 1 {
+					sb = append(sb, fmt.Sprintf("%s logged %s this period.",
+						topApp.AppName, strings.Join(catParts, ", ")))
+				} else {
+					others := len(data.AppSections) - 1
+					sb = append(sb, fmt.Sprintf(
+						"App highlights: %s logged %s — see App Activity below for all %d app%s.",
+						topApp.AppName, strings.Join(catParts, ", "), len(data.AppSections), plural(len(data.AppSections))))
+					_ = others
+				}
+			}
 		}
 	}
 
@@ -1182,41 +1263,55 @@ var reportHTMLTemplate = `<!DOCTYPE html>
   .event-cell{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:14px;text-align:center;}
   .event-value{font-size:28px;font-weight:700;font-family:monospace;line-height:1;}
   .event-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;margin-top:4px;}
-  .check-table{width:100%;border-collapse:collapse;}
-  .check-table td{padding:9px 0;border-bottom:1px solid #1e2530;font-size:14px;}
-  .check-type{font-family:monospace;font-weight:600;color:#7a8fa8;text-transform:uppercase;width:50px;}
-  .check-uptime{font-family:monospace;font-weight:700;width:80px;}
-  .check-uptime.healthy{color:#22c55e;}
-  .check-uptime.warning{color:#eab308;}
-  .check-uptime.down{color:#ef4444;}
-  .check-uptime.none{color:#445566;}
-  .check-meta{font-size:12px;color:#445566;font-family:monospace;}
-  .app-section{margin-bottom:20px;background:#0f1215;border:1px solid #1e2530;border-radius:8px;overflow:hidden;}
-  .app-header{padding:10px 16px;border-bottom:1px solid #1e2530;display:flex;align-items:center;gap:10px;}
-  .app-name{font-weight:600;font-size:14px;color:#c8d4e0;}
-  .app-profile{font-size:11px;color:#445566;font-family:monospace;}
-  .cat-row{display:flex;justify-content:space-between;align-items:center;padding:7px 16px;border-bottom:1px solid #1e2530;}
+  /* ── Check cards ── */
+  .check-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .check-card{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:16px 14px;border-top:3px solid;}
+  .check-card.healthy{border-top-color:#22c55e;}
+  .check-card.warning{border-top-color:#eab308;}
+  .check-card.down{border-top-color:#ef4444;}
+  .check-card.none{border-top-color:#3b82f6;}
+  .check-card-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;margin-bottom:8px;}
+  .check-card-uptime{font-size:24px;font-weight:700;font-family:monospace;line-height:1;margin-bottom:6px;}
+  .check-card.healthy .check-card-uptime{color:#22c55e;}
+  .check-card.warning .check-card-uptime{color:#eab308;}
+  .check-card.down   .check-card-uptime{color:#ef4444;}
+  .check-card.none   .check-card-uptime{color:#445566;}
+  .check-card-meta{font-size:11px;color:#445566;font-family:monospace;line-height:1.4;}
+  .check-card-notup{color:#ef4444;}
+  .check-card.warning .check-card-notup{color:#eab308;}
+  /* ── App widgets ── */
+  .app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+  .app-widget{background:#0f1215;border:1px solid #1e2530;border-radius:8px;overflow:hidden;}
+  .app-widget-header{padding:10px 14px;border-bottom:1px solid #1e2530;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .app-widget-name{font-weight:600;font-size:13px;color:#c8d4e0;}
+  .app-widget-badge{font-size:10px;font-family:monospace;color:#445566;background:#141820;border:1px solid #1e2530;border-radius:4px;padding:1px 5px;}
+  .cat-row{display:flex;justify-content:space-between;align-items:center;padding:7px 14px;border-bottom:1px solid #1e2530;}
   .cat-row:last-child{border-bottom:none;}
-  .cat-label{font-size:13px;color:#7a8fa8;}
-  .cat-count{font-family:monospace;font-size:14px;font-weight:600;}
+  .cat-label{font-size:12px;color:#7a8fa8;}
+  .cat-count{font-family:monospace;font-size:13px;font-weight:600;}
   .cat-count.has-errors{color:#ef4444;}
   .cat-count.has-activity{color:#3b82f6;}
   .cat-count.none{color:#445566;}
-  .infra-table{width:100%;border-collapse:collapse;}
-  .infra-table td{padding:8px 0;border-bottom:1px solid #1e2530;font-size:13px;}
-  .infra-name{color:#c8d4e0;}
-  .infra-type{font-family:monospace;font-size:11px;color:#445566;}
-  .infra-status{font-family:monospace;text-align:right;}
-  .infra-status.online{color:#22c55e;}
-  .infra-status.degraded{color:#eab308;}
-  .infra-status.offline,.infra-status.unknown{color:#ef4444;}
+  /* ── Infra cards ── */
+  .infra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
+  .infra-card{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .infra-card-left{}
+  .infra-card-name{font-size:13px;font-weight:600;color:#c8d4e0;margin-bottom:3px;}
+  .infra-card-type{font-size:11px;font-family:monospace;color:#445566;}
+  .infra-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .infra-dot.online{background:#22c55e;}
+  .infra-dot.degraded{background:#eab308;}
+  .infra-dot.offline,.infra-dot.unknown{background:#ef4444;}
+  /* ── Containers ── */
   .container-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .container-cell{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:14px;}
   .container-value{font-size:22px;font-weight:700;font-family:monospace;}
   .container-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;margin-top:4px;}
   .container-sub{font-size:11px;color:#445566;font-family:monospace;margin-top:6px;line-height:1.5;}
+  /* ── Resource warnings ── */
   .warn-table{width:100%;border-collapse:collapse;}
   .warn-table td{padding:8px 0;border-bottom:1px solid #1e2530;font-size:13px;}
+  /* ── Print button ── */
   .print-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 18px;background:#1c2028;border:1px solid #1e2530;border-radius:6px;color:#c8d4e0;font-size:13px;cursor:pointer;margin-bottom:24px;}
   .print-btn:hover{background:#252d38;}
   @media print{
@@ -1228,11 +1323,10 @@ var reportHTMLTemplate = `<!DOCTYPE html>
     .banner.healthy .banner-headline{color:#16a34a;}
     .banner.warning .banner-headline{color:#ca8a04;}
     .banner.critical .banner-headline{color:#dc2626;}
-    .app-section,.container-cell,.event-cell{border-color:#ddd;background:#fff;}
-    .section-label,.check-meta,.infra-type,.container-label,.app-profile{color:#666;}
-    .summary-text,.cat-label,.infra-name,.cat-label{color:#333;}
-    .cat-count.none,.check-uptime.none{color:#999;}
-    .event-cell{border-color:#ddd;}
+    .check-card,.app-widget,.infra-card,.container-cell,.event-cell{border-color:#ddd;background:#fff;}
+    .section-label,.check-card-meta,.infra-card-type,.container-label,.app-widget-badge{color:#666;}
+    .summary-text,.cat-label,.infra-card-name{color:#333;}
+    .cat-count.none,.check-card.none .check-card-uptime{color:#999;}
   }
 </style>
 </head>
@@ -1294,57 +1388,65 @@ var reportHTMLTemplate = `<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Monitor checks -->
+  <!-- Monitor checks — 4-card grid -->
   <div class="section">
     <div class="section-label">Monitor Checks</div>
-    <table class="check-table">
+    <div class="check-grid">
       {{range .CheckGroups}}
-      <tr>
-        <td class="check-type">{{.Type}}</td>
-        <td class="check-uptime {{.Status}}">{{if eq .Status "none"}}—{{else}}{{printf "%.1f" .AvgUptime}}%{{end}}</td>
-        <td class="check-meta">{{if eq .Status "none"}}no checks configured{{else}}{{.Total}} check{{if ne .Total 1}}s{{end}}{{if gt .NotUp 0}} · {{.NotUp}} not up{{end}}{{end}}</td>
-      </tr>
+      <div class="check-card {{.Status}}">
+        <div class="check-card-type">{{.Type}}</div>
+        <div class="check-card-uptime">{{if eq .Status "none"}}—{{else}}{{printf "%.1f" .AvgUptime}}%{{end}}</div>
+        <div class="check-card-meta">
+          {{if eq .Status "none"}}no checks configured
+          {{else}}{{.Total}} check{{if ne .Total 1}}s{{end}}{{if gt .NotUp 0}}<br><span class="check-card-notup">{{.NotUp}} not up</span>{{end}}
+          {{end}}
+        </div>
+      </div>
       {{end}}
-    </table>
+    </div>
   </div>
 
-  <!-- App activity -->
+  <!-- App activity — widget grid -->
   {{if .AppSections}}
   <div class="section">
     <div class="section-label">App Activity</div>
-    {{range .AppSections}}
-    <div class="app-section">
-      <div class="app-header">
-        <span class="app-name">{{.AppName}}</span>
-        {{if .ProfileName}}<span class="app-profile">{{.ProfileName}}</span>{{end}}
+    <div class="app-grid">
+      {{range .AppSections}}
+      <div class="app-widget">
+        <div class="app-widget-header">
+          <span class="app-widget-name">{{.AppName}}</span>
+          {{if .ProfileName}}<span class="app-widget-badge">{{.ProfileName}}</span>{{end}}
+        </div>
+        {{range .Categories}}
+        <div class="cat-row">
+          <span class="cat-label">{{.Label}}</span>
+          <span class="cat-count {{if and .IsError (gt .Count 0)}}has-errors{{else if gt .Count 0}}has-activity{{else}}none{{end}}">{{.Count}}</span>
+        </div>
+        {{end}}
+        {{if eq .TotalEvents 0}}
+        <div class="cat-row"><span class="cat-label" style="font-style:italic;font-size:11px;">No activity this period</span></div>
+        {{end}}
       </div>
-      {{range .Categories}}
-      <div class="cat-row">
-        <span class="cat-label">{{.Label}}</span>
-        <span class="cat-count {{if and .IsError (gt .Count 0)}}has-errors{{else if gt .Count 0}}has-activity{{else}}none{{end}}">{{.Count}}</span>
-      </div>
-      {{end}}
-      {{if eq .TotalEvents 0}}
-      <div class="cat-row"><span class="cat-label" style="font-style:italic;">No activity this period</span></div>
       {{end}}
     </div>
-    {{end}}
   </div>
   {{end}}
 
-  <!-- Infrastructure -->
+  <!-- Infrastructure — card grid -->
   {{if .InfraRows}}
   <div class="section">
     <div class="section-label">Infrastructure — {{.InfraOnline}} online{{if gt .InfraOffline 0}}, {{.InfraOffline}} offline{{end}}</div>
-    <table class="infra-table">
+    <div class="infra-grid">
       {{range .InfraRows}}
-      <tr>
-        <td class="infra-name">{{.Name}}</td>
-        <td class="infra-type">{{.Type}}</td>
-        <td class="infra-status {{.Status}}">{{.Status}}</td>
-      </tr>
+      <div class="infra-card">
+        <div class="infra-card-left">
+          <div class="infra-card-name">{{.Name}}</div>
+          <div class="infra-card-type">{{.Type}}</div>
+        </div>
+        <div class="infra-dot {{.Status}}"></div>
+      </div>
       {{end}}
-    </table>
+    </div>
   </div>
   {{end}}
 
