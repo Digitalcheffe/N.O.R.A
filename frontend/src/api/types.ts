@@ -262,6 +262,8 @@ export interface AppSummary {
   id: string
   name: string
   profile_id: string
+  icon_url?: string
+  capability?: string
   status: 'online' | 'warn' | 'down'
   last_event_at: string | null
   last_event_text: string | null

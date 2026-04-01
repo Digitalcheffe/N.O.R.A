@@ -1,39 +1,54 @@
-export interface BookmarkData {
-  id: string
-  name: string
-  url: string
+import { useState } from 'react'
+import type { AppSummary } from '../api/types'
+
+function monogram(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0][0] + words[1][0]).toUpperCase()
+}
+
+const CAPABILITY_LABEL: Record<string, string> = {
+  monitor_only: 'Monitor',
+  docker_only: 'Docker',
+  limited: 'Limited',
 }
 
 interface Props {
-  bookmark: BookmarkData
+  app: AppSummary
+  onClick: () => void
 }
 
-export function BookmarkWidget({ bookmark }: Props) {
+export function BookmarkWidget({ app, onClick }: Props) {
+  const [iconFailed, setIconFailed] = useState(false)
+
+  const dotClass =
+    app.status === 'online' ? 'green'
+    : app.status === 'warn' ? 'yellow'
+    : app.status === 'down' ? 'red'
+    : 'grey'
+
+  const showIcon = app.icon_url && !iconFailed
+  const capLabel = CAPABILITY_LABEL[app.capability ?? ''] ?? 'Service'
+
   return (
-    <a
-      className="bookmark-widget"
-      href={bookmark.url}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
+    <div className="bookmark-widget" onClick={onClick}>
       <div className="bookmark-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="2" y1="12" x2="22" y2="12" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
+        {showIcon ? (
+          <img
+            src={app.icon_url}
+            alt={app.name}
+            className="app-icon-img"
+            onError={() => setIconFailed(true)}
+          />
+        ) : (
+          <span className="bookmark-monogram">{monogram(app.name)}</span>
+        )}
       </div>
       <div className="bookmark-info">
-        <div className="bookmark-name">{bookmark.name}</div>
-        <div className="bookmark-url">{bookmark.url}</div>
+        <div className="bookmark-name">{app.name}</div>
+        <div className="bookmark-url">{capLabel}</div>
       </div>
-      <div className="bookmark-arrow">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-          <polyline points="15 3 21 3 21 9" />
-          <line x1="10" y1="14" x2="21" y2="3" />
-        </svg>
-      </div>
-    </a>
+      <div className={`dot ${dotClass}`} style={{ marginLeft: 'auto', flexShrink: 0 }} />
+    </div>
   )
 }

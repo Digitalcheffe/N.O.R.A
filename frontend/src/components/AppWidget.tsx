@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { AppSummary } from '../api/types'
 
 function monogram(name: string): string {
@@ -25,6 +26,8 @@ interface Props {
 }
 
 export function AppWidget({ app, onClick }: Props) {
+  const [iconFailed, setIconFailed] = useState(false)
+
   const pts = sparklinePoints(app.sparkline, 180, 28)
   const closedPts = pts ? `${pts} 180,28 0,28` : ''
 
@@ -44,13 +47,26 @@ export function AppWidget({ app, onClick }: Props) {
   const lastEventStyle: Record<string, string> =
     app.status === 'warn' ? { color: 'var(--yellow)' } : app.status === 'down' ? { color: 'var(--red)' } : {}
 
+  const showIcon = app.icon_url && !iconFailed
+
   return (
     <div
       className={`app-widget${app.status !== 'online' ? ` ${app.status}` : ''}`}
       onClick={onClick}
     >
       <div className="app-widget-header">
-        <div className="app-icon">{monogram(app.name)}</div>
+        <div className="app-icon">
+          {showIcon ? (
+            <img
+              src={app.icon_url}
+              alt={app.name}
+              className="app-icon-img"
+              onError={() => setIconFailed(true)}
+            />
+          ) : (
+            monogram(app.name)
+          )}
+        </div>
         <div className="app-name">{app.name}</div>
         <div className={`app-status ${app.status}`}>
           <div className={`dot ${dotClass}`} />

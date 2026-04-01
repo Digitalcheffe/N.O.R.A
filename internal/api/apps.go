@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/icons"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -16,12 +17,13 @@ import (
 
 // AppsHandler holds dependencies for the apps resource handlers.
 type AppsHandler struct {
-	apps repo.AppRepo
+	apps    repo.AppRepo
+	iconsFetcher *icons.Fetcher // may be nil
 }
 
 // NewAppsHandler creates an AppsHandler with the given repository.
-func NewAppsHandler(apps repo.AppRepo) *AppsHandler {
-	return &AppsHandler{apps: apps}
+func NewAppsHandler(apps repo.AppRepo, fetcher *icons.Fetcher) *AppsHandler {
+	return &AppsHandler{apps: apps, iconsFetcher: fetcher}
 }
 
 // Routes registers all app endpoints on r.
@@ -112,6 +114,9 @@ func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if h.iconsFetcher != nil {
+		h.iconsFetcher.EnsureIcon(app.ProfileID)
+	}
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -167,6 +172,9 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.apps.Update(r.Context(), existing); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if h.iconsFetcher != nil {
+		h.iconsFetcher.EnsureIcon(existing.ProfileID)
 	}
 	writeJSON(w, http.StatusOK, existing)
 }

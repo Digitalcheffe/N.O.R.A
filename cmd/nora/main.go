@@ -17,6 +17,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/config"
 	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/frontend"
+	"github.com/digitalcheffe/nora/internal/icons"
 	"github.com/digitalcheffe/nora/internal/ingest"
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
@@ -138,6 +139,24 @@ func main() {
 		log.Fatalf("app template registry init failed: %v", err)
 	}
 	log.Printf("loaded %d app templates from %s", len(registry.List()), cfg.TemplatesPath)
+
+	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
+	iconFetcher, err := icons.New(cfg.IconsPath)
+	if err != nil {
+		log.Printf("icon fetcher init failed: %v — icons disabled", err)
+		iconFetcher = nil
+	}
+	if iconFetcher != nil {
+		// Pre-fetch icons for all existing apps in the background.
+		existingApps, err := appRepo.List(context.Background())
+		if err == nil {
+			profileIDs := make([]string, 0, len(existingApps))
+			for _, a := range existingApps {
+				profileIDs = append(profileIDs, a.ProfileID)
+			}
+			iconFetcher.FetchAll(context.Background(), profileIDs)
+		}
+	}
 
 	limiter := ingest.NewRateLimiter()
 
@@ -451,7 +470,10 @@ func main() {
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Secret))
-		api.NewAppsHandler(appRepo).Routes(r)
+		api.NewAppsHandler(appRepo, iconFetcher).Routes(r)
+		if iconFetcher != nil {
+			api.NewIconsHandler(iconFetcher).Routes(r)
+		}
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)

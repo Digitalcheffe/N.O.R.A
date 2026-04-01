@@ -4,6 +4,7 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SummaryCard } from '../components/SummaryCard'
 import { AppWidget } from '../components/AppWidget'
+import { BookmarkWidget } from '../components/BookmarkWidget'
 import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
 import type { DashboardSummaryResponse, InfrastructureComponent, ResourceSummary } from '../api/types'
 import './Dashboard.css'
@@ -297,30 +298,83 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* Apps */}
-        {data.apps.length > 0 && (
-          <div>
-            <div className="section-header">
-              <div className="section-title">Apps</div>
-              <button className="section-action" onClick={() => navigate('/apps')}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                Add app
-              </button>
-            </div>
-            <div className="widget-grid">
-              {data.apps.map(app => (
-                <AppWidget
-                  key={app.id}
-                  app={app}
-                  onClick={() => navigate(`/apps/${app.id}`)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Apps — split into full widgets (webhook/digest capable) and service cards */}
+        {(() => {
+          const SERVICE_CAPS = new Set(['monitor_only', 'docker_only'])
+          const fullApps = data.apps.filter(a => !SERVICE_CAPS.has(a.capability ?? ''))
+          const serviceApps = data.apps.filter(a => SERVICE_CAPS.has(a.capability ?? ''))
+
+          return (
+            <>
+              {fullApps.length > 0 && (
+                <div>
+                  <div className="section-header">
+                    <div className="section-title">Apps</div>
+                    <button className="section-action" onClick={() => navigate('/apps')}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Add app
+                    </button>
+                  </div>
+                  <div className="widget-grid">
+                    {fullApps.map(app => (
+                      <AppWidget
+                        key={app.id}
+                        app={app}
+                        onClick={() => navigate(`/apps/${app.id}`)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {serviceApps.length > 0 && (
+                <div>
+                  <div className="section-header">
+                    <div className="section-title">Services</div>
+                    {fullApps.length === 0 && (
+                      <button className="section-action" onClick={() => navigate('/apps')}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add app
+                      </button>
+                    )}
+                  </div>
+                  <div className="services-grid">
+                    {serviceApps.map(app => (
+                      <BookmarkWidget
+                        key={app.id}
+                        app={app}
+                        onClick={() => navigate(`/apps/${app.id}`)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {data.apps.length > 0 && fullApps.length === 0 && serviceApps.length === 0 && (
+                <div>
+                  <div className="section-header">
+                    <div className="section-title">Apps</div>
+                  </div>
+                  <div className="widget-grid">
+                    {data.apps.map(app => (
+                      <AppWidget
+                        key={app.id}
+                        app={app}
+                        onClick={() => navigate(`/apps/${app.id}`)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        })()}
 
         {/* Events — severity counts */}
         {eventCounts !== null && (

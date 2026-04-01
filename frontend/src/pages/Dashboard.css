@@ -161,6 +161,13 @@
   font-weight: 600;
   color: var(--text2);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.app-icon-img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .app-name {
@@ -370,6 +377,13 @@
 .monitor-uptime.down { color: var(--red); }
 .monitor-last { font-family: var(--mono); font-size: 10px; color: var(--text3); }
 
+/* ── SERVICES GRID ── */
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
 /* ── BOOKMARK WIDGET ── */
 .bookmark-widget {
   background: var(--bg2);
@@ -399,6 +413,13 @@
 }
 
 .bookmark-icon svg { width: 12px; height: 12px; color: var(--text3); }
+.bookmark-icon .app-icon-img { width: 20px; height: 20px; object-fit: contain; }
+.bookmark-monogram {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text2);
+}
 .bookmark-info { flex: 1; min-width: 0; }
 .bookmark-name { font-size: 13px; color: var(--text); }
 .bookmark-url { font-family: var(--mono); font-size: 10px; color: var(--text3); }
@@ -908,7 +929,8 @@
     grid-template-columns: repeat(2, 1fr);
   }
 
-  /* ── Bookmarks: 2-column grid ── */
+  /* ── Services / Bookmarks: 2-column grid ── */
+  .services-grid,
   .bookmarks-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
