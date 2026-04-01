@@ -14,9 +14,9 @@ import (
 )
 
 // PortainerEnrichmentWorker polls all enabled Portainer infrastructure components
-// every 15 minutes. For each Portainer endpoint, it lists containers, matches them
-// to NORA-known discovered_containers records by name, updates image_update_available,
-// and emits an event on false→true transitions.
+// every 15 minutes. For each Portainer endpoint, it lists containers, upserts them
+// into discovered_containers (keyed by the Portainer component ID), checks image
+// update availability, and emits an event on false→true transitions.
 //
 // Gate: if no infrastructure components with type="portainer" are configured,
 // each Run call returns early. Docker Engine components are NOT required.
@@ -78,44 +78,34 @@ func (w *PortainerEnrichmentWorker) Run(ctx context.Context) error {
 		return nil
 	}
 
-	// ── Step 2: Load all NORA-known containers once (matched by name) ─────────
-	allContainers, err := w.store.DiscoveredContainers.ListAllDiscoveredContainers(ctx)
-	if err != nil {
-		return fmt.Errorf("portainer enrichment: list discovered containers: %w", err)
-	}
-
-	// Build a name→container map for O(1) lookup.
-	byName := make(map[string]*models.DiscoveredContainer, len(allContainers))
-	for _, c := range allContainers {
-		byName[c.ContainerName] = c
-	}
-
-	// ── Step 3: Poll each Portainer component ─────────────────────────────────
-	totalMatched := 0
+	// ── Step 2: Poll each Portainer component ────────────────────────────────
+	totalUpserted := 0
 	totalEndpoints := 0
 
 	for _, comp := range portainerComponents {
-		matched, endpoints, err := w.enrichComponent(ctx, comp, byName)
+		upserted, endpoints, err := w.enrichComponent(ctx, comp)
 		if err != nil {
 			log.Printf("portainer enrichment: component %q (%s): %v", comp.Name, comp.ID, err)
 			_ = w.store.InfraComponents.UpdateStatus(ctx, comp.ID, "offline", time.Now().UTC().Format(time.RFC3339Nano))
 			continue
 		}
-		totalMatched += matched
+		totalUpserted += upserted
 		totalEndpoints += endpoints
 		_ = w.store.InfraComponents.UpdateStatus(ctx, comp.ID, "online", time.Now().UTC().Format(time.RFC3339Nano))
 	}
 
-	log.Printf("portainer enrichment: %d containers matched across %d endpoints", totalMatched, totalEndpoints)
+	log.Printf("portainer enrichment: %d containers upserted across %d endpoints", totalUpserted, totalEndpoints)
 	return nil
 }
 
 // enrichComponent runs one poll cycle for a single Portainer component.
-// Returns (matchCount, endpointCount, error).
+// It upserts every container seen across all endpoints into discovered_containers
+// (keyed by infra_component_id=comp.ID, container_id=pc.ID), then checks image
+// update availability and marks containers that disappeared as stopped.
+// Returns (upsertCount, endpointCount, error).
 func (w *PortainerEnrichmentWorker) enrichComponent(
 	ctx context.Context,
 	comp models.InfrastructureComponent,
-	byName map[string]*models.DiscoveredContainer,
 ) (int, int, error) {
 	if comp.Credentials == nil || *comp.Credentials == "" {
 		return 0, 0, fmt.Errorf("no credentials configured")
@@ -133,7 +123,9 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 		return 0, 0, fmt.Errorf("list endpoints: %w", err)
 	}
 
-	matched := 0
+	upserted := 0
+	var seenContainerIDs []string // for MarkStoppedIfNotRunning
+
 	for _, ep := range endpoints {
 		containers, err := client.ListContainers(ctx, ep.ID)
 		if err != nil {
@@ -147,45 +139,65 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 				continue
 			}
 
-			nora, ok := byName[name]
-			if !ok {
-				log.Printf("portainer enrichment: no match for container %q endpoint %q (debug)", name, ep.Name)
+			now := time.Now().UTC()
+
+			// Upsert this container under the Portainer component so that the
+			// discovery.containers(componentID) API returns it — enabling
+			// "Add App" linking on the Portainer detail page.
+			rec := &models.DiscoveredContainer{
+				InfraComponentID: comp.ID,
+				ContainerID:      pc.ID,
+				ContainerName:    name,
+				Image:            pc.Image,
+				Status:           pc.State,
+				LastSeenAt:       now,
+				CreatedAt:        now,
+			}
+			if err := w.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, rec); err != nil {
+				log.Printf("portainer enrichment: upsert container %q: %v", name, err)
 				continue
 			}
 
-			// Determine image_update_available using Portainer's Docker gateway.
-			// We compare the manifest digest of the locally running image (from
-			// GET /api/endpoints/{id}/docker/images/{imageId}/json → RepoDigests)
-			// against the registry_digest stored by DD-9's image poller.
-			// If the running manifest digest differs from the latest registry digest
-			// and both are non-empty, the image is flagged as having an update available.
-			// Portainer's result overwrites DD-9's for all matched containers.
-			updateAvailable := w.determineImageUpdate(ctx, client, ep.ID, pc, nora)
+			// Fetch the stable NORA UUID for this container (the upsert may have
+			// matched an existing row whose ID we don't know from the insert path).
+			noraRec, err := w.store.DiscoveredContainers.FindByName(ctx, comp.ID, name)
+			if err != nil {
+				log.Printf("portainer enrichment: fetch upserted container %q: %v", name, err)
+				continue
+			}
 
-			// Persist: overwrite whatever DD-9 last stored.
-			imageDigest := pc.ID // use container ID as a stable key when inspect fails
+			seenContainerIDs = append(seenContainerIDs, pc.ID)
+
+			// Check image update availability via Portainer's Docker gateway.
+			updateAvailable := w.determineImageUpdate(ctx, client, ep.ID, pc, noraRec)
+
 			if err := w.store.DiscoveredContainers.UpdateContainerImageCheck(
-				ctx, nora.ID, imageDigest, "", updateAvailable,
+				ctx, noraRec.ID, pc.ID, "", updateAvailable,
 			); err != nil {
-				log.Printf("portainer enrichment: update image check %s: %v", name, err)
+				log.Printf("portainer enrichment: update image check %q: %v", name, err)
 				continue
 			}
 
 			// Emit event on false→true transition only.
 			if updateAvailable {
-				prev, _ := w.lastUpdateAvailable.Load(nora.ID)
+				prev, _ := w.lastUpdateAvailable.Load(noraRec.ID)
 				prevBool, _ := prev.(bool)
 				if !prevBool {
 					w.emitImageUpdateEvent(ctx, comp, name, pc.Image)
 				}
 			}
-			w.lastUpdateAvailable.Store(nora.ID, updateAvailable)
+			w.lastUpdateAvailable.Store(noraRec.ID, updateAvailable)
 
-			matched++
+			upserted++
 		}
 	}
 
-	return matched, len(endpoints), nil
+	// Mark containers that no longer appear in any endpoint as stopped.
+	if err := w.store.DiscoveredContainers.MarkStoppedIfNotRunning(ctx, comp.ID, seenContainerIDs); err != nil {
+		log.Printf("portainer enrichment: mark stopped %s: %v", comp.ID, err)
+	}
+
+	return upserted, len(endpoints), nil
 }
 
 // determineImageUpdate inspects the running container's image via the Portainer

@@ -353,17 +353,18 @@ export function InfraComponentDetail() {
   const navigate = useNavigate()
   const { tick } = useAutoRefresh()
 
-  const [component,     setComponent]     = useState<InfrastructureComponent | null>(null)
-  const [resources,     setResources]     = useState<ResourceSummary | null>(null)
-  const [history,       setHistory]       = useState<ResourceHistory | null>(null)
-  const [snmpDetail,    setSnmpDetail]    = useState<SNMPDetail | null>(null)
-  const [linkedApps,    setLinkedApps]    = useState<App[]>([])
-  const [allApps,       setAllApps]       = useState<App[]>([])
-  const [linkingAppId,  setLinkingAppId]  = useState('')
-  const [linkBusy,      setLinkBusy]      = useState(false)
-  const [dockerCounts,  setDockerCounts]  = useState({ total: 0, running: 0 })
-  const [loading,       setLoading]       = useState(true)
-  const [error,         setError]         = useState<string | null>(null)
+  const [component,        setComponent]        = useState<InfrastructureComponent | null>(null)
+  const [resources,        setResources]        = useState<ResourceSummary | null>(null)
+  const [history,          setHistory]          = useState<ResourceHistory | null>(null)
+  const [snmpDetail,       setSnmpDetail]       = useState<SNMPDetail | null>(null)
+  const [linkedApps,       setLinkedApps]       = useState<App[]>([])
+  const [allApps,          setAllApps]          = useState<App[]>([])
+  const [linkingAppId,     setLinkingAppId]     = useState('')
+  const [linkBusy,         setLinkBusy]         = useState(false)
+  const [dockerCounts,     setDockerCounts]     = useState({ total: 0, running: 0 })
+  const [portainerCounts,  setPortainerCounts]  = useState({ total: 0, running: 0 })
+  const [loading,          setLoading]          = useState(true)
+  const [error,            setError]            = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -448,6 +449,43 @@ export function InfraComponentDetail() {
   // Portainer: render content inline — no redirect needed.
   if (component.type === 'portainer') {
     const baseURL: string = (component.credential_meta?.base_url as string | undefined) ?? ''
+
+    const portainerLinkedAppsHeader = (
+      <div className="dpl-linked-apps-compact">
+        <span className="dpl-linked-apps-label">Linked Apps</span>
+        {linkedApps.map(app => (
+          <span key={app.id} className="dpl-linked-app-chip">
+            {app.name}
+            <button onClick={() => void handleUnlinkApp(app.id)} title="Unlink">×</button>
+          </span>
+        ))}
+        {allApps.filter(a => !linkedApps.find(l => l.id === a.id)).length > 0 && (
+          <>
+            <select
+              className="dpl-linked-apps-select"
+              value={linkingAppId}
+              onChange={e => setLinkingAppId(e.target.value)}
+            >
+              <option value="">— link app —</option>
+              {allApps
+                .filter(a => !linkedApps.find(l => l.id === a.id))
+                .map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <button
+              className="dpl-linked-apps-link-btn"
+              disabled={!linkingAppId || linkBusy}
+              onClick={() => void handleLinkApp()}
+            >
+              {linkBusy ? 'Linking…' : 'Link'}
+            </button>
+          </>
+        )}
+        {linkedApps.length === 0 && allApps.filter(a => !linkedApps.find(l => l.id === a.id)).length === 0 && (
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>None</span>
+        )}
+      </div>
+    )
+
     return (
       <DetailPageLayout
         breadcrumb="Infrastructure"
@@ -458,7 +496,11 @@ export function InfraComponentDetail() {
         keyDataPoints={[
           { label: 'Type', value: 'Portainer' },
           ...(baseURL ? [{ label: 'URL', value: baseURL }] : []),
+          ...(portainerCounts.total > 0 ? [
+            { label: 'Containers', value: `${portainerCounts.running} running / ${portainerCounts.total} total` },
+          ] : []),
         ]}
+        headerExtra={portainerLinkedAppsHeader}
         actions={
           <DiscoverNowButton
             entityType="portainer"
@@ -468,7 +510,10 @@ export function InfraComponentDetail() {
         }
         sourceId={component.id}
       >
-        <PortainerContent component={component} />
+        <PortainerContent
+          component={component}
+          onCountsLoaded={(total, running) => setPortainerCounts({ total, running })}
+        />
       </DetailPageLayout>
     )
   }
