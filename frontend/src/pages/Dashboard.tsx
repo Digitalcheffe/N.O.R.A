@@ -388,19 +388,19 @@ export function Dashboard() {
               </button>
             </div>
             <div className="event-counts-row">
-              <div className="event-count-card info">
+              <div className="event-count-card info" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=info')}>
                 <div className="event-count-value">{eventCounts.info}</div>
                 <div className="event-count-label">Info</div>
               </div>
-              <div className="event-count-card warn">
+              <div className="event-count-card warn" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=warn')}>
                 <div className="event-count-value">{eventCounts.warn}</div>
                 <div className="event-count-label">Warn</div>
               </div>
-              <div className="event-count-card error">
+              <div className="event-count-card error" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=error')}>
                 <div className="event-count-value">{eventCounts.error}</div>
                 <div className="event-count-label">Error</div>
               </div>
-              <div className="event-count-card critical">
+              <div className="event-count-card critical" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=critical')}>
                 <div className="event-count-value">{eventCounts.critical}</div>
                 <div className="event-count-label">Critical</div>
               </div>

@@ -156,41 +156,41 @@
 
 .app-card-menu-btn {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 24px;
-  height: 24px;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
   background: none;
   border: none;
   border-radius: 4px;
   color: var(--text3);
-  font-size: 14px;
-  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
+  opacity: 0.35;
   transition: opacity 0.15s, background 0.15s, color 0.15s;
   z-index: 2;
-  line-height: 1;
 }
 
-.app-widget:hover .app-card-menu-btn { opacity: 1; }
-.app-card-menu-btn:hover { background: var(--bg4); color: var(--text); }
+.app-widget:hover .app-card-menu-btn { opacity: 0.7; }
+.app-card-menu-btn:hover { background: var(--bg4); color: var(--text); opacity: 1; }
 .app-card-menu-btn.open  { opacity: 1; color: var(--text); background: var(--bg4); }
+
+/* Elevate card above siblings when dropdown is open */
+.app-widget.menu-open { z-index: 50; }
 
 .app-card-dropdown {
   position: absolute;
   top: 36px;
-  right: 10px;
+  right: 8px;
   background: var(--bg3);
   border: 1px solid var(--border2);
   border-radius: 6px;
   padding: 4px;
-  z-index: 10;
-  min-width: 130px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   animation: modalSlideUp 0.12s ease;
 }
 
