@@ -46,8 +46,11 @@ type DigestData struct {
 	// Monitor checks — one entry per check type (url/ssl/dns/ping)
 	CheckGroups []DigestCheckGroup
 
-	// App activity — per app with category labels from template
+	// App activity — per app with category labels from template (full / webhook_only / limited)
 	AppSections []DigestAppSection
+
+	// Services — monitor_only / docker_only apps (no webhook digest data)
+	ServiceSections []DigestAppSection
 
 	// Infrastructure component status summary
 	InfraOnline  int
@@ -340,6 +343,12 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 	}
 
 	// ── 3. App activity — per-app category breakdown ───────────────────────
+	// monitor_only / docker_only apps have no webhook/digest categories — route
+	// them to ServiceSections so the email can render a separate Services block.
+	isServiceCapability := func(cap string) bool {
+		return cap == "monitor_only" || cap == "docker_only"
+	}
+
 	if d.profiler != nil {
 		for _, app := range apps {
 			if app.ProfileID == "" {
@@ -349,6 +358,16 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 			if err != nil || profile == nil {
 				continue
 			}
+
+			// Service apps: no digest categories — list them in ServiceSections.
+			if isServiceCapability(profile.Meta.Capability) {
+				data.ServiceSections = append(data.ServiceSections, DigestAppSection{
+					AppName:     app.Name,
+					ProfileName: profile.Meta.Name,
+				})
+				continue
+			}
+
 			if len(profile.Digest.Categories) == 0 {
 				continue
 			}
@@ -1155,6 +1174,23 @@ var digestHTMLTemplate = `<!DOCTYPE html>
     </td></tr>
     {{end}}
 
+    <!-- Services (monitor_only / docker_only — no digest data) -->
+    {{if .ServiceSections}}
+    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
+      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Services</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {{range .ServiceSections}}
+        <tr>
+          <td style="padding:5px 0;font-size:13px;color:#c8d4e0;">{{.AppName}}</td>
+          <td style="padding:5px 0;font-size:11px;color:#445566;font-family:monospace;">{{.ProfileName}}</td>
+          <td align="right" style="padding:5px 0;font-size:11px;font-family:monospace;color:#445566;">monitor only</td>
+        </tr>
+        {{end}}
+      </table>
+      <p style="margin:10px 0 0;font-size:11px;color:#445566;font-style:italic;">These services are monitored for uptime but do not emit webhook events.</p>
+    </td></tr>
+    {{end}}
+
     <!-- Infrastructure -->
     {{if .InfraRows}}
     <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
@@ -1426,6 +1462,26 @@ var reportHTMLTemplate = `<!DOCTYPE html>
         {{if eq .TotalEvents 0}}
         <div class="cat-row"><span class="cat-label" style="font-style:italic;font-size:11px;">No activity this period</span></div>
         {{end}}
+      </div>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+
+  <!-- Services — monitor_only / docker_only -->
+  {{if .ServiceSections}}
+  <div class="section">
+    <div class="section-label">Services</div>
+    <div class="app-grid">
+      {{range .ServiceSections}}
+      <div class="app-widget">
+        <div class="app-widget-header">
+          <span class="app-widget-name">{{.AppName}}</span>
+          {{if .ProfileName}}<span class="app-widget-badge">{{.ProfileName}}</span>{{end}}
+        </div>
+        <div class="cat-row">
+          <span class="cat-label" style="font-style:italic;">Monitor only — no event data</span>
+        </div>
       </div>
       {{end}}
     </div>
