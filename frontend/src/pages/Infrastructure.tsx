@@ -688,9 +688,7 @@ export function Infrastructure() {
     const isScanning = scanningId === c.id
     const canScan = c.collection_method !== 'none'
 
-    const detailPath = c.type === 'proxmox_node'
-      ? `/infrastructure/proxmox/${c.id}`
-      : `/infrastructure/${c.id}`
+    const detailPath = `/infrastructure/${c.id}`
 
     return (
       <div key={c.id} className="infra-card">

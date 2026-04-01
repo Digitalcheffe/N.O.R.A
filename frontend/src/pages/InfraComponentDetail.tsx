@@ -6,6 +6,7 @@ import { DetailPageLayout } from '../components/DetailPageLayout'
 import { DiscoverNowButton } from '../components/DiscoverNowButton'
 import { DockerEngineDetail } from '../components/DockerEngineDetail'
 import { PortainerContent } from './PortainerDetail'
+import { ProxmoxContent } from './ProxmoxDetail'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
@@ -274,7 +275,6 @@ export function InfraComponentDetail() {
   const [resources,     setResources]     = useState<ResourceSummary | null>(null)
   const [history,       setHistory]       = useState<ResourceHistory | null>(null)
   const [snmpDetail,    setSnmpDetail]    = useState<SNMPDetail | null>(null)
-  const [children,      setChildren]      = useState<InfrastructureComponent[]>([])
   const [linkedApps,    setLinkedApps]    = useState<App[]>([])
   const [allApps,       setAllApps]       = useState<App[]>([])
   const [linkingAppId,  setLinkingAppId]  = useState('')
@@ -290,15 +290,13 @@ export function InfraComponentDetail() {
       infraApi.get(id),
       infraApi.resources(id, 'hour'),
       infraApi.resourceHistory(id, 'hour', 24),
-      infraApi.children(id),
       infraApi.linkedApps(id),
       appsApi.list(),
     ])
-      .then(([comp, res, hist, ch, linked, allA]) => {
+      .then(([comp, res, hist, linked, allA]) => {
         setComponent(comp)
         setResources(res)
         setHistory(hist)
-        setChildren(ch.data)
         setLinkedApps(linked.data)
         setAllApps(allA.data)
         const extras: Promise<unknown>[] = []
@@ -396,6 +394,33 @@ export function InfraComponentDetail() {
         sourceId={component.id}
       >
         <PortainerContent component={component} />
+      </DetailPageLayout>
+    )
+  }
+
+  // Proxmox: render content inline using the shared shell.
+  if (component.type === 'proxmox_node') {
+    return (
+      <DetailPageLayout
+        breadcrumb="Infrastructure"
+        breadcrumbPath="/infrastructure"
+        name={component.name}
+        status={{ status: dplStatus(component.last_status) }}
+        lastPolled={component.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
+        keyDataPoints={[
+          { label: 'Type', value: 'Proxmox VE' },
+          ...(component.ip ? [{ label: 'IP', value: component.ip }] : []),
+        ]}
+        actions={
+          <DiscoverNowButton
+            entityType="proxmox_node"
+            entityId={component.id}
+            onSuccess={() => void infraApi.get(component.id)}
+          />
+        }
+        sourceId={component.id}
+      >
+        <ProxmoxContent component={component} />
       </DetailPageLayout>
     )
   }
@@ -507,11 +532,6 @@ export function InfraComponentDetail() {
         </div>
       )}
 
-      {/* Discovered VMs & LXC containers (Proxmox nodes) */}
-      {component.type === 'proxmox_node' && (
-        <ProxmoxChildrenSection children={children} onNavigate={navigate} />
-      )}
-
       {/* Linked Applications — only for non-docker types (docker uses headerExtra) */}
       {component.type !== 'docker_engine' && (
         <LinkedAppsSection
@@ -525,93 +545,6 @@ export function InfraComponentDetail() {
         />
       )}
     </DetailPageLayout>
-  )
-}
-
-// ── Proxmox children section ──────────────────────────────────────────────────
-
-function statusDotClass(s: string) {
-  if (s === 'online')   return 'online'
-  if (s === 'degraded') return 'degraded'
-  if (s === 'offline')  return 'offline'
-  return 'unknown'
-}
-
-const CHILD_TYPE_LABEL: Record<string, string> = {
-  vm:  'VM',
-  lxc: 'LXC',
-}
-
-interface ProxmoxChildrenSectionProps {
-  children: InfrastructureComponent[]
-  onNavigate: (path: string) => void
-}
-
-function ProxmoxChildrenSection({ children, onNavigate }: ProxmoxChildrenSectionProps) {
-  const vms  = children.filter(c => c.type === 'vm')
-  const lxcs = children.filter(c => c.type === 'lxc')
-
-  if (children.length === 0) {
-    return (
-      <div className="icd-section">
-        <div className="icd-section-title">Virtual Machines</div>
-        <div className="icd-empty">No VMs or containers discovered yet. Run Discover Now to discover.</div>
-      </div>
-    )
-  }
-
-  return (
-    <>
-      {vms.length > 0 && (
-        <div className="icd-section">
-          <div className="icd-section-title">Virtual Machines</div>
-          <div className="icd-child-grid">
-            {vms.map(c => (
-              <div
-                key={c.id}
-                className="icd-child-card"
-                onClick={() => onNavigate(`/infrastructure/${c.id}`)}
-              >
-                <div className="icd-child-header">
-                  <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
-                  <span className="icd-child-name">{c.name}</span>
-                  <span className="icd-child-type">{CHILD_TYPE_LABEL[c.type] ?? c.type}</span>
-                </div>
-                <div className="icd-child-meta">
-                  {c.ip && <span className="icd-child-ip">{c.ip}</span>}
-                  <span className="icd-child-status">{c.last_status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {lxcs.length > 0 && (
-        <div className="icd-section">
-          <div className="icd-section-title">LXC Containers</div>
-          <div className="icd-child-grid">
-            {lxcs.map(c => (
-              <div
-                key={c.id}
-                className="icd-child-card"
-                onClick={() => onNavigate(`/infrastructure/${c.id}`)}
-              >
-                <div className="icd-child-header">
-                  <span className={`icd-status-dot ${statusDotClass(c.last_status)}`} />
-                  <span className="icd-child-name">{c.name}</span>
-                  <span className="icd-child-type">{CHILD_TYPE_LABEL[c.type] ?? c.type}</span>
-                </div>
-                <div className="icd-child-meta">
-                  {c.ip && <span className="icd-child-ip">{c.ip}</span>}
-                  <span className="icd-child-status">{c.last_status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
   )
 }
 

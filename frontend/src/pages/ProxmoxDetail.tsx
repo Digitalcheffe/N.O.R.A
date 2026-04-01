@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
-import { Topbar } from '../components/Topbar'
-import { DetailPageLayout } from '../components/DetailPageLayout'
-import { DiscoverNowButton } from '../components/DiscoverNowButton'
-import { infrastructure as infraApi, proxmox as proxmoxApi } from '../api/client'
+import { proxmox as proxmoxApi } from '../api/client'
+import { infrastructure as infraApi } from '../api/client'
+import { formatBytes } from '../utils/format'
 import type {
   InfrastructureComponent,
   ResourceSummary,
@@ -16,24 +14,6 @@ import type {
 import './ProxmoxDetail.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (secs < 60)  return `${secs}s ago`
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`
-  return `${Math.floor(secs / 86400)}d ago`
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return '0 B'
-  const gb = bytes / 1_073_741_824
-  if (gb >= 1000) return `${(gb / 1024).toFixed(1)} TB`
-  if (gb >= 1) return `${gb.toFixed(0)} GB`
-  const mb = bytes / 1_048_576
-  return `${mb.toFixed(0)} MB`
-}
 
 function formatUptime(secs: number): string {
   if (!secs) return '—'
@@ -51,7 +31,6 @@ function formatTimestamp(unix: number): string {
   })
 }
 
-// Map Proxmox ostype codes to human-readable labels.
 const OS_LABEL: Record<string, string> = {
   l24:   'Linux 2.4',
   l26:   'Linux',
@@ -269,7 +248,7 @@ function StoragePoolsSection({
 
 // ── Guests ────────────────────────────────────────────────────────────────────
 
-type GuestTypeFilter  = 'all' | 'vm' | 'lxc'
+type GuestTypeFilter   = 'all' | 'vm' | 'lxc'
 type GuestStatusFilter = 'all' | 'running' | 'stopped'
 
 function GuestsSection({
@@ -362,12 +341,12 @@ function GuestsSection({
                   g.status === 'running' ? 'online' :
                   g.status === 'paused'  ? 'degraded' : 'offline'
 
-                const bridge0  = g.network_bridges?.[0] ?? ''
-                const bridgeExtra = (g.network_bridges?.length ?? 0) > 1
+                const bridge0      = g.network_bridges?.[0] ?? ''
+                const bridgeExtra  = (g.network_bridges?.length ?? 0) > 1
                   ? ` +${(g.network_bridges?.length ?? 1) - 1}`
                   : ''
 
-                const visibleTags = g.tags?.slice(0, 3) ?? []
+                const visibleTags    = g.tags?.slice(0, 3) ?? []
                 const hiddenTagCount = (g.tags?.length ?? 0) - visibleTags.length
 
                 return (
@@ -434,7 +413,6 @@ function TaskFailuresSection({
 }) {
   const recent = useMemo(
     () => {
-      // eslint-disable-next-line react-hooks/purity
       const now = Date.now()
       return failures.filter(f => now - f.start_time * 1000 < SEVEN_DAYS_MS)
     },
@@ -518,55 +496,43 @@ function UpdatesBanner({
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── ProxmoxContent ────────────────────────────────────────────────────────────
+// Content-only component — rendered inside InfraComponentDetail's DetailPageLayout
+// shell. Manages its own Proxmox-specific data but not the base component or layout.
 
-export function ProxmoxDetail() {
-  const { componentId } = useParams<{ componentId: string }>()
-  const navigate = useNavigate()
+interface ProxmoxContentProps {
+  component: InfrastructureComponent
+}
+
+export function ProxmoxContent({ component }: ProxmoxContentProps) {
   const { tick } = useAutoRefresh()
+  const componentId = component.id
 
-  // Top-level component data
-  const [component,    setComponent]    = useState<InfrastructureComponent | null>(null)
   const [resources,    setResources]    = useState<ResourceSummary | null>(null)
-  const [topLoading,   setTopLoading]   = useState(true)
-  const [topError,     setTopError]     = useState<string | null>(null)
 
-  // Section data
   const [pools,        setPools]        = useState<ProxmoxStoragePool[]>([])
   const [poolsLoading, setPoolsLoading] = useState(true)
   const [poolsError,   setPoolsError]   = useState<string | null>(null)
 
-  const [guests,       setGuests]       = useState<ProxmoxGuestInfo[]>([])
-  const [guestsLoading,setGuestsLoading]= useState(true)
-  const [guestsError,  setGuestsError]  = useState<string | null>(null)
+  const [guests,        setGuests]       = useState<ProxmoxGuestInfo[]>([])
+  const [guestsLoading, setGuestsLoading]= useState(true)
+  const [guestsError,   setGuestsError]  = useState<string | null>(null)
 
-  const [nodeStatuses, setNodeStatuses] = useState<ProxmoxNodeStatusDetail[]>([])
-  const [statusLoading,setStatusLoading]= useState(true)
-  const [statusError,  setStatusError]  = useState<string | null>(null)
+  const [nodeStatuses,  setNodeStatuses] = useState<ProxmoxNodeStatusDetail[]>([])
+  const [statusLoading, setStatusLoading]= useState(true)
+  const [statusError,   setStatusError]  = useState<string | null>(null)
 
-  const [failures,     setFailures]     = useState<ProxmoxTaskFailure[]>([])
+  const [failures,        setFailures]        = useState<ProxmoxTaskFailure[]>([])
   const [failuresLoading, setFailuresLoading] = useState(true)
   const [failuresError,   setFailuresError]   = useState<string | null>(null)
 
-  // Load top-level component + resources
-  const loadTop = useCallback(() => {
-    if (!componentId) return
-    setTopLoading(true)
-    Promise.all([
-      infraApi.get(componentId),
-      infraApi.resources(componentId, 'hour'),
-    ])
-      .then(([comp, res]) => {
-        setComponent(comp)
-        setResources(res)
-        setTopError(null)
-      })
-      .catch(err => setTopError(err instanceof Error ? err.message : 'Failed to load component'))
-      .finally(() => setTopLoading(false))
+  const loadResources = useCallback(() => {
+    infraApi.resources(componentId, 'hour')
+      .then(r => setResources(r))
+      .catch(() => setResources(null))
   }, [componentId])
 
   const loadPools = useCallback(() => {
-    if (!componentId) return
     setPoolsLoading(true)
     proxmoxApi.storage(componentId)
       .then(r => { setPools(r.data); setPoolsError(null) })
@@ -575,7 +541,6 @@ export function ProxmoxDetail() {
   }, [componentId])
 
   const loadGuests = useCallback(() => {
-    if (!componentId) return
     setGuestsLoading(true)
     proxmoxApi.guests(componentId)
       .then(r => { setGuests(r.data); setGuestsError(null) })
@@ -584,7 +549,6 @@ export function ProxmoxDetail() {
   }, [componentId])
 
   const loadStatus = useCallback(() => {
-    if (!componentId) return
     setStatusLoading(true)
     proxmoxApi.nodeStatus(componentId)
       .then(r => { setNodeStatuses(r.data); setStatusError(null) })
@@ -593,7 +557,6 @@ export function ProxmoxDetail() {
   }, [componentId])
 
   const loadFailures = useCallback(() => {
-    if (!componentId) return
     setFailuresLoading(true)
     proxmoxApi.taskFailures(componentId)
       .then(r => { setFailures(r.data); setFailuresError(null) })
@@ -601,91 +564,31 @@ export function ProxmoxDetail() {
       .finally(() => setFailuresLoading(false))
   }, [componentId])
 
-
-  // Initial load and auto-refresh
   useEffect(() => {
-    void (async () => {
-      loadTop()
-      loadPools()
-      loadGuests()
-      loadStatus()
-      loadFailures()
-    })()
-  }, [loadTop, loadPools, loadGuests, loadStatus, loadFailures, tick])
-
-  function dplStatus(s: string): 'online' | 'offline' | 'unknown' | 'warning' {
-    if (s === 'online')   return 'online'
-    if (s === 'degraded') return 'warning'
-    if (s === 'offline')  return 'offline'
-    return 'unknown'
-  }
-
-  // Full-page error if we can't load the component at all
-  if (!topLoading && (topError || !component)) {
-    return (
-      <>
-        <Topbar title="Proxmox" />
-        <div className="content">
-          <div className="px-fullpage-error">
-            {topError ?? 'Component not found'}
-          </div>
-          <button className="px-back-btn" onClick={() => navigate('/infrastructure')}>
-            ← Infrastructure
-          </button>
-        </div>
-      </>
-    )
-  }
+    loadResources()
+    loadPools()
+    loadGuests()
+    loadStatus()
+    loadFailures()
+  }, [loadResources, loadPools, loadGuests, loadStatus, loadFailures, tick])
 
   const updatesAvailable = nodeStatuses.reduce((sum, ns) => sum + ns.updates_available, 0)
-  const ns = nodeStatuses[0]
-
-  const keyDataPoints = [
-    { label: 'Uptime',   value: ns?.uptime     ? formatUptime(ns.uptime)    : '—' },
-    { label: 'vCPUs',    value: ns?.cpu_count   ? String(ns.cpu_count)       : '—' },
-    { label: 'RAM',      value: ns?.total_mem_bytes ? formatBytes(ns.total_mem_bytes) : '—' },
-    { label: 'PVE',      value: ns?.pve_version ?? '—' },
-  ]
 
   return (
-    <DetailPageLayout
-      breadcrumb="Infrastructure"
-      breadcrumbPath="/infrastructure"
-      name={topLoading ? '…' : (component?.name ?? 'Proxmox')}
-      status={component ? { status: dplStatus(component.last_status) } : undefined}
-      lastPolled={component?.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
-      keyDataPoints={statusLoading ? [] : keyDataPoints}
-      actions={
-        <DiscoverNowButton
-          entityType="proxmox_node"
-          entityId={componentId!}
-          onSuccess={() => {
-            loadTop()
-            loadPools()
-            loadGuests()
-            loadStatus()
-            loadFailures()
-          }}
-        />
-      }
-      sourceId={componentId!}
-    >
-      {/* Updates banner */}
-      {!statusLoading && !statusError && updatesAvailable > 0 && component && (
+    <>
+      {!statusLoading && !statusError && updatesAvailable > 0 && (
         <UpdatesBanner
-          componentId={componentId!}
+          componentId={componentId}
           count={updatesAvailable}
           nodeName={component.name}
         />
       )}
 
-      {/* Node Overview */}
       <NodeOverviewSection
-        resources={topLoading ? null : resources}
+        resources={statusLoading ? null : resources}
         nodeStatuses={statusLoading ? [] : nodeStatuses}
       />
 
-      {/* Storage Pools */}
       <StoragePoolsSection
         pools={pools}
         loading={poolsLoading}
@@ -693,7 +596,6 @@ export function ProxmoxDetail() {
         onRetry={loadPools}
       />
 
-      {/* VMs & LXCs */}
       <GuestsSection
         guests={guests}
         loading={guestsLoading}
@@ -701,13 +603,28 @@ export function ProxmoxDetail() {
         onRetry={loadGuests}
       />
 
-      {/* Task Failures */}
       <TaskFailuresSection
         failures={failures}
         loading={failuresLoading}
         error={failuresError ? `Failed to load task failures. ${failuresError}` : null}
         onRetry={loadFailures}
       />
-    </DetailPageLayout>
+    </>
   )
 }
+
+// Expose the key data points so InfraComponentDetail can pass them to DetailPageLayout.
+export function proxmoxKeyDataPoints(
+  nodeStatuses: ProxmoxNodeStatusDetail[],
+): { label: string; value: string }[] {
+  const ns = nodeStatuses[0]
+  return [
+    { label: 'Uptime', value: ns?.uptime       ? formatUptime(ns.uptime)           : '—' },
+    { label: 'vCPUs',  value: ns?.cpu_count     ? String(ns.cpu_count)              : '—' },
+    { label: 'RAM',    value: ns?.total_mem_bytes ? formatBytes(ns.total_mem_bytes) : '—' },
+    { label: 'PVE',    value: ns?.pve_version   ?? '—' },
+  ]
+}
+
+// ── Keep a default export alias for backward compatibility during migration ────
+export { ProxmoxContent as ProxmoxDetail }
