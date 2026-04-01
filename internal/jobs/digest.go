@@ -176,30 +176,16 @@ func (d *DigestJob) SMTPConfigured(ctx context.Context) bool {
 }
 
 // buildDigestData queries rollups and assembles DigestData for the given period.
-// When the rollups table has no rows for the period (e.g. the month is still in
-// progress and the rollup job hasn't run yet), it falls back to querying the
-// events table directly so current-period reports are never blank.
+//
+// For monthly periods it tries the rollups table first (pre-aggregated data from
+// past months) and falls back to querying events live when the month is still in
+// progress. Daily and weekly periods always query events live because the rollup
+// table only stores monthly aggregates.
 func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*DigestData, error) {
-	year, month := periodYearMonth(period)
-
-	rollups, err := d.store.Rollups.ListByPeriod(ctx, year, month)
-	if err != nil {
-		return nil, err
-	}
-
-	// Fetch app list — needed for both the rollup and live-event paths.
+	// Fetch app list — needed regardless of data source.
 	apps, err := d.store.Apps.List(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	// If the rollups table has no rows for this period (month not yet rolled up),
-	// build equivalent rows by querying the events table directly.
-	if len(rollups) == 0 {
-		rollups, err = d.liveRollupsForPeriod(ctx, apps, year, month)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	appNames := map[string]string{}
@@ -207,7 +193,28 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 		appNames[a.ID] = a.Name
 	}
 
-	// Aggregate per app + event_type.
+	var rollups []models.Rollup
+
+	// Monthly periods can use pre-rolled-up data; daily/weekly must go live.
+	isMonthly := isMonthlyPeriod(period)
+	if isMonthly {
+		year, month := periodYearMonth(period)
+		rollups, err = d.store.Rollups.ListByPeriod(ctx, year, month)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// No rollup data? Query events directly for the exact period window.
+	if len(rollups) == 0 {
+		since, until := periodTimeRange(period)
+		rollups, err = d.liveRollupsForWindow(ctx, apps, since, until)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Aggregate per (app, event_type).
 	type appKey struct {
 		appID     string
 		eventType string
@@ -247,12 +254,11 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 	}, nil
 }
 
-// liveRollupsForPeriod builds rollup-equivalent rows by querying the events
-// table directly. Used when the rollups table has no data for the period
-// (i.e. the month is still in progress).
-func (d *DigestJob) liveRollupsForPeriod(ctx context.Context, apps []models.App, year, month int) ([]models.Rollup, error) {
-	since := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	until := since.AddDate(0, 1, 0)
+// liveRollupsForWindow queries the events table for all apps over [since, until)
+// and returns rollup-equivalent rows. Used when the rollups table has no data.
+func (d *DigestJob) liveRollupsForWindow(ctx context.Context, apps []models.App, since, until time.Time) ([]models.Rollup, error) {
+	year := since.Year()
+	month := int(since.Month())
 
 	var result []models.Rollup
 	for _, app := range apps {
@@ -272,6 +278,47 @@ func (d *DigestJob) liveRollupsForPeriod(ctx context.Context, apps []models.App,
 		}
 	}
 	return result, nil
+}
+
+// isMonthlyPeriod returns true if the period string is in YYYY-MM format.
+func isMonthlyPeriod(period string) bool {
+	_, err := time.Parse("2006-01", period)
+	return err == nil
+}
+
+// periodTimeRange returns the [since, until) time bounds for any period label.
+//
+//	daily   "2026-04-01"  → [2026-04-01 00:00 UTC, 2026-04-02 00:00 UTC)
+//	weekly  "2026-W14"    → [Monday 00:00 UTC, next Monday 00:00 UTC)
+//	monthly "2026-04"     → [2026-04-01 00:00 UTC, 2026-05-01 00:00 UTC)
+func periodTimeRange(period string) (since, until time.Time) {
+	// Daily
+	if t, err := time.Parse("2006-01-02", period); err == nil {
+		since = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+		until = since.AddDate(0, 0, 1)
+		return
+	}
+	// Weekly "2026-W14" → Monday of that ISO week
+	var year, week int
+	if n, _ := fmt.Sscanf(period, "%d-W%d", &year, &week); n == 2 {
+		jan4 := time.Date(year, time.January, 4, 0, 0, 0, 0, time.UTC)
+		_, w := jan4.ISOWeek()
+		monday := jan4.AddDate(0, 0, (week-w)*7-int(jan4.Weekday())+1)
+		since = monday
+		until = monday.AddDate(0, 0, 7)
+		return
+	}
+	// Monthly
+	if t, err := time.Parse("2006-01", period); err == nil {
+		since = time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+		until = since.AddDate(0, 1, 0)
+		return
+	}
+	// Fallback: current month
+	now := time.Now().UTC()
+	since = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	until = since.AddDate(0, 1, 0)
+	return
 }
 
 // adminEmails returns the digest recipient list.
