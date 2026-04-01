@@ -8,6 +8,7 @@ import { DockerEngineDetail } from '../components/DockerEngineDetail'
 import { PortainerContent } from '../components/PortainerDetail'
 import { ProxmoxContent } from '../components/ProxmoxDetail'
 import { SynologyContent } from '../components/SynologyDetail'
+import { TraefikContent } from '../components/TraefikDetail'
 import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
@@ -18,6 +19,7 @@ import type {
   SNMPDetail,
   SNMPDisk,
   SynologyDetail,
+  TraefikOverview,
 } from '../api/types'
 import { timeAgo, formatBytes } from '../utils/format'
 import './InfraComponentDetail.css'
@@ -258,6 +260,39 @@ function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
   )
 }
 
+// ── Traefik shell ─────────────────────────────────────────────────────────────
+
+function TraefikShell({ component }: { component: InfrastructureComponent }) {
+  const [overview, setOverview] = useState<TraefikOverview | null>(null)
+
+  const keyDataPoints = [
+    { label: 'Version',  value: overview?.version ?? '—' },
+    { label: 'Routers',  value: overview ? String(overview.routers_total)  : '—' },
+    { label: 'Services', value: overview ? String(overview.services_total) : '—' },
+  ]
+
+  return (
+    <DetailPageLayout
+      breadcrumb="Infrastructure"
+      breadcrumbPath="/infrastructure"
+      name={component.name}
+      status={{ status: dplStatus(component.last_status) }}
+      lastPolled={overview?.updated_at ? `Polled ${timeAgo(overview.updated_at)}` : undefined}
+      keyDataPoints={keyDataPoints}
+      actions={
+        <DiscoverNowButton
+          entityType="traefik"
+          entityId={component.id}
+          onSuccess={() => { /* TraefikContent auto-refreshes via tick */ }}
+        />
+      }
+      sourceId={component.id}
+    >
+      <TraefikContent component={component} onOverviewLoaded={setOverview} />
+    </DetailPageLayout>
+  )
+}
+
 // ── Synology shell ────────────────────────────────────────────────────────────
 // Wraps SynologyContent in the shared DetailPageLayout, lifting the key data
 // points out of the content component via the onDetailLoaded callback.
@@ -465,10 +500,9 @@ export function InfraComponentDetail() {
     )
   }
 
-  // Traefik: redirect to dedicated page (to be migrated in a future cleanup).
+  // Traefik: render content inline using the shared shell.
   if (component.type === 'traefik') {
-    navigate(`/infrastructure/traefik/${component.id}`, { replace: true })
-    return null
+    return <TraefikShell component={component} />
   }
 
   // Synology: render content inline using the shared shell.
