@@ -646,3 +646,84 @@
 }
 
 .icd-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Edit button (actions area) ─────────────────────────────────────────────── */
+
+.icd-edit-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--surface1);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.icd-edit-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+/* ── Inline edit panel ──────────────────────────────────────────────────────── */
+
+.icd-edit-panel {
+  background: var(--surface1);
+  border: 1px solid var(--accent, #3b82f6);
+  border-radius: 8px;
+}
+
+.icd-edit-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0 16px;
+}
+
+.icd-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.icd-edit-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.icd-edit-input {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.icd-edit-input:focus {
+  outline: none;
+  border-color: var(--accent, #3b82f6);
+}
+
+.icd-edit-check-label {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  margin-top: 20px; /* align with inputs */
+}
+
+.icd-edit-actions {
+  display: flex;
+  gap: 8px;
+}

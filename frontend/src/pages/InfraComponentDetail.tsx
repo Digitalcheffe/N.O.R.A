@@ -260,9 +260,97 @@ function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
   )
 }
 
+// ── Inline edit panel ─────────────────────────────────────────────────────────
+// Shown when the user clicks Edit on any detail page. Lets you change name, IP,
+// parent component, notes, and enabled state without touching credentials.
+
+interface EditFields {
+  name: string
+  ip: string
+  parent_id: string | null
+  notes: string
+  enabled: boolean
+}
+
+interface InlineEditPanelProps {
+  component: InfrastructureComponent
+  allComponents: InfrastructureComponent[]
+  saving: boolean
+  onSave: (fields: EditFields) => void
+  onCancel: () => void
+}
+
+function InlineEditPanel({ component, allComponents, saving, onSave, onCancel }: InlineEditPanelProps) {
+  const [name,     setName]     = useState(component.name)
+  const [ip,       setIP]       = useState(component.ip)
+  const [parentId, setParentId] = useState(component.parent_id ?? '')
+  const [notes,    setNotes]    = useState(component.notes)
+  const [enabled,  setEnabled]  = useState(component.enabled)
+
+  const available = allComponents.filter(c => c.id !== component.id)
+
+  return (
+    <div className="icd-section icd-edit-panel">
+      <div className="icd-section-title">Edit Component</div>
+      <div className="icd-edit-fields">
+        <div className="icd-edit-field">
+          <div className="icd-edit-label">Name</div>
+          <input className="icd-edit-input" value={name} onChange={e => setName(e.target.value)} />
+        </div>
+        <div className="icd-edit-field">
+          <div className="icd-edit-label">IP / Host</div>
+          <input className="icd-edit-input" value={ip} onChange={e => setIP(e.target.value)} placeholder="192.168.1.x" />
+        </div>
+        <div className="icd-edit-field">
+          <div className="icd-edit-label">Parent Component</div>
+          <select className="icd-edit-input" value={parentId} onChange={e => setParentId(e.target.value)}>
+            <option value="">None</option>
+            {available.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="icd-edit-field">
+          <div className="icd-edit-label">Notes</div>
+          <input className="icd-edit-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
+        </div>
+        <div className="icd-edit-field">
+          <label className="icd-edit-check-label">
+            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+            {' '}Enabled
+          </label>
+        </div>
+      </div>
+      <div className="icd-edit-actions">
+        <button
+          className="icd-link-btn"
+          disabled={saving || !name.trim()}
+          onClick={() => onSave({ name: name.trim(), ip: ip.trim(), parent_id: parentId || null, notes, enabled })}
+        >
+          {saving ? 'Saving…' : 'Save Changes'}
+        </button>
+        <button className="icd-unlink-btn" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Shell edit props ──────────────────────────────────────────────────────────
+// Passed into TraefikShell / SynologyShell so they can render the Edit button
+// and inline panel despite being module-level components.
+
+interface ShellEditProps {
+  allComponents: InfrastructureComponent[]
+  editOpen: boolean
+  editSaving: boolean
+  onEditOpen: () => void
+  onEditSave: (fields: EditFields) => void
+  onEditCancel: () => void
+}
+
 // ── Traefik shell ─────────────────────────────────────────────────────────────
 
-function TraefikShell({ component }: { component: InfrastructureComponent }) {
+function TraefikShell({ component, ep }: { component: InfrastructureComponent; ep: ShellEditProps }) {
   const [overview, setOverview] = useState<TraefikOverview | null>(null)
 
   const keyDataPoints = [
@@ -280,14 +368,26 @@ function TraefikShell({ component }: { component: InfrastructureComponent }) {
       lastPolled={overview?.updated_at ? `Polled ${timeAgo(overview.updated_at)}` : undefined}
       keyDataPoints={keyDataPoints}
       actions={
-        <DiscoverNowButton
-          entityType="traefik"
-          entityId={component.id}
-          onSuccess={() => { /* TraefikContent auto-refreshes via tick */ }}
-        />
+        <>
+          <button className="icd-edit-btn" onClick={ep.onEditOpen}>Edit</button>
+          <DiscoverNowButton
+            entityType="traefik"
+            entityId={component.id}
+            onSuccess={() => { /* TraefikContent auto-refreshes via tick */ }}
+          />
+        </>
       }
       sourceId={component.id}
     >
+      {ep.editOpen && (
+        <InlineEditPanel
+          component={component}
+          allComponents={ep.allComponents}
+          saving={ep.editSaving}
+          onSave={ep.onEditSave}
+          onCancel={ep.onEditCancel}
+        />
+      )}
       <TraefikContent component={component} onOverviewLoaded={setOverview} />
     </DetailPageLayout>
   )
@@ -297,7 +397,7 @@ function TraefikShell({ component }: { component: InfrastructureComponent }) {
 // Wraps SynologyContent in the shared DetailPageLayout, lifting the key data
 // points out of the content component via the onDetailLoaded callback.
 
-function SynologyShell({ component }: { component: InfrastructureComponent }) {
+function SynologyShell({ component, ep }: { component: InfrastructureComponent; ep: ShellEditProps }) {
   const [synDetail, setSynDetail] = useState<SynologyDetail | null>(null)
   const [synNoData, setSynNoData] = useState(false)
 
@@ -326,14 +426,26 @@ function SynologyShell({ component }: { component: InfrastructureComponent }) {
       lastPolled={synDetail?.polled_at ? `Polled ${timeAgo(synDetail.polled_at)}` : undefined}
       keyDataPoints={keyDataPoints}
       actions={
-        <DiscoverNowButton
-          entityType="synology"
-          entityId={component.id}
-          onSuccess={() => { /* SynologyContent auto-refreshes via tick */ }}
-        />
+        <>
+          <button className="icd-edit-btn" onClick={ep.onEditOpen}>Edit</button>
+          <DiscoverNowButton
+            entityType="synology"
+            entityId={component.id}
+            onSuccess={() => { /* SynologyContent auto-refreshes via tick */ }}
+          />
+        </>
       }
       sourceId={component.id}
     >
+      {ep.editOpen && (
+        <InlineEditPanel
+          component={component}
+          allComponents={ep.allComponents}
+          saving={ep.editSaving}
+          onSave={ep.onEditSave}
+          onCancel={ep.onEditCancel}
+        />
+      )}
       <SynologyContent component={component} onDetailLoaded={handleDetailLoaded} />
     </DetailPageLayout>
   )
@@ -359,10 +471,13 @@ export function InfraComponentDetail() {
   const [snmpDetail,       setSnmpDetail]       = useState<SNMPDetail | null>(null)
   const [linkedApps,       setLinkedApps]       = useState<App[]>([])
   const [allApps,          setAllApps]          = useState<App[]>([])
+  const [allComponents,    setAllComponents]    = useState<InfrastructureComponent[]>([])
   const [linkingAppId,     setLinkingAppId]     = useState('')
   const [linkBusy,         setLinkBusy]         = useState(false)
   const [dockerCounts,     setDockerCounts]     = useState({ total: 0, running: 0 })
   const [portainerCounts,  setPortainerCounts]  = useState({ total: 0, running: 0 })
+  const [editOpen,         setEditOpen]         = useState(false)
+  const [editSaving,       setEditSaving]       = useState(false)
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState<string | null>(null)
 
@@ -375,13 +490,15 @@ export function InfraComponentDetail() {
       infraApi.resourceHistory(id, 'hour', 24),
       infraApi.linkedApps(id),
       appsApi.list(),
+      infraApi.list(),
     ])
-      .then(([comp, res, hist, linked, allA]) => {
+      .then(([comp, res, hist, linked, allA, allComps]) => {
         setComponent(comp)
         setResources(res)
         setHistory(hist)
         setLinkedApps(linked.data)
         setAllApps(allA.data)
+        setAllComponents(allComps.data)
         const extras: Promise<unknown>[] = []
         if (comp.collection_method === 'snmp') {
           extras.push(infraApi.snmpDetail(id).then(det => setSnmpDetail(det)))
@@ -423,6 +540,28 @@ export function InfraComponentDetail() {
     if (!id) return
     await infraApi.unlinkApp(id, appId)
     setLinkedApps(prev => prev.filter(a => a.id !== appId))
+  }
+
+  async function handleEditSave(fields: {
+    name: string; ip: string; parent_id: string | null; notes: string; enabled: boolean
+  }) {
+    if (!id || !component) return
+    setEditSaving(true)
+    try {
+      const updated = await infraApi.update(id, {
+        name: fields.name,
+        ip: fields.ip,
+        type: component.type,
+        collection_method: component.collection_method,
+        parent_id: fields.parent_id,
+        notes: fields.notes,
+        enabled: fields.enabled,
+      })
+      setComponent(updated)
+      setEditOpen(false)
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   if (loading) {
@@ -502,14 +641,26 @@ export function InfraComponentDetail() {
         ]}
         headerExtra={portainerLinkedAppsHeader}
         actions={
-          <DiscoverNowButton
-            entityType="portainer"
-            entityId={component.id}
-            onSuccess={() => void infraApi.get(component.id)}
-          />
+          <>
+            <button className="icd-edit-btn" onClick={() => setEditOpen(true)}>Edit</button>
+            <DiscoverNowButton
+              entityType="portainer"
+              entityId={component.id}
+              onSuccess={() => void infraApi.get(component.id)}
+            />
+          </>
         }
         sourceId={component.id}
       >
+        {editOpen && (
+          <InlineEditPanel
+            component={component}
+            allComponents={allComponents}
+            saving={editSaving}
+            onSave={(fields) => void handleEditSave(fields)}
+            onCancel={() => setEditOpen(false)}
+          />
+        )}
         <PortainerContent
           component={component}
           onCountsLoaded={(total, running) => setPortainerCounts({ total, running })}
@@ -532,14 +683,26 @@ export function InfraComponentDetail() {
           ...(component.ip ? [{ label: 'IP', value: component.ip }] : []),
         ]}
         actions={
-          <DiscoverNowButton
-            entityType="proxmox_node"
-            entityId={component.id}
-            onSuccess={() => void infraApi.get(component.id)}
-          />
+          <>
+            <button className="icd-edit-btn" onClick={() => setEditOpen(true)}>Edit</button>
+            <DiscoverNowButton
+              entityType="proxmox_node"
+              entityId={component.id}
+              onSuccess={() => void infraApi.get(component.id)}
+            />
+          </>
         }
         sourceId={component.id}
       >
+        {editOpen && (
+          <InlineEditPanel
+            component={component}
+            allComponents={allComponents}
+            saving={editSaving}
+            onSave={(fields) => void handleEditSave(fields)}
+            onCancel={() => setEditOpen(false)}
+          />
+        )}
         <ProxmoxContent component={component} />
       </DetailPageLayout>
     )
@@ -547,12 +710,24 @@ export function InfraComponentDetail() {
 
   // Traefik: render content inline using the shared shell.
   if (component.type === 'traefik') {
-    return <TraefikShell component={component} />
+    const ep: ShellEditProps = {
+      allComponents, editOpen, editSaving,
+      onEditOpen:  () => setEditOpen(true),
+      onEditSave:  (fields) => void handleEditSave(fields),
+      onEditCancel: () => setEditOpen(false),
+    }
+    return <TraefikShell component={component} ep={ep} />
   }
 
   // Synology: render content inline using the shared shell.
   if (component.type === 'synology') {
-    return <SynologyShell component={component} />
+    const ep: ShellEditProps = {
+      allComponents, editOpen, editSaving,
+      onEditOpen:  () => setEditOpen(true),
+      onEditSave:  (fields) => void handleEditSave(fields),
+      onEditCancel: () => setEditOpen(false),
+    }
+    return <SynologyShell component={component} ep={ep} />
   }
 
   const keyDataPoints = [
@@ -619,16 +794,29 @@ export function InfraComponentDetail() {
       keyDataPoints={keyDataPoints}
       headerExtra={dockerLinkedAppsHeader}
       actions={
-        component.collection_method !== 'none' ? (
-          <DiscoverNowButton
-            entityType={component.type}
-            entityId={component.id}
-            onSuccess={() => void handleDiscoverSuccess()}
-          />
-        ) : undefined
+        <>
+          <button className="icd-edit-btn" onClick={() => setEditOpen(true)}>Edit</button>
+          {component.collection_method !== 'none' && (
+            <DiscoverNowButton
+              entityType={component.type}
+              entityId={component.id}
+              onSuccess={() => void handleDiscoverSuccess()}
+            />
+          )}
+        </>
       }
       sourceId={component.id}
     >
+      {editOpen && (
+        <InlineEditPanel
+          component={component}
+          allComponents={allComponents}
+          saving={editSaving}
+          onSave={(fields) => void handleEditSave(fields)}
+          onCancel={() => setEditOpen(false)}
+        />
+      )}
+
       {/* SNMP hosts: three-section detail view */}
       {component.collection_method === 'snmp' && (
         <SNMPSection detail={snmpDetail} />
