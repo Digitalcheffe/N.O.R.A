@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -63,6 +64,12 @@ func RunTraefikComponentPollers(ctx context.Context, store *repo.Store) {
 
 func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.InfrastructureComponent, creds traefikComponentCredentials) error {
 	client := infra.NewTraefikClient(creds.APIURL, creds.APIKey)
+
+	// ── Connectivity check ────────────────────────────────────────────────────
+	// Fail fast — if Traefik is unreachable the caller marks the component offline.
+	if err := client.Ping(ctx); err != nil {
+		return fmt.Errorf("ping: %w", err)
+	}
 
 	// ── Overview health (Infra-10) ────────────────────────────────────────────
 	pollTraefikOverview(ctx, store, c, client)
