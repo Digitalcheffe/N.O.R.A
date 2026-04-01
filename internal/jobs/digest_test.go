@@ -12,7 +12,7 @@ import (
 // newTestDigestJob creates a DigestJob with nil store and empty config for
 // unit tests that only exercise pure functions.
 func newTestDigestJob() *jobs.DigestJob {
-	return jobs.NewDigestJob(nil, &config.Config{})
+	return jobs.NewDigestJob(nil, &config.Config{}, nil)
 }
 
 // ── ShouldSendToday ──────────────────────────────────────────────────────────
@@ -132,9 +132,21 @@ func TestRenderHTML_Monthly(t *testing.T) {
 		Title:       "Your Homelab — March 2026",
 		Period:      "2026-03",
 		TotalErrors: 2,
-		AppRows: []jobs.DigestAppRow{
-			{AppName: "Sonarr", EventType: "download", Count: 89},
-			{AppName: "n8n", EventType: "error", Count: 2, HasErrors: true},
+		// Use AppSections (new template path) with per-app category rows.
+		AppSections: []jobs.DigestAppSection{
+			{
+				AppName:     "Sonarr",
+				ProfileName: "sonarr",
+				TotalEvents: 89,
+				Categories:  []jobs.DigestCategoryRow{{Label: "Downloads", Count: 89}},
+			},
+			{
+				AppName:     "n8n",
+				ProfileName: "n8n",
+				TotalEvents: 2,
+				HasIssues:   true,
+				Categories:  []jobs.DigestCategoryRow{{Label: "Errors", Count: 2}},
+			},
 		},
 	}
 	html, err := job.RenderHTML(data)
@@ -167,8 +179,13 @@ func TestRenderHTML_NoActivity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderHTML empty: %v", err)
 	}
-	if !contains(html, "No activity recorded") {
-		t.Errorf("RenderHTML empty: expected 'No activity recorded' in output")
+	// With no app sections the app activity block is omitted; verify the
+	// title and structural chrome still appear in the output.
+	if !contains(html, "Your Homelab — March 2026") {
+		t.Errorf("RenderHTML empty: expected title in output")
+	}
+	if !contains(html, "#0a0c0f") {
+		t.Errorf("RenderHTML empty: expected template chrome in output")
 	}
 }
 

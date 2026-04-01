@@ -4,10 +4,8 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SummaryCard } from '../components/SummaryCard'
 import { AppWidget } from '../components/AppWidget'
-import { SSLRow } from '../components/SSLRow'
-import { EventRow } from '../components/EventRow'
 import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
-import type { DashboardSummaryResponse, Event, InfrastructureComponent, ResourceSummary } from '../api/types'
+import type { DashboardSummaryResponse, InfrastructureComponent, ResourceSummary } from '../api/types'
 import './Dashboard.css'
 import './Infrastructure.css'
 
@@ -88,7 +86,6 @@ export function Dashboard() {
   const { tick } = useAutoRefresh()
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [data, setData] = useState<DashboardSummaryResponse | null>(null)
-  const [recentEvents, setRecentEvents] = useState<Event[]>([])
   const [eventCounts, setEventCounts] = useState<EventCounts | null>(null)
   const [infraComponents, setInfraComponents] = useState<InfrastructureComponent[]>([])
   const [resourcesMap, setResourcesMap] = useState<Record<string, ResourceSummary>>({})
@@ -101,9 +98,8 @@ export function Dashboard() {
         const periodMs = timeFilter === 'day' ? 86_400_000 : timeFilter === 'week' ? 7 * 86_400_000 : 30 * 86_400_000
         const sinceFilter = new Date(Date.now() - periodMs).toISOString()
 
-        const [summary, evts, hosts, infoRes, warnRes, errorRes, critRes] = await Promise.all([
+        const [summary, hosts, infoRes, warnRes, errorRes, critRes] = await Promise.all([
           dashboardApi.summary(timeFilter),
-          eventsApi.list({ limit: 5 }),
           infraApi.list().catch(() => ({ data: [], total: 0 })),
           eventsApi.list({ level: 'info',     from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
           eventsApi.list({ level: 'warn',     from: sinceFilter, limit: 1 }).catch(() => ({ data: [], total: 0 })),
@@ -112,7 +108,6 @@ export function Dashboard() {
         ])
 
         setData(summary)
-        setRecentEvents(evts.data)
         setInfraComponents(hosts.data)
         setEventCounts({
           info:     infoRes.total,
@@ -159,19 +154,15 @@ export function Dashboard() {
               <div key={i} className="skeleton skeleton-bar" />
             ))}
           </div>
-          <div className="two-col">
-            <div className="col-left">
-              <div className="widget-grid">
-                {[0, 1, 2, 3].map(i => (
-                  <div key={i} className="skeleton skeleton-card" />
-                ))}
-              </div>
-            </div>
-            <div className="col-right">
-              {[0, 1, 2].map(i => (
-                <div key={i} className="skeleton skeleton-bar" style={{ marginBottom: 6 }} />
-              ))}
-            </div>
+          <div className="widget-grid">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="skeleton skeleton-card" />
+            ))}
+          </div>
+          <div className="check-rollup-grid">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="skeleton skeleton-bar" />
+            ))}
           </div>
         </div>
       </>
@@ -223,10 +214,26 @@ export function Dashboard() {
     )
   }
 
-  // ── App name map for event rows ───────────────────────────────────────────
-  const appNameMap: Record<string, string> = {}
-  data.apps.forEach(a => {
-    appNameMap[a.id] = a.name
+  // ── Check type rollup — always show all 4 types ──────────────────────────
+  // avgUptime is derived from last_status on the backend (up=100, warn=75, down/critical/unknown=0).
+  // Colour thresholds: green ≥95%, yellow ≥75%, red <75%, blue = no checks configured.
+  const ALL_CHECK_TYPES = ['url', 'ssl', 'dns', 'ping'] as const
+  type RollupStatus = 'up' | 'warn' | 'down' | 'empty'
+  type RollupEntry = { type: string; total: number; avgUptime: number; notUp: number; status: RollupStatus }
+
+  function rollupColour(avgUptime: number): 'up' | 'warn' | 'down' {
+    if (avgUptime >= 95) return 'up'
+    if (avgUptime >= 75) return 'warn'
+    return 'down'
+  }
+
+  const checkRollup: RollupEntry[] = ALL_CHECK_TYPES.map(type => {
+    const ofType = data.checks.filter(c => c.type === type)
+    if (ofType.length === 0) return { type, total: 0, avgUptime: 0, notUp: 0, status: 'empty' as RollupStatus }
+    const upPctSum = ofType.reduce((acc, c) => acc + c.uptime_pct, 0)
+    const notUp = ofType.filter(c => c.status !== 'up').length
+    const avgUptime = upPctSum / ofType.length
+    return { type, total: ofType.length, avgUptime, notUp, status: rollupColour(avgUptime) }
   })
 
   // ── Infra card renderer (read-only, links to detail) ─────────────────────
@@ -290,163 +297,92 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* Two-column layout */}
-        <div className="two-col">
+        {/* Apps */}
+        {data.apps.length > 0 && (
+          <div>
+            <div className="section-header">
+              <div className="section-title">Apps</div>
+              <button className="section-action" onClick={() => navigate('/apps')}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add app
+              </button>
+            </div>
+            <div className="widget-grid">
+              {data.apps.map(app => (
+                <AppWidget
+                  key={app.id}
+                  app={app}
+                  onClick={() => navigate(`/apps/${app.id}`)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
-          {/* ── LEFT COLUMN ── */}
-          <div className="col-left">
-
-            {/* Apps */}
-            <div>
-              <div className="section-header">
-                <div className="section-title">Apps</div>
-                <button className="section-action" onClick={() => navigate('/apps')}>
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                  Add app
-                </button>
+        {/* Events — severity counts */}
+        {eventCounts !== null && (
+          <div>
+            <div className="section-header">
+              <div className="section-title">
+                Events ({timeFilter === 'day' ? '24h' : timeFilter === 'week' ? '7d' : '30d'})
               </div>
-              <div className="widget-grid">
-                {data.apps.map(app => (
-                  <AppWidget
-                    key={app.id}
-                    app={app}
-                    onClick={() => navigate(`/apps/${app.id}`)}
-                  />
-                ))}
+              <button className="section-action" onClick={() => navigate('/events')}>
+                View all →
+              </button>
+            </div>
+            <div className="event-counts-row">
+              <div className="event-count-card info">
+                <div className="event-count-value">{eventCounts.info}</div>
+                <div className="event-count-label">Info</div>
+              </div>
+              <div className="event-count-card warn">
+                <div className="event-count-value">{eventCounts.warn}</div>
+                <div className="event-count-label">Warn</div>
+              </div>
+              <div className="event-count-card error">
+                <div className="event-count-value">{eventCounts.error}</div>
+                <div className="event-count-label">Error</div>
+              </div>
+              <div className="event-count-card critical">
+                <div className="event-count-value">{eventCounts.critical}</div>
+                <div className="event-count-label">Critical</div>
               </div>
             </div>
-
-            {/* Events (24h) — severity counts */}
-            {eventCounts !== null && (
-              <div>
-                <div className="section-header">
-                  <div className="section-title">
-                    Events ({timeFilter === 'day' ? '24h' : timeFilter === 'week' ? '7d' : '30d'})
-                  </div>
-                  <button className="section-action" onClick={() => navigate('/events')}>
-                    View all →
-                  </button>
-                </div>
-                <div className="event-counts-row">
-                  <div className="event-count-card info">
-                    <div className="event-count-value">{eventCounts.info}</div>
-                    <div className="event-count-label">Info</div>
-                  </div>
-                  <div className="event-count-card warn">
-                    <div className="event-count-value">{eventCounts.warn}</div>
-                    <div className="event-count-label">Warn</div>
-                  </div>
-                  <div className="event-count-card error">
-                    <div className="event-count-value">{eventCounts.error}</div>
-                    <div className="event-count-label">Error</div>
-                  </div>
-                  <div className="event-count-card critical">
-                    <div className="event-count-value">{eventCounts.critical}</div>
-                    <div className="event-count-label">Critical</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Recent Events (below counts) */}
-            {recentEvents.length > 0 && (
-              <div>
-                <div className="section-header">
-                  <div className="section-title">Recent Events</div>
-                  <button className="section-action" onClick={() => navigate('/events')}>
-                    View all →
-                  </button>
-                </div>
-                <div className="events-panel">
-                  {recentEvents.map(event => (
-                    <EventRow
-                      key={event.id}
-                      event={event}
-                      appName={event.source_name || undefined}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
           </div>
+        )}
 
-          {/* ── RIGHT COLUMN ── */}
-          <div className="col-right">
-
-            {/* Monitor Checks — rollup by type */}
-            {data.checks.length > 0 && (() => {
-              // Group checks by type and compute average uptime + status
-              const groups: Record<string, { total: number; upPctSum: number; down: number }> = {}
-              for (const c of data.checks) {
-                if (!groups[c.type]) groups[c.type] = { total: 0, upPctSum: 0, down: 0 }
-                groups[c.type].total++
-                groups[c.type].upPctSum += c.uptime_pct
-                if (c.status === 'down' || c.status === 'critical') groups[c.type].down++
-              }
-              const rollup = Object.entries(groups).map(([type, g]) => ({
-                type,
-                total: g.total,
-                avgUptime: g.upPctSum / g.total,
-                down: g.down,
-              }))
-
-              return (
-                <div>
-                  <div className="section-header">
-                    <div className="section-title">Monitor Checks</div>
-                    <button className="section-action" onClick={() => navigate('/checks')}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Add check
-                    </button>
-                  </div>
-                  <div className="check-rollup-grid">
-                    {rollup.map(r => (
-                      <div
-                        key={r.type}
-                        className={`check-rollup-card ${r.down > 0 ? 'down' : 'up'}`}
-                        onClick={() => navigate('/checks')}
-                      >
-                        <div className="check-rollup-type">{r.type.toUpperCase()}</div>
-                        <div className="check-rollup-uptime">{r.avgUptime.toFixed(1)}%</div>
-                        <div className="check-rollup-meta">
-                          {r.total} check{r.total !== 1 ? 's' : ''}
-                          {r.down > 0 && <span className="check-rollup-down"> · {r.down} down</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+        {/* Monitor Checks — always show all 4 types */}
+        <div>
+          <div className="section-header">
+            <div className="section-title">Monitor Checks</div>
+            <button className="section-action" onClick={() => navigate('/checks')}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add check
+            </button>
+          </div>
+          <div className="check-rollup-grid">
+            {checkRollup.map(r => (
+              <div
+                key={r.type}
+                className={`check-rollup-card ${r.status}`}
+                onClick={() => navigate('/checks')}
+              >
+                <div className="check-rollup-type">{r.type.toUpperCase()}</div>
+                <div className="check-rollup-uptime">
+                  {r.status === 'empty' ? '—' : `${r.avgUptime.toFixed(1)}%`}
                 </div>
-              )
-            })()}
-
-            {/* SSL Certificates */}
-            {data.ssl_certs.length > 0 && (
-              <div>
-                <div className="section-header">
-                  <div className="section-title">SSL Certificates</div>
-                </div>
-                <div className="ssl-panel">
-                  {data.ssl_certs.map((cert, i) => (
-                    <SSLRow key={cert.domain || i} cert={cert} />
-                  ))}
+                <div className="check-rollup-meta">
+                  {r.total} check{r.total !== 1 ? 's' : ''}
+                  {r.notUp > 0 && <span className="check-rollup-not-up"> · {r.notUp} not up</span>}
                 </div>
               </div>
-            )}
-
+            ))}
           </div>
         </div>
 

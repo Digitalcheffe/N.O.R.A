@@ -216,7 +216,7 @@ func main() {
 	go jobs.StartMetricsCollection(eventJobCtx, store)
 
 	// Digest job — fires at 08:00 daily; checks stored schedule before sending.
-	digestJob := jobs.NewDigestJob(store, cfg)
+	digestJob := jobs.NewDigestJob(store, cfg, registry)
 	digestCtx, digestCancel := context.WithCancel(context.Background())
 	defer digestCancel()
 	go jobs.StartDigestJob(digestCtx, digestJob)
