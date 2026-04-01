@@ -407,11 +407,29 @@ function NotificationsTab() {
     }
   }
 
+  // Compute period string from the currently selected frequency so both
+  // Send now and Preview report always reflect what's shown in the UI.
+  const currentPeriod = (): string => {
+    const now = new Date()
+    if (schedule.frequency === 'daily') {
+      return now.toISOString().slice(0, 10) // YYYY-MM-DD
+    }
+    if (schedule.frequency === 'weekly') {
+      const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+      const day = d.getUTCDay() || 7
+      d.setUTCDate(d.getUTCDate() + 4 - day)
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+      const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
+      return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+    }
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` // YYYY-MM
+  }
+
   const sendNow = async () => {
     setSendingNow(true)
     setSendNowMsg('')
     try {
-      const res = await digestSettings.sendNow()
+      const res = await digestSettings.sendNow(currentPeriod())
       setSendNowMsg(`Queued for period ${res.period}`)
     } catch (e: unknown) {
       setSendNowMsg(e instanceof Error ? e.message : 'Failed to send')
@@ -592,15 +610,16 @@ function NotificationsTab() {
             className="settings-btn secondary"
             onClick={sendNow}
             disabled={sendingNow || !smtpConfigured}
-            title={!smtpConfigured ? 'Configure SMTP first' : undefined}
+            title={!smtpConfigured ? 'Configure SMTP first' : 'Email the digest for the current period'}
           >
-            {sendingNow ? 'Sending…' : 'Send test digest now'}
+            {sendingNow ? 'Sending…' : 'Send now'}
           </button>
           <button
             className="settings-btn secondary"
-            onClick={() => window.open(digestReport.url(), '_blank')}
+            onClick={() => window.open(digestReport.url(currentPeriod()), '_blank')}
+            title="Preview the digest report for the current period"
           >
-            View Report
+            Preview report
           </button>
           {schedMsg && <span className="settings-status-msg">{schedMsg}</span>}
           {sendNowMsg && <span className="settings-status-msg">{sendNowMsg}</span>}
