@@ -117,6 +117,25 @@ type summaryResponse struct {
 	SSLCerts   []sslCert        `json:"ssl_certs"`
 }
 
+// statusToUptimePct converts a check's last_status into a 0–100 uptime proxy.
+// This is used until a check_results history table exists for real uptime math.
+//
+//	up       → 100.0   (check passed on last poll)
+//	warn     →  75.0   (check degraded: SSL near expiry, DNS drift, slow response)
+//	down     →   0.0   (check failed on last poll)
+//	critical →   0.0   (SSL expired / check hard failure)
+//	unknown  →   0.0   (never polled yet — treat as unavailable, not as "fine")
+func statusToUptimePct(status string) float64 {
+	switch status {
+	case "up":
+		return 100.0
+	case "warn":
+		return 75.0
+	default: // "down", "critical", "unknown", ""
+		return 0.0
+	}
+}
+
 // Summary handles GET /api/v1/dashboard/summary?period=week
 func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 	periodParam := r.URL.Query().Get("period")
@@ -394,13 +413,19 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			sslCerts = append(sslCerts, cert)
 		}
 
+		// Derive uptime from last_status. No check-result history table exists yet,
+		// so this is a point-in-time proxy: up=100, warn=75, down/critical/unknown=0.
+		// When a check has never run (status=="unknown") we treat it as 0 so it
+		// doesn't inflate the average of a type group that has real failures.
+		uptimePct := statusToUptimePct(status)
+
 		checkSummaries = append(checkSummaries, checkSummary{
 			ID:            c.ID,
 			Name:          c.Name,
 			Type:          c.Type,
 			Target:        c.Target,
 			Status:        status,
-			UptimePct:     100.0,
+			UptimePct:     uptimePct,
 			LastCheckedAt: lastCheckedAt,
 		})
 	}

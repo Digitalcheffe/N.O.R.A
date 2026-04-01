@@ -215,15 +215,25 @@ export function Dashboard() {
   }
 
   // ── Check type rollup — always show all 4 types ──────────────────────────
+  // avgUptime is derived from last_status on the backend (up=100, warn=75, down/critical/unknown=0).
+  // Colour thresholds: green ≥95%, yellow ≥75%, red <75%, blue = no checks configured.
   const ALL_CHECK_TYPES = ['url', 'ssl', 'dns', 'ping'] as const
-  type RollupEntry = { type: string; total: number; avgUptime: number; down: number; empty: boolean }
+  type RollupStatus = 'up' | 'warn' | 'down' | 'empty'
+  type RollupEntry = { type: string; total: number; avgUptime: number; notUp: number; status: RollupStatus }
+
+  function rollupColour(avgUptime: number): 'up' | 'warn' | 'down' {
+    if (avgUptime >= 95) return 'up'
+    if (avgUptime >= 75) return 'warn'
+    return 'down'
+  }
 
   const checkRollup: RollupEntry[] = ALL_CHECK_TYPES.map(type => {
     const ofType = data.checks.filter(c => c.type === type)
-    if (ofType.length === 0) return { type, total: 0, avgUptime: 0, down: 0, empty: true }
+    if (ofType.length === 0) return { type, total: 0, avgUptime: 0, notUp: 0, status: 'empty' as RollupStatus }
     const upPctSum = ofType.reduce((acc, c) => acc + c.uptime_pct, 0)
-    const down = ofType.filter(c => c.status === 'down' || c.status === 'critical').length
-    return { type, total: ofType.length, avgUptime: upPctSum / ofType.length, down, empty: false }
+    const notUp = ofType.filter(c => c.status !== 'up').length
+    const avgUptime = upPctSum / ofType.length
+    return { type, total: ofType.length, avgUptime, notUp, status: rollupColour(avgUptime) }
   })
 
   // ── Infra card renderer (read-only, links to detail) ─────────────────────
@@ -360,14 +370,16 @@ export function Dashboard() {
             {checkRollup.map(r => (
               <div
                 key={r.type}
-                className={`check-rollup-card ${r.empty ? 'empty' : r.down > 0 ? 'down' : 'up'}`}
+                className={`check-rollup-card ${r.status}`}
                 onClick={() => navigate('/checks')}
               >
                 <div className="check-rollup-type">{r.type.toUpperCase()}</div>
-                <div className="check-rollup-uptime">{r.avgUptime.toFixed(1)}%</div>
+                <div className="check-rollup-uptime">
+                  {r.status === 'empty' ? '—' : `${r.avgUptime.toFixed(1)}%`}
+                </div>
                 <div className="check-rollup-meta">
                   {r.total} check{r.total !== 1 ? 's' : ''}
-                  {r.down > 0 && <span className="check-rollup-down"> · {r.down} down</span>}
+                  {r.notUp > 0 && <span className="check-rollup-not-up"> · {r.notUp} not up</span>}
                 </div>
               </div>
             ))}

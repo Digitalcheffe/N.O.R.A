@@ -611,6 +611,7 @@
 .check-rollup-card:hover { border-color: var(--border2); transform: translateY(-1px); }
 
 .check-rollup-card.up    { border-top: 3px solid var(--green); }
+.check-rollup-card.warn  { border-top: 3px solid var(--yellow); }
 .check-rollup-card.down  { border-top: 3px solid var(--red); }
 .check-rollup-card.empty { border-top: 3px solid var(--accent); }
 
@@ -627,12 +628,14 @@
   font-size: 24px;
   font-weight: 600;
   line-height: 1;
-  color: var(--text);
+  color: var(--green);
 }
 
+/* uptime colour overrides per status */
+.check-rollup-card.warn  .check-rollup-uptime  { color: var(--yellow); }
 .check-rollup-card.down  .check-rollup-uptime  { color: var(--red); }
-.check-rollup-card.empty .check-rollup-uptime  { color: var(--accent); }
-.check-rollup-card.empty .check-rollup-meta    { color: var(--accent); opacity: 0.6; }
+.check-rollup-card.empty .check-rollup-uptime  { color: var(--text3); }
+.check-rollup-card.empty .check-rollup-meta    { color: var(--accent); opacity: 0.7; }
 
 .check-rollup-meta {
   font-family: var(--mono);
@@ -640,7 +643,9 @@
   color: var(--text3);
 }
 
-.check-rollup-down { color: var(--red); }
+/* "not up" count shown when > 0 */
+.check-rollup-not-up { color: var(--red); }
+.check-rollup-card.warn .check-rollup-not-up { color: var(--yellow); }
 
 /* ── DASHBOARD INFRA GRID ── */
 .dash-infra-grid {
