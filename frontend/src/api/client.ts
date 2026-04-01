@@ -344,8 +344,8 @@ export const digestSettings = {
   putSchedule: (s: DigestSchedule) =>
     request<DigestSchedule>('PUT', '/digest/schedule', s),
 
-  sendNow: () =>
-    request<SendNowResult>('POST', '/digest/send-now'),
+  sendNow: (period?: string) =>
+    request<SendNowResult>('POST', `/digest/send-now${period ? `?period=${encodeURIComponent(period)}` : ''}`),
 }
 
 export const smtpSettings = {

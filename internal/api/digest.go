@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,26 +89,32 @@ func (h *DigestHandler) PutSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 // SendNow triggers an immediate digest for the current period: POST /api/v1/digest/send-now
+// Optional query param ?period= overrides the schedule-derived period so the UI
+// can send for whichever frequency is currently selected without saving first.
 func (h *DigestHandler) SendNow(w http.ResponseWriter, r *http.Request) {
 	if !h.digestJob.SMTPConfigured(r.Context()) {
 		writeError(w, http.StatusUnprocessableEntity, "SMTP is not configured — set up SMTP before sending a digest")
 		return
 	}
 
-	var sched models.DigestSchedule
-	err := h.store.Settings.GetJSON(r.Context(), digestScheduleKey, &sched)
-	if errors.Is(err, repo.ErrNotFound) {
-		sched = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1}
-	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+	// Use caller-supplied period if provided, otherwise derive from saved schedule.
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		var sched models.DigestSchedule
+		err := h.store.Settings.GetJSON(r.Context(), digestScheduleKey, &sched)
+		if errors.Is(err, repo.ErrNotFound) {
+			sched = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1}
+		} else if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		period = periodLabelFromSchedule(sched.Frequency, time.Now())
 	}
 
-	period := periodLabelFromSchedule(sched.Frequency, time.Now())
-
-	// Run in background — send-now is fire-and-forget from the HTTP perspective.
+	// Detach from the request context — it is cancelled as soon as the 202
+	// response is written, which would abort every DB query in buildDigestData.
 	go func() {
-		if err := h.digestJob.Send(r.Context(), period); err != nil {
+		if err := h.digestJob.Send(context.Background(), period); err != nil {
 			_ = err
 		}
 	}()
