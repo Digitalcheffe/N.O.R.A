@@ -176,11 +176,35 @@ func (d *DigestJob) SMTPConfigured(ctx context.Context) bool {
 }
 
 // buildDigestData queries rollups and assembles DigestData for the given period.
+// When the rollups table has no rows for the period (e.g. the month is still in
+// progress and the rollup job hasn't run yet), it falls back to querying the
+// events table directly so current-period reports are never blank.
 func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*DigestData, error) {
 	year, month := periodYearMonth(period)
+
 	rollups, err := d.store.Rollups.ListByPeriod(ctx, year, month)
 	if err != nil {
 		return nil, err
+	}
+
+	// Fetch app list — needed for both the rollup and live-event paths.
+	apps, err := d.store.Apps.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// If the rollups table has no rows for this period (month not yet rolled up),
+	// build equivalent rows by querying the events table directly.
+	if len(rollups) == 0 {
+		rollups, err = d.liveRollupsForPeriod(ctx, apps, year, month)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	appNames := map[string]string{}
+	for _, a := range apps {
+		appNames[a.ID] = a.Name
 	}
 
 	// Aggregate per app + event_type.
@@ -196,16 +220,6 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 		if r.Severity == "error" || r.Severity == "critical" {
 			totalErrors += r.Count
 		}
-	}
-
-	// Fetch app names.
-	apps, err := d.store.Apps.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	appNames := map[string]string{}
-	for _, a := range apps {
-		appNames[a.ID] = a.Name
 	}
 
 	var rows []DigestAppRow
@@ -231,6 +245,33 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 		TotalErrors: totalErrors,
 		AppRows:     rows,
 	}, nil
+}
+
+// liveRollupsForPeriod builds rollup-equivalent rows by querying the events
+// table directly. Used when the rollups table has no data for the period
+// (i.e. the month is still in progress).
+func (d *DigestJob) liveRollupsForPeriod(ctx context.Context, apps []models.App, year, month int) ([]models.Rollup, error) {
+	since := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	until := since.AddDate(0, 1, 0)
+
+	var result []models.Rollup
+	for _, app := range apps {
+		rows, err := d.store.Events.GroupByTypeAndLevel(ctx, app.ID, since, until)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			result = append(result, models.Rollup{
+				AppID:     app.ID,
+				Year:      year,
+				Month:     month,
+				EventType: row.EventType,
+				Severity:  row.Level,
+				Count:     row.Count,
+			})
+		}
+	}
+	return result, nil
 }
 
 // adminEmails returns the digest recipient list.
