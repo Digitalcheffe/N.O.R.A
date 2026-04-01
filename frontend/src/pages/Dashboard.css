@@ -592,7 +592,7 @@
 /* ── CHECK ROLLUP CARDS ── */
 .check-rollup-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
 
@@ -610,8 +610,9 @@
 
 .check-rollup-card:hover { border-color: var(--border2); transform: translateY(-1px); }
 
-.check-rollup-card.up   { border-top: 3px solid var(--green); }
-.check-rollup-card.down { border-top: 3px solid var(--red); }
+.check-rollup-card.up    { border-top: 3px solid var(--green); }
+.check-rollup-card.down  { border-top: 3px solid var(--red); }
+.check-rollup-card.empty { border-top: 3px solid var(--accent); }
 
 .check-rollup-type {
   font-family: var(--mono);
@@ -629,7 +630,9 @@
   color: var(--text);
 }
 
-.check-rollup-card.down .check-rollup-uptime { color: var(--red); }
+.check-rollup-card.down  .check-rollup-uptime  { color: var(--red); }
+.check-rollup-card.empty .check-rollup-uptime  { color: var(--accent); }
+.check-rollup-card.empty .check-rollup-meta    { color: var(--accent); opacity: 0.6; }
 
 .check-rollup-meta {
   font-family: var(--mono);
@@ -895,9 +898,9 @@
     font-size: 9px;
   }
 
-  /* ── Two-col layout: stack to single column ── */
-  .two-col {
-    grid-template-columns: 1fr;
+  /* ── Check rollup: 2×2 on mobile ── */
+  .check-rollup-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   /* ── Bookmarks: 2-column grid ── */
