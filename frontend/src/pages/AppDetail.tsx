@@ -160,8 +160,8 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+    <div className="modal-backdrop">
+      <div className="modal">
         <div className="modal-header">
           <div className="modal-title">App Settings</div>
           <div className="modal-subtitle">{app.name}</div>

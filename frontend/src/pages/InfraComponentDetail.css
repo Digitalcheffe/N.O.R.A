@@ -773,6 +773,13 @@
   margin-top: 20px; /* align with inputs */
 }
 
+.icd-edit-check-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
 .icd-edit-actions {
   display: flex;
   gap: 8px;
