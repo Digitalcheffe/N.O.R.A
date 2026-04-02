@@ -29,21 +29,6 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 ---
 
-## Quick Start
-
-```bash
-docker run -d \
-  -p 8081:8081 \
-  -v ./data:/data \
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \
-  -e NORA_SECRET=your-secret-here \
-  ghcr.io/digitalcheffe/nora:latest
-```
-
-Open `http://localhost:8081` — create your admin account and add your first app.
-
----
-
 ## Features
 
 ### Monitoring
@@ -119,6 +104,18 @@ Profile contributions are welcome — drop a YAML file in a GitHub issue or disc
 
 ---
 
+## Quick Start
+
+```bash
+docker run -d \
+  -p 8081:8081 \
+  -v ./data:/data \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -e NORA_SECRET=your-secret-here \
+  ghcr.io/digitalcheffe/nora:latest
+```
+
+Open `http://localhost:8081` — create your admin account and add your first app.
 ## Configuration
 
 ### Environment Variables
