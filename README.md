@@ -42,14 +42,14 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 ```bash
 docker run -d \
-  -p 8080:8080 \
+  -p 8081:8081 \
   -v ./data:/data \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -e NORA_SECRET=your-secret-here \
   ghcr.io/digitalcheffe/nora:latest
 ```
 
-Open `http://localhost:8080` — create your admin account and add your first app.
+Open `http://localhost:8081` — create your admin account and add your first app.
 
 ---
 
@@ -136,16 +136,17 @@ Profile contributions are welcome — drop a YAML file in a GitHub issue or disc
 |---|---|---|---|
 | `NORA_SECRET` | JWT signing secret | — | Yes |
 | `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
-| `NORA_PORT` | HTTP port | `8080` | No |
-| `NORA_DEV_MODE` | Inject hardcoded admin session, skip auth | `false` | No |
+| `NORA_PORT` | HTTP port | `8081` | No |
+| `NORA_TEMPLATES_PATH` | Path to app profile templates on disk | `/data/templates` | No |
+| `NORA_ICONS_PATH` | Path to cached app icons on disk | `/data/icons` | No |
 | `NORA_SMTP_HOST` | SMTP server hostname | — | No |
 | `NORA_SMTP_PORT` | SMTP port | `587` | No |
 | `NORA_SMTP_USER` | SMTP username | — | No |
 | `NORA_SMTP_PASS` | SMTP password | — | No |
 | `NORA_SMTP_FROM` | From address for outbound email | — | No |
-| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email | `0 8 1 * *` | No |
-| `NORA_VAPID_PUBLIC` | VAPID public key (auto-generated if absent) | — | No |
-| `NORA_VAPID_PRIVATE` | VAPID private key (auto-generated if absent) | — | No |
+| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email (default: 8am on the 1st of each month) | `0 8 1 * *` | No |
+| `NORA_VAPID_PUBLIC` | VAPID public key — auto-generated at startup if absent; set to persist push subscriptions across restarts | — | No |
+| `NORA_VAPID_PRIVATE` | VAPID private key — auto-generated at startup if absent; set to persist push subscriptions across restarts | — | No |
 | `NORA_ADMIN_EMAIL` | Bootstrap admin email | — | Required (first run) |
 | `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | Required (first run) |
 
