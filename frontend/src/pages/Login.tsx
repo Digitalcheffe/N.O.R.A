@@ -63,11 +63,7 @@ export function Login() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
-          <svg className="login-logo-icon" viewBox="0 0 40 40" fill="none">
-            <rect width="40" height="40" rx="8" fill="var(--accent-dim)" />
-            <path d="M8 20 L20 8 L32 20 L20 32 Z" stroke="var(--accent)" strokeWidth="2" fill="none" />
-            <circle cx="20" cy="20" r="4" fill="var(--accent)" />
-          </svg>
+          <img src="/icons/icon.svg" alt="NORA" className="login-logo-icon" />
         </div>
         <h1 className="login-title">NORA</h1>
         <p className="login-subtitle">Nexus Operations Recon &amp; Alerts</p>

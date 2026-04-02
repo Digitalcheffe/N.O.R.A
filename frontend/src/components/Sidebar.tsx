@@ -76,10 +76,7 @@ export function Sidebar() {
   return (
     <nav className="sidebar">
       <div className="sidebar-logo" title="NORA">
-        <svg viewBox="0 0 40 40" fill="none" className="sidebar-logo-icon">
-          <path d="M8 20 L20 8 L32 20 L20 32 Z" stroke="var(--accent)" strokeWidth="2" fill="none" />
-          <circle cx="20" cy="20" r="4" fill="var(--accent)" />
-        </svg>
+        <img src="/icons/icon.svg" alt="NORA" className="sidebar-logo-icon" />
       </div>
 
       {NAV_ITEMS.map(({ to, title, icon }) => (
