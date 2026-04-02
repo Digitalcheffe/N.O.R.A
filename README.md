@@ -137,21 +137,15 @@ Profile contributions are welcome — drop a YAML file in a GitHub issue or disc
 | `NORA_SECRET` | JWT signing secret | — | Yes |
 | `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
 | `NORA_PORT` | HTTP port | `8081` | No |
-| `NORA_TEMPLATES_PATH` | Path to app profile templates on disk | `/data/templates` | No |
-| `NORA_ICONS_PATH` | Path to cached app icons on disk | `/data/icons` | No |
-| `NORA_SMTP_HOST` | SMTP server hostname | — | No |
-| `NORA_SMTP_PORT` | SMTP port | `587` | No |
-| `NORA_SMTP_USER` | SMTP username | — | No |
-| `NORA_SMTP_PASS` | SMTP password | — | No |
-| `NORA_SMTP_FROM` | From address for outbound email | — | No |
+| `NORA_LOG_LEVEL` | Set to `debug` to enable verbose request logging; default shows startup and errors only | `info` | No |
 | `NORA_DIGEST_SCHEDULE` | Cron expression for digest email (default: 8am on the 1st of each month) | `0 8 1 * *` | No |
-| `NORA_VAPID_PUBLIC` | VAPID public key — auto-generated at startup if absent; set to persist push subscriptions across restarts | — | No |
-| `NORA_VAPID_PRIVATE` | VAPID private key — auto-generated at startup if absent; set to persist push subscriptions across restarts | — | No |
 | `NORA_ADMIN_EMAIL` | Bootstrap admin email | — | Required (first run) |
 | `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | Required (first run) |
 
 ### In-App Settings
-- SMTP configuration and test email
+All email configuration is managed in the app under Settings → Notifications — no env vars needed.
+
+- SMTP server, port, credentials, from address, and test email
 - Password policy (minimum length, uppercase, numbers, special characters)
 - Global MFA requirement
 - Digest email schedule
