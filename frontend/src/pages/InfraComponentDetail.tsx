@@ -695,6 +695,7 @@ export function InfraComponentDetail() {
         breadcrumb="Infrastructure"
         breadcrumbPath="/infrastructure"
         name={component.name}
+        icon={<InfraTypeIcon type={component.type} size={24} />}
         status={{ status: dplStatus(component.last_status) }}
         lastPolled={component.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
         keyDataPoints={[
