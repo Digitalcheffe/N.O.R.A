@@ -20,11 +20,29 @@ export interface AuthUser {
   id: string
   email: string
   role: 'admin' | 'member'
+  totp_enabled: boolean
+  totp_grace: boolean
 }
 
 export interface LoginResponse {
   token: string
   user: AuthUser
+  mfa_enrollment_required?: boolean
+}
+
+export interface MFARequiredResponse {
+  mfa_required: true
+  mfa_token: string
+}
+
+export interface TOTPSetupResponse {
+  uri: string
+  secret: string
+}
+
+export interface TOTPVerifyInput {
+  mfa_token: string
+  code: string
 }
 
 export interface ChangePasswordInput {
@@ -39,6 +57,8 @@ export interface User {
   email: string
   role: 'admin' | 'member'
   created_at: string
+  totp_enabled: boolean
+  totp_grace: boolean
 }
 
 export interface CreateUserInput {

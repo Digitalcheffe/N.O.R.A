@@ -29,6 +29,7 @@ func (h *UsersHandler) Routes(r chi.Router) {
 	r.Get("/users", h.List)
 	r.Post("/users", h.Create)
 	r.Delete("/users/{id}", h.Delete)
+	r.Put("/users/{id}/password", h.SetPassword)
 	r.Put("/users/me/password", h.ChangePassword)
 }
 
@@ -117,6 +118,43 @@ func (h *UsersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	err := h.users.Delete(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type setPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+// SetPassword lets an admin set any user's password: PUT /api/v1/users/{id}/password
+func (h *UsersHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req setPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Password == "" {
+		writeError(w, http.StatusBadRequest, "password is required")
+		return
+	}
+	policy := loadPasswordPolicy(r.Context(), h.settings)
+	if err := validatePassword(req.Password, policy); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+	if err := h.users.UpdatePassword(r.Context(), id, string(hashed)); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
 			return

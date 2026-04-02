@@ -185,6 +185,34 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- MFA gate ---
+	_, totpEnabled, totpGrace, totpExempt, _ := h.users.GetTOTPData(r.Context(), user.ID)
+	mfaRequired := loadMFARequired(r.Context(), h.settings)
+
+	if totpEnabled {
+		// User has TOTP set up — require the second step.
+		mfaToken, err := auth.GenerateMFAToken(user.ID, h.secret)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to generate MFA token")
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]interface{}{
+			"mfa_required": true,
+			"mfa_token":    mfaToken,
+		})
+		return
+	}
+
+	if mfaRequired && !totpExempt {
+		if !totpGrace {
+			// Grace used up — block login until admin resets or user enrolls.
+			writeError(w, http.StatusForbidden, "MFA enrollment required. Ask an admin to reset your grace login.")
+			return
+		}
+		// Use the one grace login — clear it so the next login is blocked.
+		_ = h.users.ClearGrace(r.Context(), user.ID)
+	}
+
 	token, err := auth.GenerateToken(user.ID, user.Role, h.secret)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
@@ -200,7 +228,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Now().Add(24 * time.Hour),
 	})
 
-	writeJSON(w, http.StatusOK, loginResponse{Token: token, User: *user})
+	resp := map[string]interface{}{
+		"token": token,
+		"user":  user,
+	}
+	// Flag to the frontend that TOTP enrollment is required on next login.
+	if mfaRequired && !totpExempt && !totpEnabled {
+		resp["mfa_enrollment_required"] = true
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // Logout clears the session cookie.

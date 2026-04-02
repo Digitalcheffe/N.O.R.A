@@ -16,6 +16,18 @@ import (
 
 const smtpSettingsAPIKey = "smtp"
 const passwordPolicyKey = "password_policy"
+const mfaRequiredKey = "mfa_required"
+
+// loadMFARequired returns true if the global MFA-required setting is enabled.
+func loadMFARequired(ctx context.Context, s repo.SettingsRepo) bool {
+	var v struct {
+		Required bool `json:"required"`
+	}
+	if err := s.GetJSON(ctx, mfaRequiredKey, &v); err != nil {
+		return false
+	}
+	return v.Required
+}
 
 // loadPasswordPolicy fetches the active policy, falling back to defaults on miss.
 func loadPasswordPolicy(ctx context.Context, s repo.SettingsRepo) models.PasswordPolicy {
@@ -90,6 +102,8 @@ func (h *SettingsHandler) Routes(r chi.Router) {
 	r.Post("/settings/smtp/test", h.TestSMTP)
 	r.Get("/settings/password-policy", h.GetPasswordPolicy)
 	r.Put("/settings/password-policy", h.PutPasswordPolicy)
+	r.Get("/settings/mfa-required", h.GetMFARequired)
+	r.Put("/settings/mfa-required", h.PutMFARequired)
 }
 
 // GetSMTP returns the stored SMTP config: GET /api/v1/settings/smtp
@@ -158,6 +172,31 @@ func (h *SettingsHandler) PutPasswordPolicy(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, req)
+}
+
+// GetMFARequired returns the global MFA-required setting: GET /api/v1/settings/mfa-required
+func (h *SettingsHandler) GetMFARequired(w http.ResponseWriter, r *http.Request) {
+	var v struct {
+		Required bool `json:"required"`
+	}
+	_ = h.store.Settings.GetJSON(r.Context(), mfaRequiredKey, &v)
+	writeJSON(w, http.StatusOK, v)
+}
+
+// PutMFARequired saves the global MFA-required setting: PUT /api/v1/settings/mfa-required
+func (h *SettingsHandler) PutMFARequired(w http.ResponseWriter, r *http.Request) {
+	var v struct {
+		Required bool `json:"required"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.store.Settings.SetJSON(r.Context(), mfaRequiredKey, v); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }
 
 // TestSMTP sends a test email using the stored SMTP config: POST /api/v1/settings/smtp/test

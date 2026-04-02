@@ -1040,3 +1040,28 @@
   font-size: 0.875rem;
   text-align: center;
 }
+
+/* ── TOTP enrollment ─────────────────────────────────────────────────────── */
+
+.totp-enabled-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--green, #4ade80);
+  background: color-mix(in srgb, var(--green, #4ade80) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green, #4ade80) 40%, transparent);
+  border-radius: 4px;
+  padding: 2px 7px;
+  letter-spacing: 0.04em;
+}
+
+.totp-qr-container {
+  display: flex;
+  justify-content: flex-start;
+  padding: 12px 0 4px;
+}
+
+.totp-qr-container svg {
+  border: 6px solid white;
+  border-radius: 6px;
+}
+

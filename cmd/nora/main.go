@@ -103,10 +103,14 @@ func main() {
 	// NORA_ADMIN_EMAIL + NORA_ADMIN_PASSWORD are both set.
 	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
 		if n, err := userRepo.Count(context.Background()); err == nil && n == 0 {
-			if err := seedAdmin(context.Background(), userRepo, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+			if u, err := seedAdmin(context.Background(), userRepo, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 				log.Printf("admin bootstrap failed: %v", err)
 			} else {
 				log.Printf("admin bootstrap: created admin account for %s", cfg.AdminEmail)
+				// Bootstrap admin is exempt from global MFA enforcement.
+				if exemptErr := userRepo.SetTOTPExempt(context.Background(), u.ID, true); exemptErr != nil {
+					log.Printf("admin bootstrap: could not set TOTP exempt: %v", exemptErr)
+				}
 			}
 		}
 	}
@@ -466,6 +470,8 @@ func main() {
 	pushHandler.RegisterPublicRoutes(r)
 	authHandler := api.NewAuthHandler(userRepo, store.Settings, cfg.Secret)
 	authHandler.RegisterPublicRoutes(r)
+	totpHandler := api.NewTOTPHandler(userRepo, cfg.Secret)
+	totpHandler.RegisterPublicRoutes(r)
 
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
@@ -487,6 +493,7 @@ func main() {
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
 		api.NewUsersHandler(userRepo, store.Settings).Routes(r)
+		totpHandler.Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
 		api.NewRulesHandler(store, rulesEngine).Routes(r)
@@ -518,17 +525,20 @@ func main() {
 
 // seedAdmin creates the first admin user from the bootstrap env vars.
 // It must only be called when the users table is empty.
-func seedAdmin(ctx context.Context, users repo.UserRepo, email, password string) error {
+func seedAdmin(ctx context.Context, users repo.UserRepo, email, password string) (*models.User, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	u := &models.User{
 		ID:    uuid.NewString(),
 		Email: email,
 		Role:  "admin",
 	}
-	return users.Create(ctx, u, string(hashed))
+	if err := users.Create(ctx, u, string(hashed)); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 // spaHandler serves static files when they exist, and falls back to index.html

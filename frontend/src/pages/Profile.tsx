@@ -1,30 +1,125 @@
+import { useState, useEffect } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { Topbar } from '../components/Topbar'
+import { useAuth } from '../context/AuthContext'
+import { totp as totpApi, users } from '../api/client'
+import type { TOTPSetupResponse } from '../api/types'
 import './Settings.css'
 
 export function Profile() {
+  const { user, refreshUser } = useAuth()
+
+  // ── Change Password ──────────────────────────────────────────────────────────
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [pwMsg, setPwMsg] = useState('')
+  const [pwSaving, setPwSaving] = useState(false)
+
+  const handleChangePassword = async () => {
+    if (!currentPw || !newPw) { setPwMsg('Both fields are required.'); return }
+    setPwSaving(true)
+    setPwMsg('')
+    try {
+      await users.changePassword({ current_password: currentPw, new_password: newPw })
+      setCurrentPw('')
+      setNewPw('')
+      setPwMsg('Password updated.')
+    } catch (e: unknown) {
+      setPwMsg(e instanceof Error ? e.message : 'Failed to update password')
+    } finally {
+      setPwSaving(false)
+    }
+  }
+
+  // ── TOTP Enrollment ──────────────────────────────────────────────────────────
+  const totpEnabled = user?.totp_enabled ?? false
+
+  const [setup, setSetup] = useState<TOTPSetupResponse | null>(null)
+  const [confirmCode, setConfirmCode] = useState('')
+  const [confirmMsg, setConfirmMsg] = useState('')
+  const [confirmSaving, setConfirmSaving] = useState(false)
+  const [setupLoading, setSetupLoading] = useState(false)
+
+  // Disable own TOTP
+  const [disableCode, setDisableCode] = useState('')
+  const [disableMsg, setDisableMsg] = useState('')
+  const [disableSaving, setDisableSaving] = useState(false)
+  const [showDisable, setShowDisable] = useState(false)
+
+  // Reset setup state when user TOTP status changes.
+  useEffect(() => {
+    if (totpEnabled) setSetup(null)
+  }, [totpEnabled])
+
+  const handleStartSetup = async () => {
+    setSetupLoading(true)
+    setConfirmMsg('')
+    try {
+      const res = await totpApi.setup()
+      setSetup(res)
+    } catch (e: unknown) {
+      setConfirmMsg(e instanceof Error ? e.message : 'Failed to generate secret')
+    } finally {
+      setSetupLoading(false)
+    }
+  }
+
+  const handleConfirm = async () => {
+    if (!confirmCode || confirmCode.length !== 6) {
+      setConfirmMsg('Enter the 6-digit code from your app.')
+      return
+    }
+    setConfirmSaving(true)
+    setConfirmMsg('')
+    try {
+      await totpApi.confirm(confirmCode)
+      setConfirmCode('')
+      setSetup(null)
+      setConfirmMsg('')
+      await refreshUser()
+    } catch (e: unknown) {
+      setConfirmMsg(e instanceof Error ? e.message : 'Invalid code')
+    } finally {
+      setConfirmSaving(false)
+    }
+  }
+
+  const handleDisableOwn = async () => {
+    if (!disableCode || disableCode.length !== 6) {
+      setDisableMsg('Enter your current 6-digit TOTP code to confirm.')
+      return
+    }
+    setDisableSaving(true)
+    setDisableMsg('')
+    try {
+      await totpApi.disableOwn(disableCode)
+      setDisableCode('')
+      setShowDisable(false)
+      await refreshUser()
+    } catch (e: unknown) {
+      setDisableMsg(e instanceof Error ? e.message : 'Invalid code')
+    } finally {
+      setDisableSaving(false)
+    }
+  }
+
   return (
     <>
       <Topbar title="Profile" />
       <div className="content">
         <div className="tab-content">
+
           <section className="settings-section">
             <div className="section-header">
               <span className="section-title">Account</span>
             </div>
             <div className="settings-field-row">
-              <label className="settings-label">Display name</label>
-              <input className="settings-input" defaultValue="Admin" />
-            </div>
-            <div className="settings-field-row">
               <label className="settings-label">Email</label>
-              <input className="settings-input" defaultValue="admin@nora.local" />
+              <span style={{ fontSize: '0.875rem', color: 'var(--text2)' }}>{user?.email ?? '—'}</span>
             </div>
             <div className="settings-field-row">
-              <label className="settings-label">Timezone</label>
-              <input className="settings-input" defaultValue="UTC" />
-            </div>
-            <div className="settings-actions">
-              <button className="settings-btn primary">Save</button>
+              <label className="settings-label">Role</label>
+              <span className="app-pill-type">{user?.role ?? '—'}</span>
             </div>
           </section>
 
@@ -34,24 +129,142 @@ export function Profile() {
             </div>
             <div className="settings-field-row">
               <label className="settings-label">Current password</label>
-              <input className="settings-input" type="password" placeholder="••••••••" />
+              <input
+                className="settings-input"
+                type="password"
+                placeholder="••••••••"
+                value={currentPw}
+                onChange={e => setCurrentPw(e.target.value)}
+              />
             </div>
             <div className="settings-field-row">
               <label className="settings-label">New password</label>
-              <input className="settings-input" type="password" placeholder="••••••••" />
+              <input
+                className="settings-input"
+                type="password"
+                placeholder="••••••••"
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+              />
             </div>
             <div className="settings-actions">
-              <button className="settings-btn primary">Update Password</button>
+              <button className="settings-btn primary" onClick={handleChangePassword} disabled={pwSaving}>
+                {pwSaving ? 'Saving…' : 'Update Password'}
+              </button>
+              {pwMsg && <span className="settings-status-msg">{pwMsg}</span>}
             </div>
           </section>
 
           <section className="settings-section">
             <div className="section-header">
-              <span className="section-title" style={{ color: 'var(--red)' }}>Danger Zone</span>
+              <span className="section-title">Two-Factor Authentication</span>
+              {totpEnabled && (
+                <span className="totp-enabled-badge">Enabled</span>
+              )}
             </div>
-            <div className="settings-placeholder">Delete account — removes all data associated with this user.</div>
-            <button className="settings-btn danger" style={{ marginTop: 12 }}>Delete Account</button>
+
+            {totpEnabled ? (
+              <>
+                <p className="settings-placeholder" style={{ marginBottom: 12 }}>
+                  TOTP is active on your account. Your authenticator app generates codes required at login.
+                </p>
+                {!showDisable ? (
+                  <button
+                    className="settings-btn danger settings-btn--sm"
+                    onClick={() => { setShowDisable(true); setDisableMsg('') }}
+                  >
+                    Disable TOTP
+                  </button>
+                ) : (
+                  <div>
+                    <p className="settings-placeholder" style={{ marginBottom: 8, color: 'var(--red)' }}>
+                      Enter your current authenticator code to disable TOTP.
+                    </p>
+                    <div className="settings-field-row">
+                      <label className="settings-label">Code</label>
+                      <input
+                        className="settings-input"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="000000"
+                        value={disableCode}
+                        onChange={e => setDisableCode(e.target.value.replace(/\D/g, ''))}
+                        style={{ maxWidth: 120, fontFamily: 'var(--mono)', letterSpacing: '0.15em' }}
+                      />
+                    </div>
+                    <div className="settings-actions">
+                      <button
+                        className="settings-btn danger"
+                        onClick={handleDisableOwn}
+                        disabled={disableSaving || disableCode.length !== 6}
+                      >
+                        {disableSaving ? 'Disabling…' : 'Confirm Disable'}
+                      </button>
+                      <button className="settings-btn secondary" onClick={() => { setShowDisable(false); setDisableCode(''); setDisableMsg('') }}>
+                        Cancel
+                      </button>
+                      {disableMsg && <span className="settings-status-msg" style={{ color: 'var(--red)' }}>{disableMsg}</span>}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : setup ? (
+              <>
+                <p className="settings-placeholder" style={{ marginBottom: 16 }}>
+                  Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code to confirm.
+                </p>
+                <div className="totp-qr-container">
+                  <QRCodeSVG value={setup.uri} size={180} bgColor="var(--bg2)" fgColor="var(--text)" />
+                </div>
+                <p className="settings-placeholder" style={{ marginTop: 8, marginBottom: 16, fontSize: '0.75rem' }}>
+                  Can't scan? Enter this key manually: <code style={{ userSelect: 'all', letterSpacing: '0.1em' }}>{setup.secret}</code>
+                </p>
+                <div className="settings-field-row">
+                  <label className="settings-label">Confirm code</label>
+                  <input
+                    className="settings-input"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={confirmCode}
+                    onChange={e => setConfirmCode(e.target.value.replace(/\D/g, ''))}
+                    style={{ maxWidth: 120, fontFamily: 'var(--mono)', letterSpacing: '0.15em' }}
+                    autoFocus
+                  />
+                </div>
+                <div className="settings-actions">
+                  <button
+                    className="settings-btn primary"
+                    onClick={handleConfirm}
+                    disabled={confirmSaving || confirmCode.length !== 6}
+                  >
+                    {confirmSaving ? 'Verifying…' : 'Activate TOTP'}
+                  </button>
+                  <button className="settings-btn secondary" onClick={() => { setSetup(null); setConfirmCode(''); setConfirmMsg('') }}>
+                    Cancel
+                  </button>
+                  {confirmMsg && <span className="settings-status-msg" style={{ color: 'var(--red)' }}>{confirmMsg}</span>}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="settings-placeholder" style={{ marginBottom: 12 }}>
+                  Add an extra layer of security. Once enabled, you'll need a code from your authenticator app at each login.
+                </p>
+                <button
+                  className="settings-btn primary"
+                  onClick={handleStartSetup}
+                  disabled={setupLoading}
+                >
+                  {setupLoading ? 'Generating…' : 'Set Up TOTP'}
+                </button>
+                {confirmMsg && <span className="settings-status-msg" style={{ color: 'var(--red)', marginLeft: 12 }}>{confirmMsg}</span>}
+              </>
+            )}
           </section>
+
         </div>
       </div>
     </>

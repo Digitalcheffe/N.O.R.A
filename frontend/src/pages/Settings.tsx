@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push, notifyRules, jobsApi, passwordPolicy as passwordPolicyApi } from '../api/client'
+import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push, notifyRules, jobsApi, passwordPolicy as passwordPolicyApi, mfaSettings, totp as totpApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { usePushSubscription } from '../hooks/usePushSubscription'
 import type {
@@ -25,6 +25,7 @@ import type {
 } from '../api/types'
 
 import './Settings.css'
+import '../styles/Modal.css'
 
 // ── App template icon (tries CDN, falls back to initial letter) ───────────────
 
@@ -800,12 +801,27 @@ function UsersTab() {
   const [creating, setCreating] = useState(false)
   const [createMsg, setCreateMsg] = useState('')
 
+  // Edit user modal state
+  const [editUser, setEditUser] = useState<User | null>(null)
+  const [editPw, setEditPw] = useState('')
+  const [editPwMsg, setEditPwMsg] = useState('')
+  const [editPwSaving, setEditPwSaving] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Password policy state
   const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_POLICY)
   const [savingPolicy, setSavingPolicy] = useState(false)
   const [policyMsg, setPolicyMsg] = useState('')
+
+  // Global MFA toggle
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [savingMfa, setSavingMfa] = useState(false)
+  const [mfaMsg, setMfaMsg] = useState('')
+
+  // Per-user TOTP actions in edit modal
+  const [totpActionMsg, setTotpActionMsg] = useState('')
+  const [totpActionSaving, setTotpActionSaving] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -818,6 +834,7 @@ function UsersTab() {
   useEffect(() => {
     load()
     passwordPolicyApi.get().then(setPolicy).catch(() => {})
+    mfaSettings.get().then(r => setMfaRequired(r.required)).catch(() => {})
   }, [])
 
   const handleCreate = async () => {
@@ -851,10 +868,70 @@ function UsersTab() {
     try {
       await users.delete(id)
       setUserList(prev => prev.filter(u => u.id !== id))
+      setConfirmDeleteId(null)
     } catch {
       // ignore — keep list unchanged
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleSetPassword = async () => {
+    if (!editUser || !editPw) return
+    const policyErr = checkPasswordPolicy(editPw, policy)
+    if (policyErr) { setEditPwMsg(policyErr); return }
+    setEditPwSaving(true)
+    setEditPwMsg('')
+    try {
+      await users.setPassword(editUser.id, editPw)
+      setEditPw('')
+      setEditPwMsg('Password updated.')
+    } catch (e: unknown) {
+      setEditPwMsg(e instanceof Error ? e.message : 'Failed to update password')
+    } finally {
+      setEditPwSaving(false)
+    }
+  }
+
+  const handleToggleMFA = async () => {
+    setSavingMfa(true)
+    setMfaMsg('')
+    try {
+      const res = await mfaSettings.put(!mfaRequired)
+      setMfaRequired(res.required)
+      setMfaMsg(res.required ? 'MFA requirement enabled.' : 'MFA requirement disabled.')
+    } catch (e: unknown) {
+      setMfaMsg(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSavingMfa(false)
+    }
+  }
+
+  const handleAdminDisableTOTP = async (userId: string) => {
+    setTotpActionSaving(true)
+    setTotpActionMsg('')
+    try {
+      await totpApi.adminDisable(userId)
+      setTotpActionMsg('TOTP disabled.')
+      load()
+    } catch (e: unknown) {
+      setTotpActionMsg(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setTotpActionSaving(false)
+    }
+  }
+
+  const handleAdminResetGrace = async (userId: string) => {
+    setTotpActionSaving(true)
+    setTotpActionMsg('')
+    try {
+      await totpApi.adminResetGrace(userId)
+      setTotpActionMsg('Grace login restored.')
+      load()
+    } catch (e: unknown) {
+      setTotpActionMsg(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setTotpActionSaving(false)
     }
   }
 
@@ -874,6 +951,7 @@ function UsersTab() {
   }
 
   return (
+    <>
     <div className="tab-content">
       <section className="settings-section">
         <div className="section-header">
@@ -892,6 +970,9 @@ function UsersTab() {
                 <div>
                   <span className="app-row-name">{u.email}</span>
                   <span className="app-pill-type" style={{ marginLeft: 8 }}>{u.role}</span>
+                  {u.totp_enabled && (
+                    <span className="totp-enabled-badge" style={{ marginLeft: 6 }}>MFA</span>
+                  )}
                 </div>
                 <div className="app-row-actions">
                   <span className="settings-kv-val" style={{ fontSize: '0.8em', marginRight: 8 }}>
@@ -901,11 +982,10 @@ function UsersTab() {
                     <span className="settings-kv-val" style={{ fontSize: '0.8em' }}>you</span>
                   ) : (
                     <button
-                      className="settings-btn danger settings-btn--sm"
-                      onClick={() => handleDelete(u.id)}
-                      disabled={deletingId === u.id}
+                      className="settings-btn settings-btn--sm"
+                      onClick={() => { setEditUser(u); setEditPw(''); setEditPwMsg(''); setTotpActionMsg('') }}
                     >
-                      {deletingId === u.id ? '…' : 'Remove'}
+                      Edit
                     </button>
                   )}
                 </div>
@@ -1008,7 +1088,130 @@ function UsersTab() {
           {policyMsg && <span className="settings-status-msg">{policyMsg}</span>}
         </div>
       </section>
+
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Multi-Factor Authentication</span>
+        </div>
+        <p className="settings-placeholder" style={{ marginBottom: 12 }}>
+          When enabled, all non-exempt users must enroll in TOTP. Each user gets one grace login to complete enrollment.
+        </p>
+        <div className="settings-field-row">
+          <label className="settings-label">Require MFA</label>
+          <label className="pw-policy-req-item">
+            <input
+              type="checkbox"
+              checked={mfaRequired}
+              onChange={handleToggleMFA}
+              disabled={savingMfa}
+            />
+            {mfaRequired ? 'Enabled' : 'Disabled'}
+          </label>
+        </div>
+        {mfaMsg && <span className="settings-status-msg" style={{ marginTop: 4, display: 'block' }}>{mfaMsg}</span>}
+      </section>
     </div>
+
+    {/* ── Edit User modal ── */}
+
+    {editUser && (
+      <div className="modal-backdrop" onClick={() => setEditUser(null)}>
+        <div className="modal-box" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <span className="modal-title">Edit User</span>
+            <button className="modal-close" onClick={() => setEditUser(null)}>✕</button>
+          </div>
+          <div className="modal-body">
+            <div className="settings-field-row" style={{ marginBottom: 4 }}>
+              <label className="settings-label">Email</label>
+              <span style={{ fontSize: '0.875rem', color: 'var(--text2)' }}>{editUser.email}</span>
+            </div>
+            <div className="settings-field-row" style={{ marginBottom: 4 }}>
+              <label className="settings-label">Role</label>
+              <span className="app-pill-type">{editUser.role}</span>
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+
+            <div className="section-title" style={{ fontSize: '0.8rem', marginBottom: 10 }}>Set Password</div>
+            <div className="settings-field-row">
+              <label className="settings-label">New password</label>
+              <input
+                className="settings-input"
+                type="password"
+                placeholder="New password"
+                value={editPw}
+                onChange={e => setEditPw(e.target.value)}
+              />
+            </div>
+            <div className="settings-actions">
+              <button className="settings-btn primary" onClick={handleSetPassword} disabled={editPwSaving || !editPw}>
+                {editPwSaving ? 'Saving…' : 'Update Password'}
+              </button>
+              {editPwMsg && <span className="settings-status-msg">{editPwMsg}</span>}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+
+            <div className="section-title" style={{ fontSize: '0.8rem', marginBottom: 10 }}>Two-Factor Authentication</div>
+            {totpActionMsg && (
+              <div className="settings-status-msg" style={{ marginBottom: 8 }}>{totpActionMsg}</div>
+            )}
+            {editUser.totp_enabled ? (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="settings-btn danger settings-btn--sm"
+                  onClick={() => handleAdminDisableTOTP(editUser.id)}
+                  disabled={totpActionSaving}
+                >
+                  {totpActionSaving ? '…' : 'Disable MFA'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>
+                  {editUser.totp_grace ? 'MFA not enrolled — grace login available.' : 'MFA not enrolled — grace used.'}
+                </span>
+                {!editUser.totp_grace && (
+                  <button
+                    className="settings-btn secondary settings-btn--sm"
+                    onClick={() => handleAdminResetGrace(editUser.id)}
+                    disabled={totpActionSaving}
+                  >
+                    {totpActionSaving ? '…' : 'Reset Grace'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+
+            <div className="section-title" style={{ fontSize: '0.8rem', marginBottom: 10, color: 'var(--red)' }}>Danger Zone</div>
+            {confirmDeleteId === editUser.id ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text2)' }}>Delete {editUser.email}?</span>
+                <button
+                  className="settings-btn danger settings-btn--sm"
+                  onClick={() => handleDelete(editUser.id)}
+                  disabled={deletingId === editUser.id}
+                >
+                  {deletingId === editUser.id ? '…' : 'Yes, delete'}
+                </button>
+                <button className="settings-btn settings-btn--sm" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+              </div>
+            ) : (
+              <button
+                className="settings-btn danger settings-btn--sm"
+                onClick={() => setConfirmDeleteId(editUser.id)}
+              >
+                Delete User
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 

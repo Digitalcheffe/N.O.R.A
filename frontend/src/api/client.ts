@@ -37,6 +37,9 @@ import type {
   ListResponse,
   LoginInput,
   LoginResponse,
+  MFARequiredResponse,
+  TOTPSetupResponse,
+  TOTPVerifyInput,
   MonitorCheck,
   PhysicalHost,
   ProxmoxGuestInfo,
@@ -100,8 +103,20 @@ export const auth = {
   me: () =>
     request<AuthUser>('GET', '/auth/me'),
 
-  login: (input: LoginInput) =>
-    request<LoginResponse>('POST', '/auth/login', input),
+  // login returns either a full session (200) or an MFA challenge (202).
+  login: async (input: LoginInput): Promise<LoginResponse | MFARequiredResponse> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(input),
+    })
+    if (res.status === 200 || res.status === 202) {
+      return res.json()
+    }
+    const payload = await res.json().catch(() => ({ error: 'Login failed' }))
+    throw new Error(payload.error ?? `HTTP ${res.status}`)
+  },
 
   register: (input: LoginInput) =>
     request<AuthUser>('POST', '/auth/register', input),
@@ -111,6 +126,34 @@ export const auth = {
 
   setupRequired: () =>
     request<{ required: boolean }>('GET', '/auth/setup-required'),
+}
+
+// ── TOTP ──────────────────────────────────────────────────────────────────────
+
+export const totp = {
+  // Initiate TOTP setup — generates secret, returns URI + raw secret for display.
+  setup: () =>
+    request<TOTPSetupResponse>('GET', '/auth/totp/setup'),
+
+  // Confirm the first code to activate TOTP.
+  confirm: (code: string) =>
+    request<User>('POST', '/auth/totp/confirm', { code }),
+
+  // Second-step verification during login (uses the mfa_token from auth.login 202).
+  verify: (input: TOTPVerifyInput) =>
+    request<LoginResponse>('POST', '/auth/totp/verify', input),
+
+  // User disables their own TOTP (requires current code as confirmation).
+  disableOwn: (code: string) =>
+    request<void>('DELETE', '/auth/totp/self', { code }),
+
+  // Admin: disable TOTP for any user.
+  adminDisable: (id: string) =>
+    request<void>('DELETE', `/users/${id}/totp`),
+
+  // Admin: restore a user's grace login.
+  adminResetGrace: (id: string) =>
+    request<void>('PUT', `/users/${id}/totp/grace`),
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -127,6 +170,9 @@ export const users = {
 
   delete: (id: string) =>
     request<void>('DELETE', `/users/${id}`),
+
+  setPassword: (id: string, password: string) =>
+    request<void>('PUT', `/users/${id}/password`, { password }),
 
   changePassword: (input: ChangePasswordInput) =>
     request<void>('PUT', '/users/me/password', input),
@@ -369,6 +415,14 @@ export const passwordPolicy = {
 
   put: (p: PasswordPolicy) =>
     request<PasswordPolicy>('PUT', '/settings/password-policy', p),
+}
+
+export const mfaSettings = {
+  get: () =>
+    request<{ required: boolean }>('GET', '/settings/mfa-required'),
+
+  put: (required: boolean) =>
+    request<{ required: boolean }>('PUT', '/settings/mfa-required', { required }),
 }
 
 export const digestReport = {
