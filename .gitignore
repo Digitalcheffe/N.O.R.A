@@ -7,11 +7,13 @@ frontend/dist/
 frontend/.vite/
 bin/
 *.exe
-# Claude Code — keep local, do not publish
+# Claude Code and local docs — keep local, do not publish
 CLAUDE.md
 AGENTS.md
+ARCHITECTURE.md
 .claude/
 wiki/
+docs/
 # Allow the embed placeholder so the Go build works locally
 !internal/frontend/dist/
 !internal/frontend/dist/.gitkeep
