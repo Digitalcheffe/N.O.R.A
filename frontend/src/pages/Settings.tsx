@@ -932,11 +932,9 @@ function UsersTab() {
       const updated = await users.update(editUser.id, { email: editEmail, role: editRole })
       if (editPw) {
         await users.setPassword(editUser.id, editPw)
-        setEditPw('')
       }
-      setEditUser(updated)
       setUserList(prev => prev.map(u => u.id === updated.id ? updated : u))
-      setEditMsg('Saved.')
+      setEditUser(null)
     } catch (e: unknown) {
       setEditMsg(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -1173,16 +1171,8 @@ function UsersTab() {
               placeholder="••••••••"
               value={editPw}
               onChange={e => setEditPw(e.target.value)}
-              style={{ marginBottom: 12 }}
+              style={{ marginBottom: 4 }}
             />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <button className="modal-btn-primary" onClick={handleUpdateUser} disabled={editSaving || !editEmail}>
-                {editSaving ? 'Saving…' : 'Save'}
-              </button>
-              <button className="modal-btn-ghost" onClick={() => setEditUser(null)}>Cancel</button>
-              {editMsg && <span style={{ fontSize: '0.8rem', color: editMsg === 'Saved.' ? 'var(--accent)' : 'var(--red)' }}>{editMsg}</span>}
-            </div>
 
             <hr className="modal-section-divider" />
 
@@ -1251,6 +1241,14 @@ function UsersTab() {
                 Delete User
               </button>
             )}
+
+          </div>
+          <div className="modal-footer">
+            <button className="modal-btn-primary" onClick={handleUpdateUser} disabled={editSaving || !editEmail}>
+              {editSaving ? 'Saving…' : 'Save'}
+            </button>
+            <button className="modal-btn-ghost" onClick={() => setEditUser(null)}>Cancel</button>
+            {editMsg && <span style={{ fontSize: '0.8rem', color: 'var(--red)', marginLeft: 4 }}>{editMsg}</span>}
           </div>
         </div>
       </div>
