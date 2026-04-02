@@ -31,7 +31,7 @@ func (h *IconsHandler) Serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.fetcher.ServeIcon(w, name) {
-		h.fetcher.EnsureIcon(name) // fetch in background for next request
+		h.fetcher.EnsureIcon(name, "") // fetch in background for next request; slug unknown at this point
 		writeError(w, http.StatusNotFound, "icon not available")
 	}
 }

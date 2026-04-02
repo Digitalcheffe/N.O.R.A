@@ -51,7 +51,7 @@ func TestHandleIngest_HappyPath(t *testing.T) {
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(s, &apptemplate.NoopLoader{}, limiter))
 
 	appsR := chi.NewRouter()
-	api.NewAppsHandler(appRepo, nil, nil).Routes(appsR)
+	api.NewAppsHandler(appRepo, nil, nil, nil).Routes(appsR)
 
 	// Create an app
 	appBody, _ := json.Marshal(map[string]any{"name": "my-app", "rate_limit": 100})
@@ -139,7 +139,7 @@ func TestHandleIngest_RateLimit(t *testing.T) {
 
 	// Create app with limit of 1
 	appsR := chi.NewRouter()
-	api.NewAppsHandler(appRepo, nil, nil).Routes(appsR)
+	api.NewAppsHandler(appRepo, nil, nil, nil).Routes(appsR)
 	appBody, _ := json.Marshal(map[string]any{"name": "rate-app", "rate_limit": 1})
 	req := httptest.NewRequest(http.MethodPost, "/apps", bytes.NewReader(appBody))
 	req.Header.Set("Content-Type", "application/json")

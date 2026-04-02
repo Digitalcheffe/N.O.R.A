@@ -373,7 +373,8 @@ export interface DigestSchedule {
   frequency: DigestFrequency
   day_of_week: number    // 0–6, used when frequency=weekly
   day_of_month: number   // 1–28, used when frequency=monthly
-  send_hour?: number     // 0–23, defaults to 8 when absent
+  send_hour?: number     // 0–23 in server timezone, defaults to 17 when absent
+  timezone?: string      // read-only: IANA timezone name from server config (NORA_TIMEZONE)
 }
 
 export interface SMTPSettings {

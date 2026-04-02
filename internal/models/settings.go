@@ -9,14 +9,17 @@ type DigestSchedule struct {
 	DayOfWeek int `json:"day_of_week"`
 	// DayOfMonth is 1–28. Only used when Frequency = "monthly".
 	DayOfMonth int `json:"day_of_month"`
-	// SendHour is 0–23 (local server time). Nil means use the default (8).
+	// SendHour is 0–23 in the server timezone (NORA_TIMEZONE). Nil means use the default (17).
 	SendHour *int `json:"send_hour,omitempty"`
+	// Timezone is populated by the server on reads only; it reflects the NORA_TIMEZONE setting
+	// so the UI can display which timezone send_hour applies to. Not persisted.
+	Timezone string `json:"timezone,omitempty"`
 }
 
-// EffectiveSendHour returns the configured send hour, defaulting to 8 when unset.
+// EffectiveSendHour returns the configured send hour, defaulting to 17 when unset.
 func (s DigestSchedule) EffectiveSendHour() int {
 	if s.SendHour == nil {
-		return 8
+		return 17
 	}
 	return *s.SendHour
 }

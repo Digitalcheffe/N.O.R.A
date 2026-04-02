@@ -527,6 +527,16 @@
   max-width: 180px;
 }
 
+/* ── Inline hint (e.g. timezone label next to send time) ────────────────── */
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--text3, var(--text2));
+  margin-left: 8px;
+  align-self: center;
+  opacity: 0.75;
+}
+
 /* ── Status message ─────────────────────────────────────────────────────── */
 
 .settings-status-msg {

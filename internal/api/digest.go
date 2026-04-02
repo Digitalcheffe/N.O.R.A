@@ -20,11 +20,12 @@ const digestScheduleKey = "digest_schedule"
 type DigestHandler struct {
 	store     *repo.Store
 	digestJob *jobs.DigestJob
+	loc       *time.Location // same timezone as the digest job; used for period derivation
 }
 
 // NewDigestHandler creates a DigestHandler.
 func NewDigestHandler(store *repo.Store, digestJob *jobs.DigestJob) *DigestHandler {
-	return &DigestHandler{store: store, digestJob: digestJob}
+	return &DigestHandler{store: store, digestJob: digestJob, loc: digestJob.Location()}
 }
 
 // Routes registers the digest endpoints.
@@ -40,11 +41,13 @@ func (h *DigestHandler) GetSchedule(w http.ResponseWriter, r *http.Request) {
 	var sched models.DigestSchedule
 	err := h.store.Settings.GetJSON(r.Context(), digestScheduleKey, &sched)
 	if errors.Is(err, repo.ErrNotFound) {
-		sched = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1}
+		h17 := 17
+		sched = models.DigestSchedule{Frequency: "weekly", DayOfWeek: 5, DayOfMonth: 1, SendHour: &h17}
 	} else if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sched.Timezone = h.loc.String()
 	writeJSON(w, http.StatusOK, sched)
 }
 
@@ -103,12 +106,12 @@ func (h *DigestHandler) SendNow(w http.ResponseWriter, r *http.Request) {
 		var sched models.DigestSchedule
 		err := h.store.Settings.GetJSON(r.Context(), digestScheduleKey, &sched)
 		if errors.Is(err, repo.ErrNotFound) {
-			sched = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1}
+			sched = models.DigestSchedule{Frequency: "weekly", DayOfWeek: 5, DayOfMonth: 1}
 		} else if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		period = periodLabelFromSchedule(sched.Frequency, time.Now())
+		period = periodLabelFromSchedule(sched.Frequency, time.Now().In(h.loc))
 	}
 
 	// Detach from the request context — it is cancelled as soon as the 202
@@ -133,12 +136,12 @@ func (h *DigestHandler) GetReport(w http.ResponseWriter, r *http.Request) {
 		var sched models.DigestSchedule
 		err := h.store.Settings.GetJSON(r.Context(), digestScheduleKey, &sched)
 		if errors.Is(err, repo.ErrNotFound) {
-			sched = models.DigestSchedule{Frequency: "monthly"}
+			sched = models.DigestSchedule{Frequency: "weekly"}
 		} else if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		period = periodLabelFromSchedule(sched.Frequency, time.Now())
+		period = periodLabelFromSchedule(sched.Frequency, time.Now().In(h.loc))
 	}
 
 	html, err := h.digestJob.GenerateReportHTML(r.Context(), period)

@@ -32,19 +32,23 @@ func New(iconsDir string) (*Fetcher, error) {
 }
 
 // EnsureIcon fetches the icon for profileID in the background if not already cached.
-func (f *Fetcher) EnsureIcon(profileID string) {
+// iconSlug is the dashboard-icons CDN slug from the app template (e.g. "wireguard");
+// if non-empty it is tried first on the CDN before falling back to profileID.
+// The result is always stored as profileID.svg so the icon URL stays stable.
+func (f *Fetcher) EnsureIcon(profileID, iconSlug string) {
 	if profileID == "" {
 		return
 	}
 	if _, err := os.Stat(f.iconPath(profileID)); err == nil {
 		return // already cached
 	}
-	go f.fetch(context.Background(), profileID)
+	go f.fetch(context.Background(), profileID, iconSlug)
 }
 
 // FetchAll ensures icons exist for all given profile IDs. Runs concurrently.
+// slugOverrides maps profileID → CDN icon slug; pass nil if no overrides.
 // Safe to call from main on startup.
-func (f *Fetcher) FetchAll(ctx context.Context, profileIDs []string) {
+func (f *Fetcher) FetchAll(ctx context.Context, profileIDs []string, slugOverrides map[string]string) {
 	seen := make(map[string]bool)
 	for _, id := range profileIDs {
 		if id == "" || seen[id] {
@@ -55,7 +59,8 @@ func (f *Fetcher) FetchAll(ctx context.Context, profileIDs []string) {
 			continue // already cached
 		}
 		id := id
-		go f.fetch(ctx, id)
+		slug := slugOverrides[id]
+		go f.fetch(ctx, id, slug)
 	}
 }
 
@@ -76,9 +81,15 @@ func (f *Fetcher) iconPath(profileID string) string {
 	return filepath.Join(f.iconsDir, profileID+".svg")
 }
 
-func (f *Fetcher) fetch(ctx context.Context, profileID string) {
-	// Try exact name first, then hyphen variant (e.g. adguardhome → adguard-home)
-	candidates := []string{profileID}
+func (f *Fetcher) fetch(ctx context.Context, profileID, iconSlug string) {
+	// Build CDN candidate list. The template's icon slug (if any) takes priority
+	// so authors can point directly to any dashboard-icons name regardless of profileID.
+	var candidates []string
+	if iconSlug != "" && iconSlug != profileID {
+		candidates = append(candidates, iconSlug)
+	}
+	// Try exact profileID, then hyphen variant (e.g. adguardhome → adguard-home)
+	candidates = append(candidates, profileID)
 	if hyph := strings.ReplaceAll(profileID, "_", "-"); hyph != profileID {
 		candidates = append(candidates, hyph)
 	}

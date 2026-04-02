@@ -134,12 +134,23 @@ type DigestJob struct {
 	store    *repo.Store
 	config   *config.Config
 	profiler apptemplate.Loader // optional; nil = no per-app category breakdown
+	loc      *time.Location    // timezone for schedule evaluation; derived from config.Timezone
 }
 
 // NewDigestJob creates a DigestJob.
 // profiler may be nil — if absent, app category sections are omitted.
 func NewDigestJob(store *repo.Store, cfg *config.Config, profiler apptemplate.Loader) *DigestJob {
-	return &DigestJob{store: store, config: cfg, profiler: profiler}
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		log.Printf("digest: invalid NORA_TIMEZONE %q, falling back to UTC: %v", cfg.Timezone, err)
+		loc = time.UTC
+	}
+	return &DigestJob{store: store, config: cfg, profiler: profiler, loc: loc}
+}
+
+// Location returns the timezone location used for schedule evaluation.
+func (d *DigestJob) Location() *time.Location {
+	return d.loc
 }
 
 // Run is called every hour. It reads the stored schedule and decides whether
@@ -148,13 +159,15 @@ func (d *DigestJob) Run(ctx context.Context) error {
 	var schedule models.DigestSchedule
 	err := d.store.Settings.GetJSON(ctx, digestScheduleKey, &schedule)
 	if errors.Is(err, repo.ErrNotFound) {
-		h := 8
-		schedule = models.DigestSchedule{Frequency: "monthly", DayOfWeek: 1, DayOfMonth: 1, SendHour: &h}
+		h := 17
+		schedule = models.DigestSchedule{Frequency: "weekly", DayOfWeek: 5, DayOfMonth: 1, SendHour: &h}
 	} else if err != nil {
 		return fmt.Errorf("digest: read schedule: %w", err)
 	}
 
-	now := time.Now()
+	// Use the configured timezone so send_hour is interpreted in the user's local time,
+	// not the container's UTC clock.
+	now := time.Now().In(d.loc)
 	if now.Hour() != schedule.EffectiveSendHour() {
 		return nil
 	}
