@@ -101,13 +101,15 @@ Open `http://localhost:8080` — create your admin account and add your first ap
 
 NORA ships with 29 pre-built profiles. Pick your app and NORA already knows how to handle its events.
 
-**Media** — Plex · Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Overseerr · Tubesync · NZBGet
-**Automation** — n8n · Home Assistant · Mealie
-**Infrastructure** — Traefik · Unifi · WG-Easy
-**Security & DNS** — AdGuard Home · Cloudflare DDNS · Vaultwarden
-**Backup & Updates** — Duplicati · Watchtower · DIUN
-**Notifications & Comms** — Gotify · Ghost · Matrix · Maubot
-**Other** — Uptime Kuma · Homepage · Zwavejs2mqtt
+| Category | Apps |
+|---|---|
+| Media | Plex · Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Overseerr · Tubesync · NZBGet |
+| Automation | n8n · Home Assistant · Mealie |
+| Infrastructure | Traefik · Unifi · WG-Easy |
+| Security & DNS | AdGuard Home · Cloudflare DDNS · Vaultwarden |
+| Backup & Updates | Duplicati · Watchtower · DIUN |
+| Notifications & Comms | Gotify · Ghost · Matrix · Maubot |
+| Other | Uptime Kuma · Homepage · Zwavejs2mqtt |
 
 Don't see your app? The custom profile editor lets you map any webhook payload to NORA's event model.
 
