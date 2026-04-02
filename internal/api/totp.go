@@ -28,6 +28,7 @@ func (h *TOTPHandler) Routes(r chi.Router) {
 	r.Get("/auth/totp/setup", h.Setup)
 	r.Post("/auth/totp/confirm", h.Confirm)
 	r.Delete("/auth/totp/self", h.DisableOwn)
+	r.Put("/auth/totp/self/enable", h.EnableOwn)
 
 	// Admin manages other users' TOTP
 	r.Delete("/users/{id}/totp", h.AdminDisable)
@@ -218,6 +219,26 @@ func (h *TOTPHandler) AdminDisable(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := h.users.DisableTOTP(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to disable TOTP")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// EnableOwn re-enables TOTP for the authenticated user using their existing secret.
+// PUT /api/v1/auth/totp/self/enable
+func (h *TOTPHandler) EnableOwn(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserID(r.Context())
+	secret, enabled, _, _, err := h.users.GetTOTPData(r.Context(), userID)
+	if err != nil || secret == "" {
+		writeError(w, http.StatusBadRequest, "no TOTP secret enrolled — use setup flow")
+		return
+	}
+	if enabled {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := h.users.EnableTOTP(r.Context(), userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to enable TOTP")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -15,6 +15,21 @@ export function Profile() {
     mfaSettings.get().then(r => setMfaRequired(r.required)).catch(() => {})
   }, [])
 
+  // Re-enable TOTP using existing secret
+  const totpEnrolled = user?.totp_enrolled ?? false
+  const [reEnabling, setReEnabling] = useState(false)
+  const handleReEnable = async () => {
+    setReEnabling(true)
+    try {
+      await totpApi.enableOwn()
+      await refreshUser()
+    } catch (e: unknown) {
+      console.error(e)
+    } finally {
+      setReEnabling(false)
+    }
+  }
+
   // ── Change Password ──────────────────────────────────────────────────────────
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -300,6 +315,19 @@ export function Profile() {
                   </button>
                   {confirmMsg && <span className="settings-status-msg" style={{ color: 'var(--red)' }}>{confirmMsg}</span>}
                 </div>
+              </>
+            ) : totpEnrolled ? (
+              <>
+                <p className="settings-placeholder" style={{ marginBottom: 12 }}>
+                  TOTP is enrolled but currently disabled. You can re-enable it using your existing authenticator app — no re-scan required.
+                </p>
+                <button
+                  className="settings-btn primary"
+                  onClick={handleReEnable}
+                  disabled={reEnabling}
+                >
+                  {reEnabling ? 'Enabling…' : 'Re-enable TOTP'}
+                </button>
               </>
             ) : (
               <>

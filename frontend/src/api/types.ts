@@ -21,6 +21,7 @@ export interface AuthUser {
   email: string
   role: 'admin' | 'member'
   totp_enabled: boolean
+  totp_enrolled: boolean
   totp_grace: boolean
   totp_exempt: boolean
 }
@@ -60,6 +61,7 @@ export interface User {
   role: 'admin' | 'member'
   created_at: string
   totp_enabled: boolean
+  totp_enrolled: boolean
   totp_grace: boolean
   totp_exempt: boolean
 }

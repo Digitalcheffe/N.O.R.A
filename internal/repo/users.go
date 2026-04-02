@@ -31,7 +31,7 @@ type UserRepo interface {
 	SetTOTPSecret(ctx context.Context, id string, secret string) error
 	// EnableTOTP marks TOTP as confirmed/active and clears grace.
 	EnableTOTP(ctx context.Context, id string) error
-	// DisableTOTP clears the TOTP secret, disables TOTP, and restores grace to 1.
+	// DisableTOTP turns off TOTP (keeps the secret so re-enabling doesn't require re-scanning).
 	DisableTOTP(ctx context.Context, id string) error
 	// ClearGrace sets totp_grace = 0 (called after a grace login).
 	ClearGrace(ctx context.Context, id string) error
@@ -53,7 +53,7 @@ func NewUserRepo(db *sqlx.DB) UserRepo {
 func (r *sqliteUserRepo) List(ctx context.Context) ([]models.User, error) {
 	var users []models.User
 	err := r.db.SelectContext(ctx, &users, `
-		SELECT id, email, role, created_at, totp_enabled, totp_grace, totp_exempt
+		SELECT id, email, role, created_at, totp_enabled, (totp_secret IS NOT NULL AND totp_secret != '') AS totp_enrolled, totp_grace, totp_exempt
 		FROM users ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
@@ -90,7 +90,7 @@ func (r *sqliteUserRepo) Delete(ctx context.Context, id string) error {
 func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
 	var u models.User
 	err := r.db.GetContext(ctx, &u, `
-		SELECT id, email, role, created_at, totp_enabled, totp_grace, totp_exempt
+		SELECT id, email, role, created_at, totp_enabled, (totp_secret IS NOT NULL AND totp_secret != '') AS totp_enrolled, totp_grace, totp_exempt
 		FROM users WHERE id = ?`, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -108,7 +108,7 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*models.
 		PasswordHash string `db:"password_hash"`
 	}
 	err := r.db.GetContext(ctx, &row, `
-		SELECT id, email, role, created_at, totp_enabled, totp_grace, totp_exempt, password_hash
+		SELECT id, email, role, created_at, totp_enabled, (totp_secret IS NOT NULL AND totp_secret != '') AS totp_enrolled, totp_grace, totp_exempt, password_hash
 		FROM users WHERE email = ?`, email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -191,10 +191,11 @@ func (r *sqliteUserRepo) EnableTOTP(ctx context.Context, id string) error {
 	return err
 }
 
-// DisableTOTP clears the TOTP secret, disables TOTP, and resets grace to 1.
+// DisableTOTP turns TOTP off without clearing the secret.
+// The secret is retained so the user can re-enable without re-scanning.
 func (r *sqliteUserRepo) DisableTOTP(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE users SET totp_secret = NULL, totp_enabled = 0, totp_grace = 1 WHERE id = ?`, id)
+		`UPDATE users SET totp_enabled = 0 WHERE id = ?`, id)
 	return err
 }
 

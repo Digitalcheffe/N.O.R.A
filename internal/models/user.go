@@ -8,7 +8,8 @@ type User struct {
 	Email       string    `db:"email"        json:"email"`
 	Role        string    `db:"role"         json:"role"`
 	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
-	TOTPEnabled bool `db:"totp_enabled" json:"totp_enabled"`
-	TOTPGrace   bool `db:"totp_grace"   json:"totp_grace"`
-	TOTPExempt  bool `db:"totp_exempt"  json:"totp_exempt"`
+	TOTPEnabled  bool `db:"totp_enabled"  json:"totp_enabled"`
+	TOTPEnrolled bool `db:"totp_enrolled" json:"totp_enrolled"` // true when a secret is stored (even if disabled)
+	TOTPGrace    bool `db:"totp_grace"    json:"totp_grace"`
+	TOTPExempt   bool `db:"totp_exempt"   json:"totp_exempt"`
 }

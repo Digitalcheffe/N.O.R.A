@@ -148,6 +148,10 @@ export const totp = {
   disableOwn: (code: string) =>
     request<void>('DELETE', '/auth/totp/self', { code }),
 
+  // User re-enables TOTP using the existing secret (no new QR needed).
+  enableOwn: () =>
+    request<void>('PUT', '/auth/totp/self/enable'),
+
   // Admin: disable TOTP for any user.
   adminDisable: (id: string) =>
     request<void>('DELETE', `/users/${id}/totp`),
