@@ -927,24 +927,11 @@ func (d *DigestJob) adminEmails(ctx context.Context) ([]string, error) {
 	return nil, nil
 }
 
-// smtpSettings reads SMTP config from the settings table or environment.
+// smtpSettings reads SMTP config from the settings table.
 func (d *DigestJob) smtpSettings(ctx context.Context) (*models.SMTPSettings, error) {
 	var s models.SMTPSettings
-	err := d.store.Settings.GetJSON(ctx, smtpSettingsKey, &s)
-	if errors.Is(err, repo.ErrNotFound) {
-		if d.config.SMTPHost == "" {
-			return nil, fmt.Errorf("smtp not configured")
-		}
-		return &models.SMTPSettings{
-			Host: d.config.SMTPHost,
-			Port: d.config.SMTPPort,
-			User: d.config.SMTPUser,
-			Pass: d.config.SMTPPass,
-			From: d.config.SMTPFrom,
-		}, nil
-	}
-	if err != nil {
-		return nil, err
+	if err := d.store.Settings.GetJSON(ctx, smtpSettingsKey, &s); err != nil {
+		return nil, fmt.Errorf("smtp not configured")
 	}
 	if s.Host == "" {
 		return nil, fmt.Errorf("smtp not configured")

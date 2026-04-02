@@ -3,23 +3,18 @@ package config
 import (
 	"log"
 	"os"
-	"strconv"
 )
 
 type Config struct {
 	Secret         string
 	DBPath         string
 	Port           string
-	SMTPHost       string
-	SMTPPort       int
-	SMTPUser       string
-	SMTPPass       string
-	SMTPFrom       string
+	LogLevel       string // "debug" enables verbose request logging; default is minimal
 	DigestSchedule string
 	VAPIDPublic    string
 	VAPIDPrivate   string
-	TemplatesPath string
-	IconsPath     string
+	TemplatesPath  string
+	IconsPath      string
 	// Bootstrap admin credentials — used only when the users table is empty.
 	AdminEmail    string
 	AdminPassword string
@@ -36,11 +31,7 @@ func Load() *Config {
 		TemplatesPath:  getEnvStr("NORA_TEMPLATES_PATH", "/data/templates"),
 		IconsPath:      getEnvStr("NORA_ICONS_PATH", "/data/icons"),
 		Port:           getEnvStr("NORA_PORT", "8081"),
-		SMTPHost:       os.Getenv("NORA_SMTP_HOST"),
-		SMTPPort:       getEnvInt("NORA_SMTP_PORT", 587),
-		SMTPUser:       os.Getenv("NORA_SMTP_USER"),
-		SMTPPass:       os.Getenv("NORA_SMTP_PASS"),
-		SMTPFrom:       os.Getenv("NORA_SMTP_FROM"),
+		LogLevel:       getEnvStr("NORA_LOG_LEVEL", "info"),
 		DigestSchedule: getEnvStr("NORA_DIGEST_SCHEDULE", "0 8 1 * *"),
 		VAPIDPublic:    os.Getenv("NORA_VAPID_PUBLIC"),
 		VAPIDPrivate:   os.Getenv("NORA_VAPID_PRIVATE"),
@@ -55,6 +46,11 @@ func Load() *Config {
 	return cfg
 }
 
+// IsDebug returns true when NORA_LOG_LEVEL=debug.
+func (c *Config) IsDebug() bool {
+	return c.LogLevel == "debug"
+}
+
 func getEnvStr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -62,14 +58,3 @@ func getEnvStr(key, def string) string {
 	return def
 }
 
-func getEnvInt(key string, def int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return def
-	}
-	i, err := strconv.Atoi(v)
-	if err != nil {
-		return def
-	}
-	return i
-}

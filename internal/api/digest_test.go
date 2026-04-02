@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -51,12 +52,7 @@ func newDigestRouter(t *testing.T) (http.Handler, *repo.Store) {
 // so that SMTP-gated endpoints (PUT schedule, POST send-now) are accessible.
 func newDigestRouterWithSMTP(t *testing.T) (http.Handler, *repo.Store) {
 	t.Helper()
-	cfg := &config.Config{
-		SMTPHost: "smtp.example.com",
-		SMTPPort: 587,
-		SMTPFrom: "nora@example.com",
-	}
-	// Re-create the handler with SMTP available via config fallback.
+	cfg := &config.Config{}
 	db := newTestDB(t)
 	store2 := repo.NewStore(
 		repo.NewAppRepo(db),
@@ -80,6 +76,11 @@ func newDigestRouterWithSMTP(t *testing.T) (http.Handler, *repo.Store) {
 		nil,
 		nil,
 	)
+	// Seed SMTP into settings so SMTP-gated endpoints are accessible.
+	smtpSettings := models.SMTPSettings{Host: "smtp.example.com", Port: 587, From: "nora@example.com"}
+	if err := store2.Settings.SetJSON(context.Background(), "smtp", smtpSettings); err != nil {
+		t.Fatalf("seed smtp settings: %v", err)
+	}
 	digestJob2 := jobs.NewDigestJob(store2, cfg, nil)
 	h2 := api.NewDigestHandler(store2, digestJob2)
 	r2 := chi.NewRouter()

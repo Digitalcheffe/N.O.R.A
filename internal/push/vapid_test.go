@@ -1,13 +1,19 @@
 package push
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/digitalcheffe/nora/internal/config"
 )
 
+func cfgWithTempDir(t *testing.T) *config.Config {
+	t.Helper()
+	return &config.Config{DBPath: filepath.Join(t.TempDir(), "nora.db")}
+}
+
 func TestEnsureVAPIDKeys_GeneratesWhenMissing(t *testing.T) {
-	cfg := &config.Config{}
+	cfg := cfgWithTempDir(t)
 
 	if err := EnsureVAPIDKeys(cfg); err != nil {
 		t.Fatalf("EnsureVAPIDKeys: %v", err)
@@ -22,10 +28,9 @@ func TestEnsureVAPIDKeys_GeneratesWhenMissing(t *testing.T) {
 }
 
 func TestEnsureVAPIDKeys_UsesExistingKeys(t *testing.T) {
-	cfg := &config.Config{
-		VAPIDPublic:  "existing-public",
-		VAPIDPrivate: "existing-private",
-	}
+	cfg := cfgWithTempDir(t)
+	cfg.VAPIDPublic = "existing-public"
+	cfg.VAPIDPrivate = "existing-private"
 
 	if err := EnsureVAPIDKeys(cfg); err != nil {
 		t.Fatalf("EnsureVAPIDKeys: %v", err)
@@ -40,8 +45,8 @@ func TestEnsureVAPIDKeys_UsesExistingKeys(t *testing.T) {
 }
 
 func TestEnsureVAPIDKeys_GeneratesUniqueKeyPairs(t *testing.T) {
-	cfg1 := &config.Config{}
-	cfg2 := &config.Config{}
+	cfg1 := cfgWithTempDir(t)
+	cfg2 := cfgWithTempDir(t)
 
 	if err := EnsureVAPIDKeys(cfg1); err != nil {
 		t.Fatalf("first EnsureVAPIDKeys: %v", err)
@@ -52,5 +57,26 @@ func TestEnsureVAPIDKeys_GeneratesUniqueKeyPairs(t *testing.T) {
 
 	if cfg1.VAPIDPublic == cfg2.VAPIDPublic {
 		t.Error("expected two generated key pairs to differ")
+	}
+}
+
+func TestEnsureVAPIDKeys_PersistsAndReloads(t *testing.T) {
+	cfg1 := cfgWithTempDir(t)
+
+	if err := EnsureVAPIDKeys(cfg1); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+
+	// Second config pointing at the same data dir simulates a restart.
+	cfg2 := &config.Config{DBPath: cfg1.DBPath}
+	if err := EnsureVAPIDKeys(cfg2); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+
+	if cfg1.VAPIDPublic != cfg2.VAPIDPublic {
+		t.Error("expected keys to be the same after reload from file")
+	}
+	if cfg1.VAPIDPrivate != cfg2.VAPIDPrivate {
+		t.Error("expected private key to be the same after reload from file")
 	}
 }

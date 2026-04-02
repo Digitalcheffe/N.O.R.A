@@ -37,9 +37,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const version = "1.0.0"
+
 func main() {
 	cfg := config.Load()
 	startTime := time.Now()
+
+	log.Printf("================================================")
+	log.Printf("  N.O.R.A  v%s", version)
+	log.Printf("  Nexus Operations Recon & Alerts")
+	log.Printf("================================================")
 
 	// File logging — write to NORA_LOG_PATH alongside stdout so logs persist.
 	if logPath := os.Getenv("NORA_LOG_PATH"); logPath != "" {
@@ -64,7 +71,7 @@ func main() {
 	}
 	defer db.Close()
 
-	log.Printf("NORA database ready at %s", cfg.DBPath)
+	log.Printf("  database : %s", cfg.DBPath)
 
 	// Repositories
 	appRepo := repo.NewAppRepo(db)
@@ -142,7 +149,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("app template registry init failed: %v", err)
 	}
-	log.Printf("loaded %d app templates from %s", len(registry.List()), cfg.TemplatesPath)
+	log.Printf("  templates: %d loaded from %s", len(registry.List()), cfg.TemplatesPath)
 
 	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
 	iconFetcher, err := icons.New(cfg.IconsPath)
@@ -461,8 +468,17 @@ func main() {
 
 	// Router
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	if cfg.IsDebug() {
+		r.Use(middleware.Logger)
+	}
 	r.Use(middleware.Recoverer)
+
+	// Health check — public, no auth required
+	r.Get("/api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
 
 	// Public routes — no session auth
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
@@ -492,7 +508,7 @@ func main() {
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
-		api.NewUsersHandler(userRepo, store.Settings, cfg).Routes(r)
+		api.NewUsersHandler(userRepo, store.Settings).Routes(r)
 		totpHandler.Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
@@ -517,10 +533,38 @@ func main() {
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("NORA listening on %s", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("server error: %v", err)
+	log.Printf("  port     : %s", cfg.Port)
+	log.Printf("  log level: %s", cfg.LogLevel)
+	log.Printf("================================================")
+
+	// Start server in background so we can run a startup health check.
+	go func() {
+		if err := http.ListenAndServe(addr, r); err != nil {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	// Startup health check — verify the server is accepting connections.
+	healthURL := fmt.Sprintf("http://localhost:%s/api/v1/health", cfg.Port)
+	for i := 0; i < 10; i++ {
+		time.Sleep(200 * time.Millisecond)
+		resp, err := http.Get(healthURL)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				log.Printf("  health   : OK — ready in %s", time.Since(startTime).Round(time.Millisecond))
+				log.Printf("================================================")
+				break
+			}
+		}
+		if i == 9 {
+			log.Printf("  health   : WARN — server did not respond after startup")
+			log.Printf("================================================")
+		}
 	}
+
+	// Block forever.
+	select {}
 }
 
 // seedAdmin creates the first admin user from the bootstrap env vars.
