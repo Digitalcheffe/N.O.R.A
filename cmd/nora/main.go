@@ -461,8 +461,17 @@ func main() {
 
 	// Router
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+	if cfg.IsDebug() {
+		r.Use(middleware.Logger)
+	}
 	r.Use(middleware.Recoverer)
+
+	// Health check — public, no auth required
+	r.Get("/api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
 
 	// Public routes — no session auth
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
@@ -517,10 +526,34 @@ func main() {
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("NORA listening on %s", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("server error: %v", err)
+	log.Printf("NORA listening on %s (log level: %s)", addr, cfg.LogLevel)
+
+	// Start server in background so we can run a startup health check.
+	go func() {
+		if err := http.ListenAndServe(addr, r); err != nil {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	// Startup health check — verify the server is accepting connections.
+	healthURL := fmt.Sprintf("http://localhost:%s/api/v1/health", cfg.Port)
+	for i := 0; i < 10; i++ {
+		time.Sleep(200 * time.Millisecond)
+		resp, err := http.Get(healthURL)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				log.Printf("NORA health check OK — startup complete in %s", time.Since(startTime).Round(time.Millisecond))
+				break
+			}
+		}
+		if i == 9 {
+			log.Printf("NORA health check did not respond after startup — server may still be initializing")
+		}
 	}
+
+	// Block forever.
+	select {}
 }
 
 // seedAdmin creates the first admin user from the bootstrap env vars.

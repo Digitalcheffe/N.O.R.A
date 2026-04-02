@@ -10,6 +10,7 @@ type Config struct {
 	Secret         string
 	DBPath         string
 	Port           string
+	LogLevel       string // "debug" enables verbose request logging; default is minimal
 	SMTPHost       string
 	SMTPPort       int
 	SMTPUser       string
@@ -36,6 +37,7 @@ func Load() *Config {
 		TemplatesPath:  getEnvStr("NORA_TEMPLATES_PATH", "/data/templates"),
 		IconsPath:      getEnvStr("NORA_ICONS_PATH", "/data/icons"),
 		Port:           getEnvStr("NORA_PORT", "8081"),
+		LogLevel:       getEnvStr("NORA_LOG_LEVEL", "info"),
 		SMTPHost:       os.Getenv("NORA_SMTP_HOST"),
 		SMTPPort:       getEnvInt("NORA_SMTP_PORT", 587),
 		SMTPUser:       os.Getenv("NORA_SMTP_USER"),
@@ -53,6 +55,11 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+// IsDebug returns true when NORA_LOG_LEVEL=debug.
+func (c *Config) IsDebug() bool {
+	return c.LogLevel == "debug"
 }
 
 func getEnvStr(key, def string) string {

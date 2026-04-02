@@ -137,6 +137,7 @@ Profile contributions are welcome — drop a YAML file in a GitHub issue or disc
 | `NORA_SECRET` | JWT signing secret | — | Yes |
 | `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
 | `NORA_PORT` | HTTP port | `8081` | No |
+| `NORA_LOG_LEVEL` | Set to `debug` to enable verbose request logging; default shows startup and errors only | `info` | No |
 | `NORA_TEMPLATES_PATH` | Path to app profile templates on disk | `/data/templates` | No |
 | `NORA_ICONS_PATH` | Path to cached app icons on disk | `/data/icons` | No |
 | `NORA_SMTP_HOST` | SMTP server hostname | — | No |
