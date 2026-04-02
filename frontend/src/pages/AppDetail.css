@@ -166,6 +166,223 @@
 
 .detail-delete-warn strong { color: var(--text); }
 
+/* ── APP ICON / DESCRIPTION ROW (below header, above stats) ── */
+.detail-app-icon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.detail-app-icon-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.detail-app-description {
+  font-size: 12px;
+  color: var(--text2);
+  font-family: var(--sans);
+  flex: 1;
+}
+
+.detail-app-homepage {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.detail-app-homepage:hover { color: var(--accent); }
+
+/* ── SERVICE DETAIL PANEL ── */
+.service-detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+  animation: fadeUp 0.25s ease both;
+}
+
+.service-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.service-hero-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.service-hero-icon img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.service-hero-monogram {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.service-hero-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.service-capability-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 3px;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  width: fit-content;
+}
+
+.service-capability-desc {
+  font-size: 12px;
+  color: var(--text3);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.service-base-url {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.service-base-url:hover { color: var(--accent); }
+.service-homepage { color: var(--text3); }
+
+/* ── SERVICE CHECKS ── */
+.service-checks-section {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.service-checks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.service-checks-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+}
+
+.service-add-check-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.service-add-check-btn:hover { background: var(--accent-dim); }
+
+.service-checks-empty {
+  padding: 24px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.service-checks-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.service-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.service-check-row:last-child { border-bottom: none; }
+.service-check-row:hover { background: var(--bg3); }
+
+.service-check-type {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text2);
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
+.service-check-target {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-check-name {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+
+.service-check-status {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 /* ── STATS ROW ── */
 .detail-stats-row {
   display: flex;
