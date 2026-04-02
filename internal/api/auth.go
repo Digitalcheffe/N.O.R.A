@@ -16,13 +16,14 @@ import (
 
 // AuthHandler serves authentication endpoints.
 type AuthHandler struct {
-	users  repo.UserRepo
-	secret string
+	users    repo.UserRepo
+	settings repo.SettingsRepo
+	secret   string
 }
 
 // NewAuthHandler creates an AuthHandler.
-func NewAuthHandler(users repo.UserRepo, secret string) *AuthHandler {
-	return &AuthHandler{users: users, secret: secret}
+func NewAuthHandler(users repo.UserRepo, settings repo.SettingsRepo, secret string) *AuthHandler {
+	return &AuthHandler{users: users, settings: settings, secret: secret}
 }
 
 // Routes registers auth endpoints on r.
@@ -112,6 +113,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == "" {
 		writeError(w, http.StatusBadRequest, "password is required")
+		return
+	}
+	policy := loadPasswordPolicy(r.Context(), h.settings)
+	if err := validatePassword(req.Password, policy); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

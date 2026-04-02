@@ -15,12 +15,13 @@ import (
 
 // UsersHandler serves user management endpoints.
 type UsersHandler struct {
-	users repo.UserRepo
+	users    repo.UserRepo
+	settings repo.SettingsRepo
 }
 
 // NewUsersHandler creates a UsersHandler.
-func NewUsersHandler(users repo.UserRepo) *UsersHandler {
-	return &UsersHandler{users: users}
+func NewUsersHandler(users repo.UserRepo, settings repo.SettingsRepo) *UsersHandler {
+	return &UsersHandler{users: users, settings: settings}
 }
 
 // Routes registers user endpoints on r.
@@ -69,6 +70,11 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == "" {
 		writeError(w, http.StatusBadRequest, "password is required")
+		return
+	}
+	policy := loadPasswordPolicy(r.Context(), h.settings)
+	if err := validatePassword(req.Password, policy); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	role := req.Role
@@ -138,6 +144,11 @@ func (h *UsersHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.CurrentPassword == "" || req.NewPassword == "" {
 		writeError(w, http.StatusBadRequest, "current_password and new_password are required")
+		return
+	}
+	policy := loadPasswordPolicy(r.Context(), h.settings)
+	if err := validatePassword(req.NewPassword, policy); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

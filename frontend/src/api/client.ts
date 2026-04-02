@@ -47,6 +47,7 @@ import type {
   ResourceSummary,
   Rule,
   RuleSourcesResponse,
+  PasswordPolicy,
   SMTPSettings,
   SNMPDetail,
   ScanResult,
@@ -360,6 +361,14 @@ export const smtpSettings = {
 
   test: () =>
     request<{ status: string; to: string }>('POST', '/settings/smtp/test'),
+}
+
+export const passwordPolicy = {
+  get: () =>
+    request<PasswordPolicy>('GET', '/settings/password-policy'),
+
+  put: (p: PasswordPolicy) =>
+    request<PasswordPolicy>('PUT', '/settings/password-policy', p),
 }
 
 export const digestReport = {

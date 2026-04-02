@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
-import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push, notifyRules, jobsApi } from '../api/client'
+import { appTemplates, digestSettings, digestReport, smtpSettings, metrics, users, push, notifyRules, jobsApi, passwordPolicy as passwordPolicyApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { usePushSubscription } from '../hooks/usePushSubscription'
 import type {
@@ -19,6 +19,7 @@ import type {
   RuleConditionLogic,
   RuleSource,
   Severity,
+  PasswordPolicy,
   SMTPSettings,
   User,
 } from '../api/types'
@@ -776,6 +777,16 @@ function MetricsTab() {
 
 // ── Users tab ─────────────────────────────────────────────────────────────────
 
+const DEFAULT_POLICY: PasswordPolicy = { min_length: 8, require_uppercase: false, require_number: false, require_special: false }
+
+function checkPasswordPolicy(pw: string, policy: PasswordPolicy): string | null {
+  if (pw.length < policy.min_length) return `Password must be at least ${policy.min_length} characters`
+  if (policy.require_uppercase && !/[A-Z]/.test(pw)) return 'Password must contain at least one uppercase letter'
+  if (policy.require_number && !/[0-9]/.test(pw)) return 'Password must contain at least one number'
+  if (policy.require_special && !/[^A-Za-z0-9]/.test(pw)) return 'Password must contain at least one special character'
+  return null
+}
+
 function UsersTab() {
   const { user: currentUser } = useAuth()
   const [userList, setUserList] = useState<User[]>([])
@@ -797,6 +808,11 @@ function UsersTab() {
   const [changingPw, setChangingPw] = useState(false)
   const [changePwMsg, setChangePwMsg] = useState('')
 
+  // Password policy state
+  const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_POLICY)
+  const [savingPolicy, setSavingPolicy] = useState(false)
+  const [policyMsg, setPolicyMsg] = useState('')
+
   const load = () => {
     setLoading(true)
     users.list()
@@ -805,11 +821,19 @@ function UsersTab() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    passwordPolicyApi.get().then(setPolicy).catch(() => {})
+  }, [])
 
   const handleCreate = async () => {
     if (!newEmail || !newPassword) {
       setCreateMsg('Email and password are required.')
+      return
+    }
+    const policyErr = checkPasswordPolicy(newPassword, policy)
+    if (policyErr) {
+      setCreateMsg(policyErr)
       return
     }
     setCreating(true)
@@ -840,9 +864,28 @@ function UsersTab() {
     }
   }
 
+  const handleSavePolicy = async () => {
+    setSavingPolicy(true)
+    setPolicyMsg('')
+    try {
+      const saved = await passwordPolicyApi.put(policy)
+      setPolicy(saved)
+      setPolicyMsg('Policy saved.')
+    } catch (e: unknown) {
+      setPolicyMsg(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setSavingPolicy(false)
+    }
+  }
+
   const handleChangePassword = async () => {
     if (!currentPw || !newPw) {
       setChangePwMsg('Both fields are required.')
+      return
+    }
+    const policyErr = checkPasswordPolicy(newPw, policy)
+    if (policyErr) {
+      setChangePwMsg(policyErr)
       return
     }
     setChangingPw(true)
@@ -975,6 +1018,54 @@ function UsersTab() {
             {changingPw ? 'Updating…' : 'Update Password'}
           </button>
           {changePwMsg && <span className="settings-status-msg">{changePwMsg}</span>}
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <div className="section-header">
+          <span className="section-title">Password Policy</span>
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-label">Minimum length</label>
+          <input
+            className="settings-input"
+            type="number"
+            min={1}
+            max={128}
+            style={{ width: 80 }}
+            value={policy.min_length}
+            onChange={e => setPolicy(p => ({ ...p, min_length: parseInt(e.target.value, 10) || 8 }))}
+          />
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-label">Require uppercase</label>
+          <input
+            type="checkbox"
+            checked={policy.require_uppercase}
+            onChange={e => setPolicy(p => ({ ...p, require_uppercase: e.target.checked }))}
+          />
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-label">Require number</label>
+          <input
+            type="checkbox"
+            checked={policy.require_number}
+            onChange={e => setPolicy(p => ({ ...p, require_number: e.target.checked }))}
+          />
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-label">Require special character</label>
+          <input
+            type="checkbox"
+            checked={policy.require_special}
+            onChange={e => setPolicy(p => ({ ...p, require_special: e.target.checked }))}
+          />
+        </div>
+        <div className="settings-actions">
+          <button className="settings-btn primary" onClick={handleSavePolicy} disabled={savingPolicy}>
+            {savingPolicy ? 'Saving…' : 'Save Policy'}
+          </button>
+          {policyMsg && <span className="settings-status-msg">{policyMsg}</span>}
         </div>
       </section>
     </div>

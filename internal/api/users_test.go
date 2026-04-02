@@ -17,7 +17,8 @@ func newUsersRouter(t *testing.T) http.Handler {
 	t.Helper()
 	db := newTestDB(t)
 	userRepo := repo.NewUserRepo(db)
-	h := api.NewUsersHandler(userRepo)
+	settingsRepo := repo.NewSettingsRepo(db)
+	h := api.NewUsersHandler(userRepo, settingsRepo)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
@@ -63,8 +64,8 @@ func TestListUsers_Empty(t *testing.T) {
 
 func TestListUsers_ReturnsAll(t *testing.T) {
 	router := newUsersRouter(t)
-	createUser(t, router, "alice@example.com", "pw1", "admin")
-	createUser(t, router, "bob@example.com", "pw2", "member")
+	createUser(t, router, "alice@example.com", "password1", "admin")
+	createUser(t, router, "bob@example.com", "password2", "member")
 
 	req := httptest.NewRequest(http.MethodGet, "/users", nil)
 	rr := httptest.NewRecorder()
@@ -84,7 +85,7 @@ func TestListUsers_ReturnsAll(t *testing.T) {
 
 func TestCreateUser_HappyPath(t *testing.T) {
 	router := newUsersRouter(t)
-	u := createUser(t, router, "test@example.com", "secret", "member")
+	u := createUser(t, router, "test@example.com", "password123", "member")
 
 	if u.ID == "" {
 		t.Error("expected non-empty ID")
@@ -137,7 +138,7 @@ func TestCreateUser_InvalidRole(t *testing.T) {
 
 func TestDeleteUser_HappyPath(t *testing.T) {
 	router := newUsersRouter(t)
-	u := createUser(t, router, "del@example.com", "pw", "member")
+	u := createUser(t, router, "del@example.com", "password123", "member")
 
 	req := httptest.NewRequest(http.MethodDelete, "/users/"+u.ID, nil)
 	rr := httptest.NewRecorder()

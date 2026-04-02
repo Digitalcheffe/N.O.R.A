@@ -355,6 +355,13 @@ export interface SMTPSettings {
   to: string
 }
 
+export interface PasswordPolicy {
+  min_length: number
+  require_uppercase: boolean
+  require_number: boolean
+  require_special: boolean
+}
+
 export interface SendNowResult {
   status: string
   period: string

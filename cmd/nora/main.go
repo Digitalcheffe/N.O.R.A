@@ -464,7 +464,7 @@ func main() {
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
 	pushHandler := api.NewPushHandler(cfg, store, pushSender)
 	pushHandler.RegisterPublicRoutes(r)
-	authHandler := api.NewAuthHandler(userRepo, cfg.Secret)
+	authHandler := api.NewAuthHandler(userRepo, store.Settings, cfg.Secret)
 	authHandler.RegisterPublicRoutes(r)
 
 	// API v1 — protected by auth middleware
@@ -486,7 +486,7 @@ func main() {
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
-		api.NewUsersHandler(userRepo).Routes(r)
+		api.NewUsersHandler(userRepo, store.Settings).Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
 		api.NewRulesHandler(store, rulesEngine).Routes(r)

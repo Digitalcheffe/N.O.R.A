@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"unicode"
 
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/models"
@@ -12,6 +15,63 @@ import (
 )
 
 const smtpSettingsAPIKey = "smtp"
+const passwordPolicyKey = "password_policy"
+
+// loadPasswordPolicy fetches the active policy, falling back to defaults on miss.
+func loadPasswordPolicy(ctx context.Context, s repo.SettingsRepo) models.PasswordPolicy {
+	var p models.PasswordPolicy
+	if err := s.GetJSON(ctx, passwordPolicyKey, &p); err != nil {
+		return models.DefaultPasswordPolicy()
+	}
+	if p.MinLength < 1 {
+		p.MinLength = models.DefaultPasswordPolicy().MinLength
+	}
+	return p
+}
+
+// validatePassword checks pw against policy and returns a user-facing error or nil.
+func validatePassword(pw string, p models.PasswordPolicy) error {
+	if len(pw) < p.MinLength {
+		return fmt.Errorf("password must be at least %d characters", p.MinLength)
+	}
+	if p.RequireUppercase {
+		ok := false
+		for _, c := range pw {
+			if unicode.IsUpper(c) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("password must contain at least one uppercase letter")
+		}
+	}
+	if p.RequireNumber {
+		ok := false
+		for _, c := range pw {
+			if unicode.IsDigit(c) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("password must contain at least one number")
+		}
+	}
+	if p.RequireSpecial {
+		ok := false
+		for _, c := range pw {
+			if !unicode.IsLetter(c) && !unicode.IsDigit(c) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("password must contain at least one special character")
+		}
+	}
+	return nil
+}
 
 // SettingsHandler handles generic settings endpoints (currently SMTP only).
 type SettingsHandler struct {
@@ -28,6 +88,8 @@ func (h *SettingsHandler) Routes(r chi.Router) {
 	r.Get("/settings/smtp", h.GetSMTP)
 	r.Put("/settings/smtp", h.PutSMTP)
 	r.Post("/settings/smtp/test", h.TestSMTP)
+	r.Get("/settings/password-policy", h.GetPasswordPolicy)
+	r.Put("/settings/password-policy", h.PutPasswordPolicy)
 }
 
 // GetSMTP returns the stored SMTP config: GET /api/v1/settings/smtp
@@ -73,6 +135,29 @@ func (h *SettingsHandler) PutSMTP(w http.ResponseWriter, r *http.Request) {
 		resp.Pass = "••••••••"
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// GetPasswordPolicy returns the current password policy: GET /api/v1/settings/password-policy
+func (h *SettingsHandler) GetPasswordPolicy(w http.ResponseWriter, r *http.Request) {
+	p := loadPasswordPolicy(r.Context(), h.store.Settings)
+	writeJSON(w, http.StatusOK, p)
+}
+
+// PutPasswordPolicy saves the password policy: PUT /api/v1/settings/password-policy
+func (h *SettingsHandler) PutPasswordPolicy(w http.ResponseWriter, r *http.Request) {
+	var req models.PasswordPolicy
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.MinLength < 1 {
+		req.MinLength = 8
+	}
+	if err := h.store.Settings.SetJSON(r.Context(), passwordPolicyKey, req); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, req)
 }
 
 // TestSMTP sends a test email using the stored SMTP config: POST /api/v1/settings/smtp/test
