@@ -22,6 +22,7 @@ export interface AuthUser {
   role: 'admin' | 'member'
   totp_enabled: boolean
   totp_grace: boolean
+  totp_exempt: boolean
 }
 
 export interface LoginResponse {
@@ -59,11 +60,17 @@ export interface User {
   created_at: string
   totp_enabled: boolean
   totp_grace: boolean
+  totp_exempt: boolean
 }
 
 export interface CreateUserInput {
   email: string
   password: string
+  role: 'admin' | 'member'
+}
+
+export interface UpdateUserInput {
+  email: string
   role: 'admin' | 'member'
 }
 

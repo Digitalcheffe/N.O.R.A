@@ -28,9 +28,11 @@ func NewUsersHandler(users repo.UserRepo, settings repo.SettingsRepo) *UsersHand
 func (h *UsersHandler) Routes(r chi.Router) {
 	r.Get("/users", h.List)
 	r.Post("/users", h.Create)
+	r.Put("/users/me/password", h.ChangePassword)
+	r.Put("/users/{id}", h.Update)
 	r.Delete("/users/{id}", h.Delete)
 	r.Put("/users/{id}/password", h.SetPassword)
-	r.Put("/users/me/password", h.ChangePassword)
+	r.Put("/users/{id}/totp/exempt", h.SetTOTPExempt)
 }
 
 // --- request / response types ---
@@ -214,6 +216,66 @@ func (h *UsersHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.users.UpdatePassword(r.Context(), userID, string(newHash)); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type updateUserRequest struct {
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+// Update updates a user's email and role: PUT /api/v1/users/{id}
+func (h *UsersHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req updateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Email == "" {
+		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	if req.Role != "admin" && req.Role != "member" {
+		writeError(w, http.StatusBadRequest, "role must be admin or member")
+		return
+	}
+	if err := h.users.UpdateUser(r.Context(), id, req.Email, req.Role); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	updated, err := h.users.GetByID(r.Context(), id)
+	if err != nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+type setTOTPExemptRequest struct {
+	Exempt bool `json:"exempt"`
+}
+
+// SetTOTPExempt sets or clears the totp_exempt flag for a user: PUT /api/v1/users/{id}/totp/exempt
+func (h *UsersHandler) SetTOTPExempt(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req setTOTPExemptRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.users.SetTOTPExempt(r.Context(), id, req.Exempt); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

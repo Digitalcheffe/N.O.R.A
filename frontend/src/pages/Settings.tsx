@@ -803,6 +803,10 @@ function UsersTab() {
 
   // Edit user modal state
   const [editUser, setEditUser] = useState<User | null>(null)
+  const [editEmail, setEditEmail] = useState('')
+  const [editRole, setEditRole] = useState<'admin' | 'member'>('member')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editMsg, setEditMsg] = useState('')
   const [editPw, setEditPw] = useState('')
   const [editPwMsg, setEditPwMsg] = useState('')
   const [editPwSaving, setEditPwSaving] = useState(false)
@@ -935,6 +939,37 @@ function UsersTab() {
     }
   }
 
+  const handleUpdateUser = async () => {
+    if (!editUser || !editEmail) return
+    setEditSaving(true)
+    setEditMsg('')
+    try {
+      const updated = await users.update(editUser.id, { email: editEmail, role: editRole })
+      setEditUser(updated)
+      setUserList(prev => prev.map(u => u.id === updated.id ? updated : u))
+      setEditMsg('Saved.')
+    } catch (e: unknown) {
+      setEditMsg(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const handleSetTOTPExempt = async (exempt: boolean) => {
+    if (!editUser) return
+    setTotpActionSaving(true)
+    setTotpActionMsg('')
+    try {
+      await users.setTOTPExempt(editUser.id, exempt)
+      setTotpActionMsg(exempt ? 'Marked as MFA exempt.' : 'Exemption removed.')
+      load()
+    } catch (e: unknown) {
+      setTotpActionMsg(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      setTotpActionSaving(false)
+    }
+  }
+
   const handleSavePolicy = async () => {
 
     setSavingPolicy(true)
@@ -982,8 +1017,8 @@ function UsersTab() {
                     <span className="settings-kv-val" style={{ fontSize: '0.8em' }}>you</span>
                   ) : (
                     <button
-                      className="settings-btn settings-btn--sm"
-                      onClick={() => { setEditUser(u); setEditPw(''); setEditPwMsg(''); setTotpActionMsg('') }}
+                      className="settings-btn settings-btn--sm settings-btn--edit"
+                      onClick={() => { setEditUser(u); setEditEmail(u.email); setEditRole(u.role); setEditPw(''); setEditPwMsg(''); setEditMsg(''); setTotpActionMsg('') }}
                     >
                       Edit
                     </button>
@@ -1116,65 +1151,79 @@ function UsersTab() {
 
     {editUser && (
       <div className="modal-backdrop" onClick={() => setEditUser(null)}>
-        <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
             <span className="modal-title">Edit User</span>
             <button className="modal-close" onClick={() => setEditUser(null)}>✕</button>
           </div>
           <div className="modal-body">
-            <div className="settings-field-row" style={{ marginBottom: 4 }}>
-              <label className="settings-label">Email</label>
-              <span style={{ fontSize: '0.875rem', color: 'var(--text2)' }}>{editUser.email}</span>
-            </div>
-            <div className="settings-field-row" style={{ marginBottom: 4 }}>
-              <label className="settings-label">Role</label>
-              <span className="app-pill-type">{editUser.role}</span>
+            <label className="modal-label">Email</label>
+            <input
+              className="modal-input"
+              type="email"
+              value={editEmail}
+              onChange={e => setEditEmail(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+
+            <label className="modal-label">Role</label>
+            <select
+              className="modal-input"
+              value={editRole}
+              onChange={e => setEditRole(e.target.value as 'admin' | 'member')}
+              style={{ marginBottom: 10 }}
+            >
+              <option value="member">member</option>
+              <option value="admin">admin</option>
+            </select>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <button className="modal-btn-primary" onClick={handleUpdateUser} disabled={editSaving || !editEmail}>
+                {editSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+              {editMsg && <span style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>{editMsg}</span>}
             </div>
 
-            <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+            <hr className="modal-section-divider" />
 
-            <div className="section-title" style={{ fontSize: '0.8rem', marginBottom: 10 }}>Set Password</div>
-            <div className="settings-field-row">
-              <label className="settings-label">New password</label>
-              <input
-                className="settings-input"
-                type="password"
-                placeholder="New password"
-                value={editPw}
-                onChange={e => setEditPw(e.target.value)}
-              />
-            </div>
-            <div className="settings-actions">
-              <button className="settings-btn primary" onClick={handleSetPassword} disabled={editPwSaving || !editPw}>
+            <label className="modal-label">Set Password</label>
+            <input
+              className="modal-input"
+              type="password"
+              placeholder="New password"
+              value={editPw}
+              onChange={e => setEditPw(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button className="modal-btn-primary" onClick={handleSetPassword} disabled={editPwSaving || !editPw}>
                 {editPwSaving ? 'Saving…' : 'Update Password'}
               </button>
               {editPwMsg && <span className="settings-status-msg">{editPwMsg}</span>}
             </div>
 
-            <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+            <hr className="modal-section-divider" />
 
-            <div className="section-title" style={{ fontSize: '0.8rem', marginBottom: 10 }}>Two-Factor Authentication</div>
+            <label className="modal-label">Two-Factor Authentication</label>
             {totpActionMsg && (
-              <div className="settings-status-msg" style={{ marginBottom: 8 }}>{totpActionMsg}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--accent)', marginBottom: 8 }}>{totpActionMsg}</div>
             )}
             {editUser.totp_enabled ? (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button
-                  className="settings-btn danger settings-btn--sm"
-                  onClick={() => handleAdminDisableTOTP(editUser.id)}
-                  disabled={totpActionSaving}
-                >
-                  {totpActionSaving ? '…' : 'Disable MFA'}
-                </button>
-              </div>
+              <button
+                className="modal-btn-danger"
+                onClick={() => handleAdminDisableTOTP(editUser.id)}
+                disabled={totpActionSaving}
+              >
+                {totpActionSaving ? '…' : 'Disable MFA'}
+              </button>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>
-                  {editUser.totp_grace ? 'MFA not enrolled — grace login available.' : 'MFA not enrolled — grace used.'}
+                  {editUser.totp_grace ? 'Not enrolled — grace login available' : 'Not enrolled — grace used'}
                 </span>
                 {!editUser.totp_grace && (
                   <button
-                    className="settings-btn secondary settings-btn--sm"
+                    className="modal-btn-ghost"
                     onClick={() => handleAdminResetGrace(editUser.id)}
                     disabled={totpActionSaving}
                   >
@@ -1183,25 +1232,38 @@ function UsersTab() {
                 )}
               </div>
             )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text2)' }}>MFA Exempt:</span>
+              <button
+                className={editUser.totp_exempt ? 'modal-btn-danger' : 'modal-btn-ghost'}
+                onClick={() => handleSetTOTPExempt(!editUser.totp_exempt)}
+                disabled={totpActionSaving}
+              >
+                {editUser.totp_exempt ? 'Remove Exemption' : 'Mark Exempt'}
+              </button>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>
+                {editUser.totp_exempt ? 'Never blocked by global MFA' : 'Subject to global MFA policy'}
+              </span>
+            </div>
 
-            <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
+            <hr className="modal-section-divider" />
 
-            <div className="section-title" style={{ fontSize: '0.8rem', marginBottom: 10, color: 'var(--red)' }}>Danger Zone</div>
+            <div className="modal-danger-label">Danger Zone</div>
             {confirmDeleteId === editUser.id ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text2)' }}>Delete {editUser.email}?</span>
                 <button
-                  className="settings-btn danger settings-btn--sm"
+                  className="modal-btn-danger"
                   onClick={() => handleDelete(editUser.id)}
                   disabled={deletingId === editUser.id}
                 >
                   {deletingId === editUser.id ? '…' : 'Yes, delete'}
                 </button>
-                <button className="settings-btn settings-btn--sm" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+                <button className="modal-btn-ghost" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
               </div>
             ) : (
               <button
-                className="settings-btn danger settings-btn--sm"
+                className="modal-btn-danger"
                 onClick={() => setConfirmDeleteId(editUser.id)}
               >
                 Delete User

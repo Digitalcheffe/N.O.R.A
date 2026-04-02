@@ -10,4 +10,5 @@ type User struct {
 	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
 	TOTPEnabled bool      `db:"totp_enabled" json:"totp_enabled"`
 	TOTPGrace   bool      `db:"totp_grace"   json:"totp_grace"`
+	TOTPExempt  bool      `db:"totp_exempt"  json:"totp_exempt"`
 }

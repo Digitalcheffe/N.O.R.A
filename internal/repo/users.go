@@ -21,6 +21,8 @@ type UserRepo interface {
 	Count(ctx context.Context) (int, error)
 	// UpdatePassword replaces the stored password hash for the given user ID.
 	UpdatePassword(ctx context.Context, id string, newHash string) error
+	// UpdateUser updates the email and role for the given user ID.
+	UpdateUser(ctx context.Context, id string, email string, role string) error
 
 	// TOTP methods
 	// GetTOTPData returns the TOTP secret and flags for the given user.
@@ -51,7 +53,7 @@ func NewUserRepo(db *sqlx.DB) UserRepo {
 func (r *sqliteUserRepo) List(ctx context.Context) ([]models.User, error) {
 	var users []models.User
 	err := r.db.SelectContext(ctx, &users, `
-		SELECT id, email, role, created_at, totp_enabled, totp_grace
+		SELECT id, email, role, created_at, totp_enabled, totp_grace, totp_exempt
 		FROM users ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
@@ -88,7 +90,7 @@ func (r *sqliteUserRepo) Delete(ctx context.Context, id string) error {
 func (r *sqliteUserRepo) GetByID(ctx context.Context, id string) (*models.User, error) {
 	var u models.User
 	err := r.db.GetContext(ctx, &u, `
-		SELECT id, email, role, created_at, totp_enabled, totp_grace
+		SELECT id, email, role, created_at, totp_enabled, totp_grace, totp_exempt
 		FROM users WHERE id = ?`, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -106,7 +108,7 @@ func (r *sqliteUserRepo) GetByEmail(ctx context.Context, email string) (*models.
 		PasswordHash string `db:"password_hash"`
 	}
 	err := r.db.GetContext(ctx, &row, `
-		SELECT id, email, role, created_at, totp_enabled, totp_grace, password_hash
+		SELECT id, email, role, created_at, totp_enabled, totp_grace, totp_exempt, password_hash
 		FROM users WHERE email = ?`, email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -122,6 +124,19 @@ func (r *sqliteUserRepo) UpdatePassword(ctx context.Context, id string, newHash 
 	res, err := r.db.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, newHash, id)
 	if err != nil {
 		return fmt.Errorf("update password: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateUser updates the email and role for the given user ID.
+func (r *sqliteUserRepo) UpdateUser(ctx context.Context, id string, email string, role string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE users SET email = ?, role = ? WHERE id = ?`, email, role, id)
+	if err != nil {
+		return fmt.Errorf("update user: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {

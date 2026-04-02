@@ -426,6 +426,18 @@
   font-size: 11px;
 }
 
+.settings-btn--edit {
+  background: var(--bg4);
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+.settings-btn--edit:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ── Profile avatar ───────────────────────────────────────────────────────── */
 
 .settings-avatar-row {

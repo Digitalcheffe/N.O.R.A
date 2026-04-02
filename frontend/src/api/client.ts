@@ -13,6 +13,7 @@ import type {
   CreateIntegrationInput,
   CreateRuleInput,
   CreateUserInput,
+  UpdateUserInput,
   CustomProfile,
   DashboardSummaryResponse,
   DigestSchedule,
@@ -165,8 +166,11 @@ export const users = {
   create: (input: CreateUserInput) =>
     request<User>('POST', '/users', input),
 
-  update: (id: string, input: Partial<CreateUserInput>) =>
+  update: (id: string, input: UpdateUserInput) =>
     request<User>('PUT', `/users/${id}`, input),
+
+  setTOTPExempt: (id: string, exempt: boolean) =>
+    request<void>('PUT', `/users/${id}/totp/exempt`, { exempt }),
 
   delete: (id: string) =>
     request<void>('DELETE', `/users/${id}`),
