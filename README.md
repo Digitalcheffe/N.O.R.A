@@ -124,6 +124,8 @@ NORA ships with 29 pre-built profiles. Pick your app and NORA already knows how 
 
 Don't see your app? The custom profile editor lets you map any webhook payload to NORA's event model.
 
+Profile contributions are welcome — drop a YAML file in a GitHub issue or discussion and it will be reviewed for inclusion in the library.
+
 ---
 
 ## Configuration
@@ -185,8 +187,6 @@ Don't see your app? The custom profile editor lets you map any webhook payload t
 ---
 
 ## Contributing
-
-Profile contributions are welcome. Drop a YAML file in a GitHub issue or discussion — see the profile schema in `/docs/architecture.md` for the format. Profiles are reviewed and merged into the library.
 
 Code contributions: open an issue first so we can align on approach before you build.
 
