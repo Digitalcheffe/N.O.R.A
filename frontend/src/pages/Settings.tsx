@@ -808,8 +808,6 @@ function UsersTab() {
   const [editSaving, setEditSaving] = useState(false)
   const [editMsg, setEditMsg] = useState('')
   const [editPw, setEditPw] = useState('')
-  const [editPwMsg, setEditPwMsg] = useState('')
-  const [editPwSaving, setEditPwSaving] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -880,23 +878,6 @@ function UsersTab() {
     }
   }
 
-  const handleSetPassword = async () => {
-    if (!editUser || !editPw) return
-    const policyErr = checkPasswordPolicy(editPw, policy)
-    if (policyErr) { setEditPwMsg(policyErr); return }
-    setEditPwSaving(true)
-    setEditPwMsg('')
-    try {
-      await users.setPassword(editUser.id, editPw)
-      setEditPw('')
-      setEditPwMsg('Password updated.')
-    } catch (e: unknown) {
-      setEditPwMsg(e instanceof Error ? e.message : 'Failed to update password')
-    } finally {
-      setEditPwSaving(false)
-    }
-  }
-
   const handleToggleMFA = async () => {
     setSavingMfa(true)
     setMfaMsg('')
@@ -941,10 +922,18 @@ function UsersTab() {
 
   const handleUpdateUser = async () => {
     if (!editUser || !editEmail) return
+    if (editPw) {
+      const policyErr = checkPasswordPolicy(editPw, policy)
+      if (policyErr) { setEditMsg(policyErr); return }
+    }
     setEditSaving(true)
     setEditMsg('')
     try {
       const updated = await users.update(editUser.id, { email: editEmail, role: editRole })
+      if (editPw) {
+        await users.setPassword(editUser.id, editPw)
+        setEditPw('')
+      }
       setEditUser(updated)
       setUserList(prev => prev.map(u => u.id === updated.id ? updated : u))
       setEditMsg('Saved.')
@@ -1018,7 +1007,7 @@ function UsersTab() {
                   ) : (
                     <button
                       className="settings-btn settings-btn--sm settings-btn--edit"
-                      onClick={() => { setEditUser(u); setEditEmail(u.email); setEditRole(u.role); setEditPw(''); setEditPwMsg(''); setEditMsg(''); setTotpActionMsg('') }}
+                      onClick={() => { setEditUser(u); setEditEmail(u.email); setEditRole(u.role); setEditPw(''); setEditMsg(''); setTotpActionMsg('') }}
                     >
                       Edit
                     </button>
@@ -1150,8 +1139,8 @@ function UsersTab() {
     {/* ── Edit User modal ── */}
 
     {editUser && (
-      <div className="modal-backdrop" onClick={() => setEditUser(null)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-backdrop">
+        <div className="modal">
           <div className="modal-header">
             <span className="modal-title">Edit User</span>
             <button className="modal-close" onClick={() => setEditUser(null)}>✕</button>
@@ -1177,29 +1166,22 @@ function UsersTab() {
               <option value="admin">admin</option>
             </select>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <button className="modal-btn-primary" onClick={handleUpdateUser} disabled={editSaving || !editEmail}>
-                {editSaving ? 'Saving…' : 'Save Changes'}
-              </button>
-              {editMsg && <span style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>{editMsg}</span>}
-            </div>
-
-            <hr className="modal-section-divider" />
-
-            <label className="modal-label">Set Password</label>
+            <label className="modal-label">New Password <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(leave blank to keep current)</span></label>
             <input
               className="modal-input"
               type="password"
-              placeholder="New password"
+              placeholder="••••••••"
               value={editPw}
               onChange={e => setEditPw(e.target.value)}
-              style={{ marginBottom: 10 }}
+              style={{ marginBottom: 12 }}
             />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="modal-btn-primary" onClick={handleSetPassword} disabled={editPwSaving || !editPw}>
-                {editPwSaving ? 'Saving…' : 'Update Password'}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <button className="modal-btn-primary" onClick={handleUpdateUser} disabled={editSaving || !editEmail}>
+                {editSaving ? 'Saving…' : 'Save'}
               </button>
-              {editPwMsg && <span className="settings-status-msg">{editPwMsg}</span>}
+              <button className="modal-btn-ghost" onClick={() => setEditUser(null)}>Cancel</button>
+              {editMsg && <span style={{ fontSize: '0.8rem', color: editMsg === 'Saved.' ? 'var(--accent)' : 'var(--red)' }}>{editMsg}</span>}
             </div>
 
             <hr className="modal-section-divider" />
