@@ -9,8 +9,8 @@ self.addEventListener('push', (event) => {
   const title = data['title'] ?? 'NORA'
   const options: NotificationOptions = {
     body: data['body'] ?? '',
-    icon: '/icons/icon.svg',
-    badge: '/icons/badge.svg',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
     data: { url: data['url'] ?? '/' },
   }
   event.waitUntil(self.registration.showNotification(title, options))
