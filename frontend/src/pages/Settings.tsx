@@ -1025,19 +1025,18 @@ function UsersTab() {
         <div className="section-header">
           <span className="section-title">Password Policy</span>
         </div>
-        <div className="settings-field-row">
-          <label className="settings-label">Minimum length</label>
-          <input
-            className="settings-input"
-            type="number"
-            min={1}
-            max={128}
-            style={{ width: 80 }}
-            value={policy.min_length}
-            onChange={e => setPolicy(p => ({ ...p, min_length: parseInt(e.target.value, 10) || 8 }))}
-          />
-        </div>
         <div className="pw-policy-requirements">
+          <label className="pw-policy-req-item">
+            Min length
+            <input
+              className="pw-policy-length-input"
+              type="number"
+              min={1}
+              max={128}
+              value={policy.min_length}
+              onChange={e => setPolicy(p => ({ ...p, min_length: parseInt(e.target.value, 10) || 8 }))}
+            />
+          </label>
           <label className="pw-policy-req-item">
             <input
               type="checkbox"
