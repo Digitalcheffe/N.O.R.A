@@ -268,7 +268,7 @@ export function Profile() {
                   Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code to confirm.
                 </p>
                 <div className="totp-qr-container">
-                  <QRCodeSVG value={setup.uri} size={180} bgColor="var(--bg2)" fgColor="var(--text)" />
+                  <QRCodeSVG value={setup.uri} size={180} bgColor="#ffffff" fgColor="#000000" />
                 </div>
                 <p className="settings-placeholder" style={{ marginTop: 8, marginBottom: 16, fontSize: '0.75rem' }}>
                   Can't scan? Enter this key manually: <code style={{ userSelect: 'all', letterSpacing: '0.1em' }}>{setup.secret}</code>
