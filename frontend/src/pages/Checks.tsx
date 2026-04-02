@@ -73,44 +73,7 @@ function extractSSLCerts(checkList: MonitorCheck[]): SSLCert[] {
     .sort((a, b) => a.days_remaining - b.days_remaining)
 }
 
-// ── Check type icons ─────────────────────────────────────────────────────────
-
-function CheckTypeIcon({ type }: { type: string }) {
-  const s = { width: 15, height: 15, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, flexShrink: 0 as const, opacity: 0.55 }
-  switch (type) {
-    case 'url':
-      return (
-        <svg viewBox="0 0 16 16" style={s}>
-          <circle cx="8" cy="8" r="6.5" />
-          <path d="M8 1.5S5.5 4 5.5 8 8 14.5 8 14.5M8 1.5S10.5 4 10.5 8 8 14.5 8 14.5" />
-          <path d="M1.5 8h13" />
-        </svg>
-      )
-    case 'ssl':
-      return (
-        <svg viewBox="0 0 16 16" style={s}>
-          <rect x="3" y="7" width="10" height="7.5" rx="1.5" />
-          <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
-          <circle cx="8" cy="10.5" r="1" fill="currentColor" stroke="none" opacity="1" />
-        </svg>
-      )
-    case 'dns':
-      return (
-        <svg viewBox="0 0 16 16" style={s}>
-          <path d="M8 2v12M5 5l3-3 3 3M5 11l3 3 3-3" />
-          <path d="M2 8h3M11 8h3" />
-        </svg>
-      )
-    case 'ping':
-      return (
-        <svg viewBox="0 0 16 16" style={s}>
-          <path d="M1 9h2.5L5 5l3 8 2-5 1.5 2.5H15" />
-        </svg>
-      )
-    default:
-      return null
-  }
-}
+import { CheckTypeIcon } from '../components/CheckTypeIcon'
 
 // ── Check card ────────────────────────────────────────────────────────────────
 

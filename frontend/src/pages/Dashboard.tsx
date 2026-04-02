@@ -7,6 +7,7 @@ import { AppWidget } from '../components/AppWidget'
 import { BookmarkWidget } from '../components/BookmarkWidget'
 import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
 import type { DashboardSummaryResponse, InfrastructureComponent, ResourceSummary } from '../api/types'
+import { InfraTypeIcon, CheckTypeIcon } from '../components/CheckTypeIcon'
 import './Dashboard.css'
 import './Infrastructure.css'
 
@@ -251,6 +252,7 @@ export function Dashboard() {
         onClick={() => navigate(`/infrastructure/${host.id}`)}
       >
         <div className="infra-card-header">
+          <InfraTypeIcon type={host.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {host.name}
@@ -443,7 +445,10 @@ export function Dashboard() {
                 className={`check-rollup-card ${r.status}`}
                 onClick={() => navigate('/checks')}
               >
-                <div className="check-rollup-type">{r.type.toUpperCase()}</div>
+                <div className="check-rollup-type">
+                  <CheckTypeIcon type={r.type} size={14} />
+                  {r.type.toUpperCase()}
+                </div>
                 <div className="check-rollup-uptime">
                   {r.status === 'empty' ? '—' : `${r.avgUptime.toFixed(1)}%`}
                 </div>

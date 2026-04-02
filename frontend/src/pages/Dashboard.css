@@ -650,6 +650,9 @@
 .check-rollup-card.empty { border-top: 3px solid var(--accent); }
 
 .check-rollup-type {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text3);
