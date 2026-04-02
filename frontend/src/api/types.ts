@@ -29,6 +29,7 @@ export interface LoginResponse {
   token: string
   user: AuthUser
   mfa_enrollment_required?: boolean
+  pw_policy_noncompliant?: boolean
 }
 
 export interface MFARequiredResponse {

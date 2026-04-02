@@ -995,6 +995,9 @@ function UsersTab() {
                   {u.totp_enabled && (
                     <span className="totp-enabled-badge" style={{ marginLeft: 6 }}>MFA</span>
                   )}
+                  {u.totp_exempt && (
+                    <span className="totp-enabled-badge" style={{ marginLeft: 6, background: 'var(--bg4)', color: 'var(--text3)', border: '1px solid var(--border2)' }}>Exempt</span>
+                  )}
                 </div>
                 <div className="app-row-actions">
                   <span className="settings-kv-val" style={{ fontSize: '0.8em', marginRight: 8 }}>

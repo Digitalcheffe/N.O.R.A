@@ -9,11 +9,13 @@ interface AuthContextType {
   isAuthenticated: boolean
   setupRequired: boolean
   mfaEnrollmentRequired: boolean
+  pwPolicyNoncompliant: boolean
   // login returns the MFA challenge when TOTP is required, or null for a full login.
   login: (email: string, password: string) => Promise<MFARequiredResponse | null>
   verifyMFA: (input: TOTPVerifyInput) => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
+  clearPwPolicyNoncompliant: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -23,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
   const [mfaEnrollmentRequired, setMfaEnrollmentRequired] = useState(false)
+  const [pwPolicyNoncompliant, setPwPolicyNoncompliant] = useState(false)
 
   useEffect(() => {
     const onExpired = () => setUser(null)
@@ -68,6 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loginRes.mfa_enrollment_required) {
       setMfaEnrollmentRequired(true)
     }
+    if (loginRes.pw_policy_noncompliant) {
+      setPwPolicyNoncompliant(true)
+    }
     return null
   }, [])
 
@@ -81,13 +87,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await auth.logout()
     setUser(null)
     setMfaEnrollmentRequired(false)
+    setPwPolicyNoncompliant(false)
   }, [])
 
   const refreshUser = useCallback(async () => {
     const u = await auth.me()
     setUser(u)
-    // Clear enrollment banner once user has TOTP enabled.
     if (u.totp_enabled) setMfaEnrollmentRequired(false)
+  }, [])
+
+  const clearPwPolicyNoncompliant = useCallback(() => {
+    setPwPolicyNoncompliant(false)
   }, [])
 
   return (
@@ -97,10 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: user !== null,
       setupRequired,
       mfaEnrollmentRequired,
+      pwPolicyNoncompliant,
       login,
       verifyMFA,
       logout,
       refreshUser,
+      clearPwPolicyNoncompliant,
     }}>
       {children}
     </AuthContext.Provider>

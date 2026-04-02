@@ -492,7 +492,7 @@ func main() {
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
-		api.NewUsersHandler(userRepo, store.Settings).Routes(r)
+		api.NewUsersHandler(userRepo, store.Settings, cfg).Routes(r)
 		totpHandler.Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)

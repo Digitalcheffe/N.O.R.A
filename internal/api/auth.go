@@ -236,6 +236,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if mfaRequired && !totpExempt && !totpEnabled {
 		resp["mfa_enrollment_required"] = true
 	}
+	// Flag if the user's current password doesn't meet the active policy.
+	policy := loadPasswordPolicy(r.Context(), h.settings)
+	if err := validatePassword(req.Password, policy); err != nil {
+		resp["pw_policy_noncompliant"] = true
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 

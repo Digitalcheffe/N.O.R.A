@@ -2,12 +2,18 @@ import { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Topbar } from '../components/Topbar'
 import { useAuth } from '../context/AuthContext'
-import { totp as totpApi, users } from '../api/client'
+import { totp as totpApi, users, mfaSettings } from '../api/client'
 import type { TOTPSetupResponse } from '../api/types'
 import './Settings.css'
 
 export function Profile() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, mfaEnrollmentRequired, pwPolicyNoncompliant, clearPwPolicyNoncompliant } = useAuth()
+
+  // Global MFA requirement
+  const [mfaRequired, setMfaRequired] = useState(false)
+  useEffect(() => {
+    mfaSettings.get().then(r => setMfaRequired(r.required)).catch(() => {})
+  }, [])
 
   // ── Change Password ──────────────────────────────────────────────────────────
   const [currentPw, setCurrentPw] = useState('')
@@ -24,6 +30,7 @@ export function Profile() {
       setCurrentPw('')
       setNewPw('')
       setPwMsg('Password updated.')
+      clearPwPolicyNoncompliant()
     } catch (e: unknown) {
       setPwMsg(e instanceof Error ? e.message : 'Failed to update password')
     } finally {
@@ -109,6 +116,46 @@ export function Profile() {
       <div className="content">
         <div className="tab-content">
 
+          {/* Password policy warning banner */}
+          {pwPolicyNoncompliant && (
+            <div style={{
+              background: 'rgba(239,68,68,0.1)',
+              border: '1px solid var(--red)',
+              borderRadius: 8,
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: '0.875rem',
+              color: 'var(--red)',
+            }}>
+              <span style={{ fontSize: '1.1rem' }}>⚠</span>
+              <span>
+                Your password no longer meets the current security policy. Please update it below.
+              </span>
+            </div>
+          )}
+
+          {/* MFA enrollment warning banner */}
+          {mfaEnrollmentRequired && (
+            <div style={{
+              background: 'var(--amber-dim, rgba(245,158,11,0.12))',
+              border: '1px solid var(--amber, #f59e0b)',
+              borderRadius: 8,
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: '0.875rem',
+              color: 'var(--amber, #f59e0b)',
+            }}>
+              <span style={{ fontSize: '1.1rem' }}>⚠</span>
+              <span>
+                Multi-factor authentication is required for your account. Set up TOTP below before your next login — your grace login has been used.
+              </span>
+            </div>
+          )}
+
           <section className="settings-section">
             <div className="section-header">
               <span className="section-title">Account</span>
@@ -168,14 +215,20 @@ export function Profile() {
                 <p className="settings-placeholder" style={{ marginBottom: 12 }}>
                   TOTP is active on your account. Your authenticator app generates codes required at login.
                 </p>
-                {!showDisable ? (
+                {mfaRequired && (
+                  <p className="settings-placeholder" style={{ marginBottom: 12, color: 'var(--text3)', fontSize: '0.8rem' }}>
+                    MFA is required globally — disabling TOTP is not permitted.
+                  </p>
+                )}
+                {!mfaRequired && !showDisable && (
                   <button
                     className="settings-btn danger settings-btn--sm"
                     onClick={() => { setShowDisable(true); setDisableMsg('') }}
                   >
                     Disable TOTP
                   </button>
-                ) : (
+                )}
+                {!mfaRequired && showDisable && (
                   <div>
                     <p className="settings-placeholder" style={{ marginBottom: 8, color: 'var(--red)' }}>
                       Enter your current authenticator code to disable TOTP.

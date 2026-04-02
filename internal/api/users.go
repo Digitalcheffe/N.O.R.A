@@ -3,9 +3,13 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/digitalcheffe/nora/internal/auth"
+	"github.com/digitalcheffe/nora/internal/config"
+	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -17,11 +21,12 @@ import (
 type UsersHandler struct {
 	users    repo.UserRepo
 	settings repo.SettingsRepo
+	cfg      *config.Config
 }
 
 // NewUsersHandler creates a UsersHandler.
-func NewUsersHandler(users repo.UserRepo, settings repo.SettingsRepo) *UsersHandler {
-	return &UsersHandler{users: users, settings: settings}
+func NewUsersHandler(users repo.UserRepo, settings repo.SettingsRepo, cfg *config.Config) *UsersHandler {
+	return &UsersHandler{users: users, settings: settings, cfg: cfg}
 }
 
 // Routes registers user endpoints on r.
@@ -112,6 +117,33 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, u)
 		return
 	}
+
+	// Send invite email if SMTP is configured (fire-and-forget).
+	if h.cfg.SMTPHost != "" {
+		go func() {
+			mfaRequired := loadMFARequired(r.Context(), h.settings)
+			mfaLine := ""
+			if mfaRequired {
+				mfaLine = `<p style="margin:12px 0;color:#f59e0b;">&#9888; Multi-factor authentication is required. Please set up TOTP under your profile after logging in.</p>`
+			}
+			body := fmt.Sprintf(`<!DOCTYPE html><html><body style="font-family:sans-serif;color:#e2e8f0;background:#0f172a;padding:32px;">
+<h2 style="color:#fff;margin:0 0 8px;">Welcome to NORA</h2>
+<p style="color:#94a3b8;margin:0 0 24px;">Your account has been created.</p>
+<table style="background:#1e293b;border-radius:8px;padding:20px;width:100%%;max-width:480px;">
+  <tr><td style="padding:6px 0;color:#94a3b8;font-size:13px;">Email</td><td style="padding:6px 0;font-size:13px;">%s</td></tr>
+  <tr><td style="padding:6px 0;color:#94a3b8;font-size:13px;">Password</td><td style="padding:6px 0;font-size:13px;font-family:monospace;">%s</td></tr>
+  <tr><td style="padding:6px 0;color:#94a3b8;font-size:13px;">Role</td><td style="padding:6px 0;font-size:13px;">%s</td></tr>
+</table>
+%s
+<p style="margin:24px 0 0;font-size:12px;color:#475569;">Please change your password after your first login.</p>
+</body></html>`, req.Email, req.Password, role, mfaLine)
+			if err := jobs.SendMail(h.cfg.SMTPHost, h.cfg.SMTPPort, h.cfg.SMTPUser, h.cfg.SMTPPass, h.cfg.SMTPFrom,
+				[]string{req.Email}, "Your NORA account", body); err != nil {
+				log.Printf("invite email to %s: %v", req.Email, err)
+			}
+		}()
+	}
+
 	writeJSON(w, http.StatusCreated, created)
 }
 
