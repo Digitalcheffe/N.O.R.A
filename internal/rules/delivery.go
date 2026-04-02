@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/models"
-	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/google/uuid"
 )
 
@@ -138,24 +136,11 @@ func (e *Engine) deliverWebhook(ctx context.Context, rule models.Rule, event mod
 	e.logExecution(ctx, rule.ID, event.ID, "webhook", true, "")
 }
 
-// smtpSettings reads SMTP config from the settings table with env fallback.
+// smtpSettings reads SMTP config from the settings table.
 func (e *Engine) smtpSettings(ctx context.Context) (*models.SMTPSettings, error) {
 	var s models.SMTPSettings
-	err := e.store.Settings.GetJSON(ctx, "smtp", &s)
-	if errors.Is(err, repo.ErrNotFound) {
-		if e.cfg.SMTPHost == "" {
-			return nil, fmt.Errorf("smtp not configured")
-		}
-		return &models.SMTPSettings{
-			Host: e.cfg.SMTPHost,
-			Port: e.cfg.SMTPPort,
-			User: e.cfg.SMTPUser,
-			Pass: e.cfg.SMTPPass,
-			From: e.cfg.SMTPFrom,
-		}, nil
-	}
-	if err != nil {
-		return nil, err
+	if err := e.store.Settings.GetJSON(ctx, "smtp", &s); err != nil {
+		return nil, fmt.Errorf("smtp not configured")
 	}
 	if s.Host == "" {
 		return nil, fmt.Errorf("smtp not configured")

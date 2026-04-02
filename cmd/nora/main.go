@@ -37,9 +37,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const version = "1.0.0"
+
 func main() {
 	cfg := config.Load()
 	startTime := time.Now()
+
+	log.Printf("================================================")
+	log.Printf("  N.O.R.A  v%s", version)
+	log.Printf("  Nexus Operations Recon & Alerts")
+	log.Printf("================================================")
 
 	// File logging — write to NORA_LOG_PATH alongside stdout so logs persist.
 	if logPath := os.Getenv("NORA_LOG_PATH"); logPath != "" {
@@ -64,7 +71,7 @@ func main() {
 	}
 	defer db.Close()
 
-	log.Printf("NORA database ready at %s", cfg.DBPath)
+	log.Printf("  database : %s", cfg.DBPath)
 
 	// Repositories
 	appRepo := repo.NewAppRepo(db)
@@ -142,7 +149,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("app template registry init failed: %v", err)
 	}
-	log.Printf("loaded %d app templates from %s", len(registry.List()), cfg.TemplatesPath)
+	log.Printf("  templates: %d loaded from %s", len(registry.List()), cfg.TemplatesPath)
 
 	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
 	iconFetcher, err := icons.New(cfg.IconsPath)
@@ -501,7 +508,7 @@ func main() {
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
-		api.NewUsersHandler(userRepo, store.Settings, cfg).Routes(r)
+		api.NewUsersHandler(userRepo, store.Settings).Routes(r)
 		totpHandler.Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
@@ -526,7 +533,9 @@ func main() {
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("NORA listening on %s (log level: %s)", addr, cfg.LogLevel)
+	log.Printf("  port     : %s", cfg.Port)
+	log.Printf("  log level: %s", cfg.LogLevel)
+	log.Printf("================================================")
 
 	// Start server in background so we can run a startup health check.
 	go func() {
@@ -543,12 +552,14 @@ func main() {
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				log.Printf("NORA health check OK — startup complete in %s", time.Since(startTime).Round(time.Millisecond))
+				log.Printf("  health   : OK — ready in %s", time.Since(startTime).Round(time.Millisecond))
+				log.Printf("================================================")
 				break
 			}
 		}
 		if i == 9 {
-			log.Printf("NORA health check did not respond after startup — server may still be initializing")
+			log.Printf("  health   : WARN — server did not respond after startup")
+			log.Printf("================================================")
 		}
 	}
 

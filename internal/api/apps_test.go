@@ -24,6 +24,8 @@ func newTestDB(t *testing.T) *sqlx.DB {
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
+	// In-memory SQLite: each connection gets its own database unless we pin to one.
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 	return db
 }

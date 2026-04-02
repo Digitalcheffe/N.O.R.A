@@ -3,7 +3,6 @@ package config
 import (
 	"log"
 	"os"
-	"strconv"
 )
 
 type Config struct {
@@ -11,16 +10,11 @@ type Config struct {
 	DBPath         string
 	Port           string
 	LogLevel       string // "debug" enables verbose request logging; default is minimal
-	SMTPHost       string
-	SMTPPort       int
-	SMTPUser       string
-	SMTPPass       string
-	SMTPFrom       string
 	DigestSchedule string
 	VAPIDPublic    string
 	VAPIDPrivate   string
-	TemplatesPath string
-	IconsPath     string
+	TemplatesPath  string
+	IconsPath      string
 	// Bootstrap admin credentials — used only when the users table is empty.
 	AdminEmail    string
 	AdminPassword string
@@ -38,11 +32,6 @@ func Load() *Config {
 		IconsPath:      getEnvStr("NORA_ICONS_PATH", "/data/icons"),
 		Port:           getEnvStr("NORA_PORT", "8081"),
 		LogLevel:       getEnvStr("NORA_LOG_LEVEL", "info"),
-		SMTPHost:       os.Getenv("NORA_SMTP_HOST"),
-		SMTPPort:       getEnvInt("NORA_SMTP_PORT", 587),
-		SMTPUser:       os.Getenv("NORA_SMTP_USER"),
-		SMTPPass:       os.Getenv("NORA_SMTP_PASS"),
-		SMTPFrom:       os.Getenv("NORA_SMTP_FROM"),
 		DigestSchedule: getEnvStr("NORA_DIGEST_SCHEDULE", "0 8 1 * *"),
 		VAPIDPublic:    os.Getenv("NORA_VAPID_PUBLIC"),
 		VAPIDPrivate:   os.Getenv("NORA_VAPID_PRIVATE"),
@@ -69,14 +58,3 @@ func getEnvStr(key, def string) string {
 	return def
 }
 
-func getEnvInt(key string, def int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return def
-	}
-	i, err := strconv.Atoi(v)
-	if err != nil {
-		return def
-	}
-	return i
-}
