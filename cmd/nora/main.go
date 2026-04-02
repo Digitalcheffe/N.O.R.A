@@ -500,7 +500,7 @@ func main() {
 		r.Use(auth.RequireAuth(cfg.Secret))
 		api.NewAppsHandler(appRepo, iconFetcher, checkRepo, registry).Routes(r)
 		if iconFetcher != nil {
-			api.NewIconsHandler(iconFetcher).Routes(r)
+			api.NewIconsHandler(iconFetcher, registry).Routes(r)
 		}
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
