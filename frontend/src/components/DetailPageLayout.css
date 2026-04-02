@@ -36,6 +36,24 @@
 
 .dpl-breadcrumb:hover { color: var(--text); }
 
+.dpl-name-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dpl-name-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dpl-name-icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
 .dpl-name {
   font-family: var(--mono);
   font-size: 18px;

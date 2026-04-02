@@ -4,6 +4,7 @@ meta:
   logo: overseerr.png
   description: Media request management for Plex
   capability: full
+  homepage: https://overseerr.dev
 
 webhook:
   setup_instructions: |

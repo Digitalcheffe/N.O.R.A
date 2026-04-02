@@ -4,6 +4,7 @@ meta:
   logo: vaultwarden.png
   description: Lightweight self-hosted Bitwarden-compatible password manager
   capability: monitor_only
+  homepage: https://github.com/dani-garcia/vaultwarden
 
 webhook:
   setup_instructions: |

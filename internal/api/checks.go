@@ -46,7 +46,7 @@ type checkRequest struct {
 	Type             string  `json:"type"`
 	Target           string  `json:"target"`
 	IntervalSecs     int     `json:"interval_secs"`
-	AppID            string  `json:"app_id"`
+	AppID            *string `json:"app_id"` // nil=no change, ""=clear, "uuid"=set
 	ExpectedStatus   int     `json:"expected_status"`
 	SSLWarnDays      int     `json:"ssl_warn_days"`
 	SSLCritDays      int     `json:"ssl_crit_days"`
@@ -146,9 +146,13 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	skipTLS := req.SkipTLSVerify != nil && *req.SkipTLSVerify
 
+	appID := ""
+	if req.AppID != nil {
+		appID = *req.AppID
+	}
 	check := &models.MonitorCheck{
 		ID:               uuid.New().String(),
-		AppID:            req.AppID,
+		AppID:            appID,
 		Name:             req.Name,
 		Type:             req.Type,
 		Target:           req.Target,
@@ -245,8 +249,8 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.IntervalSecs != 0 {
 		existing.IntervalSecs = req.IntervalSecs
 	}
-	if req.AppID != "" {
-		existing.AppID = req.AppID
+	if req.AppID != nil {
+		existing.AppID = *req.AppID
 	}
 	if req.ExpectedStatus != 0 {
 		existing.ExpectedStatus = req.ExpectedStatus

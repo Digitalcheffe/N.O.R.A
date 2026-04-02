@@ -4,6 +4,7 @@ meta:
   logo: diun.png
   description: Docker image update notifier
   capability: webhook_only
+  homepage: https://crazymax.dev/diun
 
 webhook:
   setup_instructions: |

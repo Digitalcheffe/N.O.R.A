@@ -4,6 +4,7 @@ meta:
   logo: tubesync.png
   description: YouTube PVR — automatically downloads and syncs YouTube channels and playlists
   capability: monitor_only
+  homepage: https://github.com/meeb/tubesync
 
 webhook:
   setup_instructions: |

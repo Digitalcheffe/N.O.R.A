@@ -4,6 +4,7 @@ meta:
   logo: sonarr.png
   description: TV series management and download automation
   capability: full
+  homepage: https://sonarr.tv
 
 webhook:
   setup_instructions: |

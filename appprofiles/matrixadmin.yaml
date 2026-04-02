@@ -2,6 +2,7 @@ meta:
   name: Matrix Admin
   category: Infrastructure
   logo: matrixadmin.png
+  icon: matrix
   description: Synapse Admin UI for Matrix homeserver administration
   capability: monitor_only
 

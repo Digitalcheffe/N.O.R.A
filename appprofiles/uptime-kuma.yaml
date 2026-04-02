@@ -4,6 +4,7 @@ meta:
   logo: uptime-kuma.png
   description: Self-hosted uptime monitoring tool
   capability: webhook_only
+  homepage: https://github.com/louislam/uptime-kuma
 
 webhook:
   setup_instructions: |

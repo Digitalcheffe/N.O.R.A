@@ -4,6 +4,7 @@ meta:
   logo: plex.png
   description: Personal media server and streaming platform
   capability: full
+  homepage: https://www.plex.tv
 
 webhook:
   setup_instructions: |

@@ -27,19 +27,10 @@ import './Settings.css'
 
 // ── App template icon (tries CDN, falls back to initial letter) ───────────────
 
-// Maps template IDs (filename without .yaml) to their dashboard-icons CDN names
-const APP_ICON_CDN_NAMES: Record<string, string> = {
-  adguardhome:    'adguard-home',
-  homeassistant:  'home-assistant',
-  matrixadmin:    'matrix',
-  wgeasy:         'wireguard',
-  'cloudflare-ddns': 'cloudflare',
-}
-
-function AppTemplateIcon({ id, name }: { id: string; name: string }) {
+function AppTemplateIcon({ id, icon, name }: { id: string; icon?: string; name: string }) {
   const [failed, setFailed] = useState(false)
   const onError = useCallback(() => setFailed(true), [])
-  const cdnName = APP_ICON_CDN_NAMES[id] ?? id
+  const cdnName = icon ?? id
   if (!failed) {
     return (
       <img
@@ -209,7 +200,7 @@ function AppsTab() {
           <div className="apps-pills">
             {builtins.map(t => (
               <span key={t.id} className="app-pill">
-                <AppTemplateIcon id={t.id} name={t.name} />
+                <AppTemplateIcon id={t.id} icon={t.icon} name={t.name} />
                 {t.name}
                 <span className="app-pill-type">{t.category}</span>
               </span>

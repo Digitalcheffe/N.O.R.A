@@ -307,6 +307,8 @@ export interface AppTemplate {
   category: string
   description: string
   capability: AppTemplateCapability
+  homepage?: string
+  icon?: string  // CDN icon slug override; falls back to id
 }
 
 // ── Custom App Templates ───────────────────────────────────────────────────────

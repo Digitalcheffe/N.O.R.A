@@ -22,6 +22,8 @@ export interface DetailPageLayoutProps {
   breadcrumbPath: string
   /** Entity name — large heading and Topbar title */
   name: string
+  /** Optional icon rendered inline next to the name */
+  icon?: React.ReactNode
   /** Badges rendered under the name */
   keyDataPoints?: KeyDataPoint[]
   /** Online/offline/unknown dot + label, top right */
@@ -57,6 +59,7 @@ export function DetailPageLayout({
   breadcrumb,
   breadcrumbPath,
   name,
+  icon,
   keyDataPoints,
   status,
   lastPolled,
@@ -83,7 +86,10 @@ export function DetailPageLayout({
             >
               ← {breadcrumb}
             </button>
-            <h1 className="dpl-name">{name}</h1>
+            <div className="dpl-name-row">
+              {icon && <span className="dpl-name-icon">{icon}</span>}
+              <h1 className="dpl-name">{name}</h1>
+            </div>
           </div>
 
           <div className="dpl-header-right">

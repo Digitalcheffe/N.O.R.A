@@ -4,6 +4,7 @@ meta:
   logo: ghost.png
   description: Headless CMS for blogs and newsletters
   capability: full
+  homepage: https://ghost.org
 
 webhook:
   setup_instructions: |

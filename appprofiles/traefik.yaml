@@ -4,6 +4,7 @@ meta:
   logo: traefik.png
   description: Cloud-native reverse proxy and load balancer
   capability: monitor_only
+  homepage: https://traefik.io
 
 monitor:
   check_type: url
