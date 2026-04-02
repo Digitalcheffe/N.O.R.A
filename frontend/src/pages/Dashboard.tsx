@@ -389,18 +389,34 @@ export function Dashboard() {
             </div>
             <div className="event-counts-row">
               <div className="event-count-card info" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=info')}>
+                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="10" cy="10" r="8" />
+                  <path d="M10 9v5M10 7h.01" />
+                </svg>
                 <div className="event-count-value">{eventCounts.info}</div>
                 <div className="event-count-label">Info</div>
               </div>
               <div className="event-count-card warn" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=warn')}>
+                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 3L18.5 17H1.5L10 3z" />
+                  <path d="M10 9v4M10 15h.01" />
+                </svg>
                 <div className="event-count-value">{eventCounts.warn}</div>
                 <div className="event-count-label">Warn</div>
               </div>
               <div className="event-count-card error" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=error')}>
+                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="10" cy="10" r="8" />
+                  <path d="M7 7l6 6M13 7l-6 6" />
+                </svg>
                 <div className="event-count-value">{eventCounts.error}</div>
                 <div className="event-count-label">Error</div>
               </div>
               <div className="event-count-card critical" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=critical')}>
+                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 2c0 4-4 5-4 9a4 4 0 0 0 8 0c0-4-4-5-4-9z" />
+                  <path d="M8 17.5a2 2 0 0 0 4 0" />
+                </svg>
                 <div className="event-count-value">{eventCounts.critical}</div>
                 <div className="event-count-label">Critical</div>
               </div>

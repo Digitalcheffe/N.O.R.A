@@ -16,6 +16,80 @@ import type {
 import './Infrastructure.css'
 import '../components/CheckForm.css'
 
+// ── Infra type icons ──────────────────────────────────────────────────────────
+
+const INFRA_CDN_ICONS: Partial<Record<string, string>> = {
+  proxmox_node:  'proxmox',
+  synology:      'synology-dsm',
+  traefik:       'traefik',
+  portainer:     'portainer',
+  docker_engine: 'docker',
+}
+
+function InfraTypeSVGFallback({ type }: { type: string }) {
+  const s = { width: 22, height: 22, fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  switch (type) {
+    case 'vm':
+    case 'lxc':
+      // Monitor / container
+      return (
+        <svg viewBox="0 0 22 22" style={s}>
+          <rect x="2" y="3" width="18" height="13" rx="2" />
+          <path d="M7 19h8M11 16v3" />
+        </svg>
+      )
+    case 'linux_host':
+      // Tux-inspired silhouette
+      return (
+        <svg viewBox="0 0 22 22" style={s}>
+          <ellipse cx="11" cy="8" rx="5" ry="5.5" />
+          <path d="M7 13c-3 1-4 4-4 6h16c0-2-1-5-4-6" />
+          <circle cx="9" cy="7" r="1" fill="currentColor" stroke="none" />
+          <circle cx="13" cy="7" r="1" fill="currentColor" stroke="none" />
+          <path d="M9 10.5c.5.7 1.5.7 2 0" />
+        </svg>
+      )
+    case 'windows_host':
+      // Windows logo
+      return (
+        <svg viewBox="0 0 22 22" style={s}>
+          <path d="M3 5.5l7-1v7H3zM11 4.2l8-1.2v8.5H11zM3 12.5h7v7l-7-1zM11 12.5h8v8.5L11 19.8z" />
+        </svg>
+      )
+    default:
+      // Server rack / bare metal / generic
+      return (
+        <svg viewBox="0 0 22 22" style={s}>
+          <rect x="2" y="4" width="18" height="5" rx="1.5" />
+          <rect x="2" y="11" width="18" height="5" rx="1.5" />
+          <circle cx="17" cy="6.5" r="1" fill="currentColor" stroke="none" />
+          <circle cx="17" cy="13.5" r="1" fill="currentColor" stroke="none" />
+        </svg>
+      )
+  }
+}
+
+function InfraTypeIcon({ type }: { type: string }) {
+  const [failed, setFailed] = useState(false)
+  const cdnName = INFRA_CDN_ICONS[type]
+
+  if (cdnName && !failed) {
+    return (
+      <img
+        src={`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${cdnName}.svg`}
+        alt={type}
+        className="infra-type-icon"
+        onError={() => setFailed(true)}
+      />
+    )
+  }
+  return (
+    <span className="infra-type-icon infra-type-icon-svg">
+      <InfraTypeSVGFallback type={type} />
+    </span>
+  )
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 type ActiveTab = 'components' | 'map'
@@ -505,6 +579,7 @@ export function Infrastructure() {
     return (
       <div key={c.id} className="infra-card">
         <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/${c.id}`)}>
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -564,6 +639,7 @@ export function Infrastructure() {
           style={{ cursor: 'pointer' }}
           onClick={() => navigate(`/infrastructure/${c.id}`)}
         >
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">{c.name}</div>
             <div className="infra-card-meta">Docker Engine · {c.ip || 'local socket'}</div>
@@ -623,6 +699,7 @@ export function Infrastructure() {
     return (
       <div key={c.id} className="infra-card">
         <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/${c.id}`)}>
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -686,6 +763,7 @@ export function Infrastructure() {
     return (
       <div key={c.id} className="infra-card">
         <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(detailPath)}>
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}

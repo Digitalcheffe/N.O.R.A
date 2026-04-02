@@ -585,6 +585,19 @@
 
 .event-count-card:hover { border-color: var(--border2); }
 
+.event-count-icon {
+  width: 20px;
+  height: 20px;
+  opacity: 0.6;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.event-count-card.info     .event-count-icon { stroke: var(--accent); }
+.event-count-card.warn     .event-count-icon { stroke: var(--yellow); }
+.event-count-card.error    .event-count-icon { stroke: var(--red); }
+.event-count-card.critical .event-count-icon { stroke: var(--red); }
+
 .event-count-value {
   font-family: var(--mono);
   font-size: 28px;
