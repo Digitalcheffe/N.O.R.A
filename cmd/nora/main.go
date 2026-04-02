@@ -470,7 +470,7 @@ func main() {
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Secret))
-		api.NewAppsHandler(appRepo, iconFetcher).Routes(r)
+		api.NewAppsHandler(appRepo, iconFetcher, checkRepo).Routes(r)
 		if iconFetcher != nil {
 			api.NewIconsHandler(iconFetcher).Routes(r)
 		}

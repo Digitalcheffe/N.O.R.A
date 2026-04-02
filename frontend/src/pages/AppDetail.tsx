@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { DetailPageLayout } from '../components/DetailPageLayout'
-import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi } from '../api/client'
-import type { App, AppSummary, AppTemplate } from '../api/types'
+import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi } from '../api/client'
+import type { App, AppSummary, AppTemplate, MonitorCheck } from '../api/types'
+import { CheckTypeIcon } from '../components/CheckTypeIcon'
 import '../styles/Modal.css'
 import './AppDetail.css'
 
@@ -309,6 +310,15 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function statusColor(s: string | null) {
+  if (s === 'up')   return 'var(--green)'
+  if (s === 'warn') return 'var(--yellow)'
+  if (s === 'down') return 'var(--red)'
+  return 'var(--text3)'
+}
+
 // ── AppDetail ─────────────────────────────────────────────────────────────────
 
 export function AppDetail() {
@@ -320,13 +330,22 @@ export function AppDetail() {
 
   const [app, setApp] = useState<App | null>(null)
   const [appSummary, setAppSummary] = useState<AppSummary | null>(null)
+  const [appChecks, setAppChecks] = useState<MonitorCheck[]>([])
+  const [appTemplate, setAppTemplate] = useState<AppTemplate | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
   const appId = id ?? ''
 
   useEffect(() => {
     if (!appId) return
-    appsApi.get(appId).then(setApp).catch(console.error)
+    appsApi.get(appId).then(a => {
+      setApp(a)
+      if (a.profile_id) {
+        templatesApi.get(a.profile_id)
+          .then(setAppTemplate)
+          .catch(() => {})
+      }
+    }).catch(console.error)
   }, [appId, tick])
 
   useEffect(() => {
@@ -337,6 +356,13 @@ export function AppDetail() {
       })
       .catch(console.error)
   }, [appId, timeFilter, tick])
+
+  useEffect(() => {
+    if (!appId) return
+    checksApi.list()
+      .then(res => setAppChecks(res.data.filter(c => c.app_id === appId)))
+      .catch(() => {})
+  }, [appId, tick])
 
   useEffect(() => {
     if (!id) navigate('/apps')
@@ -355,11 +381,36 @@ export function AppDetail() {
       })
     : null
 
+  const capability = appSummary?.capability
   const keyDataPoints = [
     { label: 'Profile', value: app?.profile_id || 'Generic' },
+    ...(capability ? [{ label: 'Type', value: CAPABILITY_LABEL[capability] ?? capability }] : []),
     { label: 'Rate limit', value: app?.rate_limit ? `${app.rate_limit}/min` : 'Unlimited' },
     ...(baseUrl ? [{ label: 'URL', value: baseUrl }] : []),
   ]
+
+  // Icon shown next to the name
+  const appIcon = appSummary?.icon_url ? (
+    <img
+      src={appSummary.icon_url}
+      alt={appName}
+      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+    />
+  ) : undefined
+
+  // Description + homepage shown below the KDP badges
+  const AppExtraHeader = (appTemplate?.description || appTemplate?.homepage) ? (
+    <div className="detail-app-icon-row">
+      {appTemplate.description && (
+        <span className="detail-app-description">{appTemplate.description}</span>
+      )}
+      {appTemplate.homepage && (
+        <a className="detail-app-homepage" href={appTemplate.homepage} target="_blank" rel="noopener noreferrer">
+          ↗ {appTemplate.homepage.replace(/^https?:\/\//, '')}
+        </a>
+      )}
+    </div>
+  ) : undefined
 
   return (
     <>
@@ -370,6 +421,8 @@ export function AppDetail() {
         status={{ status: dplStatus }}
         lastPolled={lastEvent ? `Last event: ${lastEvent}` : undefined}
         keyDataPoints={keyDataPoints}
+        icon={appIcon}
+        headerExtra={AppExtraHeader}
         actions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {baseUrl && (
@@ -394,8 +447,8 @@ export function AppDetail() {
         sourceType="app"
         sourceId={appId}
       >
-        {/* ── Stats row ── */}
-        {appSummary && (
+        {/* ── Stats row (when available) ── */}
+        {appSummary && (appSummary.stats ?? []).length > 0 && (
           <div className="detail-stats-row">
             {(appSummary.stats ?? []).map(stat => (
               <div key={stat.label} className="detail-stat-card">
@@ -413,6 +466,33 @@ export function AppDetail() {
             )}
           </div>
         )}
+
+        {/* ── Monitor checks — shown for all apps ── */}
+        <div className="service-checks-section">
+          <div className="service-checks-header">
+            <span className="service-checks-title">Monitor Checks</span>
+            <button className="service-add-check-btn" onClick={() => navigate('/checks')}>+ Add check</button>
+          </div>
+          {appChecks.length === 0 ? (
+            <div className="service-checks-empty">
+              No monitor checks linked to this app yet.
+            </div>
+          ) : (
+            <div className="service-checks-list">
+              {appChecks.map(c => (
+                <div key={c.id} className="service-check-row" onClick={() => navigate(`/checks/${c.id}`)}>
+                  <CheckTypeIcon type={c.type} size={14} />
+                  <span className="service-check-type">{c.type.toUpperCase()}</span>
+                  <span className="service-check-target">{c.target}</span>
+                  <span className="service-check-name">{c.name !== c.target ? c.name : ''}</span>
+                  <span className="service-check-status" style={{ color: statusColor(c.last_status) }}>
+                    {c.last_status?.toUpperCase() ?? '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </DetailPageLayout>
 
       {showSettings && app && (
