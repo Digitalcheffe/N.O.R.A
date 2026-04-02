@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
@@ -28,16 +28,28 @@ import './Settings.css'
 // ── App template icon (tries CDN, falls back to initial letter) ───────────────
 
 function AppTemplateIcon({ id, icon, name }: { id: string; icon?: string; name: string }) {
-  const [failed, setFailed] = useState(false)
-  const onError = useCallback(() => setFailed(true), [])
+  const [svgFailed, setSvgFailed] = useState(false)
+  const [pngFailed, setPngFailed] = useState(false)
   const cdnName = icon ?? id
-  if (!failed) {
+  const CDN = 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons'
+
+  if (!svgFailed) {
     return (
       <img
-        src={`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${cdnName}.svg`}
+        src={`${CDN}/svg/${cdnName}.svg`}
         alt={name}
         style={{ width: 20, height: 20, flexShrink: 0 }}
-        onError={onError}
+        onError={() => setSvgFailed(true)}
+      />
+    )
+  }
+  if (!pngFailed) {
+    return (
+      <img
+        src={`${CDN}/png/${cdnName}.png`}
+        alt={name}
+        style={{ width: 20, height: 20, flexShrink: 0 }}
+        onError={() => setPngFailed(true)}
       />
     )
   }
