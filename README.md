@@ -19,13 +19,13 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 | | |
 |---|---|
-| **Monitor** | Actively checks hosts, services, and SSL certificates on a schedule — no agent required |
+| **Monitor** | Actively checks hosts, services, SSL certificates, and DNS on a schedule — no agent required |
 | **Capture** | Receives webhook events from apps that support them (Sonarr, n8n, Duplicati, and more) |
-| **Observe** | Connects to the Docker socket for container-level visibility across your stack |
-| **Measure** | Collects CPU, memory, and disk from containers and hosts automatically |
-| **Store** | Retains events by severity — errors for 90 days, info for 7 — with monthly rollups kept forever |
-| **Notify** | Fires Web Push notifications to any subscribed browser or mobile device |
-| **Summarize** | Delivers a monthly digest email of what happened across your stack |
+| **Observe** | Connects to Docker, Proxmox, Portainer, Traefik, Synology, and SNMP targets for deep visibility |
+| **Measure** | Collects CPU, memory, and disk from containers, VMs, and hosts automatically |
+| **Store** | Retains events by severity with configurable retention — monthly rollups kept forever |
+| **Alert** | Fires rules-based Web Push notifications to any subscribed browser or mobile device |
+| **Summarize** | Delivers a scheduled digest email of what happened across your stack |
 
 ---
 
@@ -33,7 +33,7 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 - **Not Grafana** — no metrics pipelines, no dashboards you have to build yourself
 - **Not Splunk** — no query language, no complex field extraction, no enterprise pricing
-- **Not Uptime Kuma** — not just uptime; has event history, context, and resource trends
+- **Not Uptime Kuma** — not just uptime; has event history, context, resource trends, and integrations
 - **Not Gotify** — not just notifications; it remembers what your apps told it
 
 ---
@@ -42,53 +42,113 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 ```bash
 docker run -d \
-  -p 8080:8080 \
+  -p 8081:8081 \
   -v ./data:/data \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -e NORA_SECRET=your-secret-here \
   ghcr.io/digitalcheffe/nora:latest
 ```
 
-Open `http://localhost:8080` — create your admin account and add your first app.
+Open `http://localhost:8081` — create your admin account and add your first app.
 
 ---
 
-## App Library
+## Features
 
-NORA ships with pre-built profiles for the most common homelab apps. Pick your app from the library and NORA already knows how to handle its events, what to monitor, and how to summarize it.
+### Monitoring
+- **Ping checks** — ICMP reachability on a schedule
+- **URL checks** — HTTP/HTTPS with status code verification
+- **SSL checks** — certificate expiry detection with configurable warning thresholds
+- **DNS checks** — query validation with record type support
+- Manual run, baseline reset, and per-check event history
 
-**Media** — Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Overseerr  
-**Automation** — n8n · Home Assistant  
-**Infrastructure** — Proxmox · OPNsense · Traefik · Matrix  
-**Backup & Updates** — Duplicati · Watchtower · DIUN · Uptime Kuma  
+### Event Capture
+- Receive webhooks from any app via `POST /api/v1/ingest/{token}`
+- Token-based auth per app — compromise one token, the rest are safe
+- App profiles normalize payloads into NORA's event model automatically
 
-Don't see your app? The custom profile editor lets you map any webhook payload to NORA's event model in minutes.
+### Infrastructure Integrations
+
+| Integration | What NORA collects |
+|---|---|
+| **Docker** | Container discovery, resource metrics, image update detection |
+| **Proxmox** | Node status, VMs and LXC guests, storage, task failures |
+| **Portainer** | Endpoints, container inventory, image status |
+| **Traefik** | Routes, services, SSL certificates |
+| **Synology** | System status, storage information |
+| **SNMP** | Generic metrics and health from any SNMP-capable device |
+
+### Notifications
+- **Web Push** — browser-native push to desktop and mobile, no app store required
+- **Alert Rules** — define conditions on any event field, fire notifications when they match
+- **Digest Email** — scheduled summary of what happened across your stack via SMTP
+- VAPID keys auto-generated on first run
+
+### User Management
+- Admin and Member roles
+- Admin-controlled user creation with optional invite email on creation
+- Per-user password management with configurable policy enforcement
+- **Two-Factor Authentication (TOTP)** — time-based codes via any authenticator app (Google Authenticator, Authy, etc.)
+- Global MFA enforcement with grace login and per-user exempt flag
+- Disable TOTP without losing enrollment — re-enable without re-scanning
+
+### Dashboard
+- Summary counts, sparklines, and status rollup across apps, checks, and infrastructure
+- Event timeline, check status, and resource trends in one view
+- Clickable event cards with full payload detail
+
+### Alert Rules
+- Define conditions on any event field (severity, source, app, message, etc.)
+- Combine conditions with AND / OR logic
+- Fire Web Push or email notifications when a rule matches
+- Enable, disable, or delete rules from the Settings → Notify Rules tab
+
+### Topology
+- Visual network map of your infrastructure, containers, apps, and routes
+- Clickable nodes drill into component detail
+- Automatically populated from Docker, Traefik, and infrastructure discovery
+
+### App Library
+
+NORA ships with 29 pre-built profiles. Pick your app and NORA already knows how to handle its events.
+
+| Category | Apps |
+|---|---|
+| Media | Plex · Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Overseerr · Tubesync · NZBGet |
+| Automation | n8n · Home Assistant · Mealie |
+| Infrastructure | Traefik · Unifi · WG-Easy |
+| Security & DNS | AdGuard Home · Cloudflare DDNS · Vaultwarden |
+| Backup & Updates | Duplicati · Watchtower · DIUN |
+| Notifications & Comms | Gotify · Ghost · Matrix · Maubot |
+| Other | Uptime Kuma · Homepage · Zwavejs2mqtt |
+
+Don't see your app? The custom profile editor lets you map any webhook payload to NORA's event model.
+
+Profile contributions are welcome — drop a YAML file in a GitHub issue or discussion and it will be reviewed for inclusion in the library.
 
 ---
 
-## Roadmap
+## Configuration
 
-### v1 — Foundation *(in development)*
-- Webhook ingest from any app that can fire an HTTP POST
-- Active monitoring — ping, URL checks, SSL certificate expiry
-- Docker socket integration — container events and resource metrics
-- App profile library — 15 apps at launch
-- Dashboard with counts, sparklines, and status rollup
-- Monthly digest email via SMTP
-- Web Push notifications (browser-native, no app store)
-- Single Docker image, SQLite, zero external dependencies
+### Environment Variables
 
-### v2 — Intelligence
-- **Notification rules engine** — define conditions on any event field, fire push notifications when they match. Rules created from real events you're looking at, not blank forms.
-- **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
-- **Remote Docker nodes** — monitor containers across multiple hosts via socket proxy
+| Variable | Description | Default | Required |
+|---|---|---|---|
+| `NORA_SECRET` | JWT signing secret | — | Yes |
+| `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
+| `NORA_PORT` | HTTP port | `8081` | No |
+| `NORA_LOG_LEVEL` | Set to `debug` to enable verbose request logging; default shows startup and errors only | `info` | No |
+| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email (default: 8am on the 1st of each month) | `0 8 1 * *` | No |
+| `NORA_ADMIN_EMAIL` | Bootstrap admin email | — | Required (first run) |
+| `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | Required (first run) |
 
-### v3 — Scale
-- PostgreSQL support for larger installations
-- SSO / OAuth login
-- Community profile library — import profiles contributed by other users
-- API polling for apps without webhook support (deeper Proxmox, Synology, OPNsense integration)
-- Multi-instance federation
+### In-App Settings
+All email configuration is managed in the app under Settings → Notifications — no env vars needed.
+
+- SMTP server, port, credentials, from address, and test email
+- Password policy (minimum length, uppercase, numbers, special characters)
+- Global MFA requirement
+- Digest email schedule
 
 ---
 
@@ -98,23 +158,30 @@ Don't see your app? The custom profile editor lets you map any webhook payload t
 |---|---|
 | Backend | Go — single binary, zero runtime dependencies |
 | Database | SQLite — single file, zero ops |
-| Frontend | React + Vite — PWA, installable, works offline |
+| Frontend | React + Vite — PWA, installable |
 | Push | Web Push / VAPID — browser-native, no third party |
-| Deployment | Single Docker image |
+| Deployment | Single Docker image (~50 MB) |
+
+3-stage Docker build: frontend → Go binary → `alpine:3.19` final image. No node_modules, no Go toolchain, no source in the final image.
 
 ---
 
-## Design Principles
+## What's Next
 
-1. Store what matters. Surface what's important. Stay out of the way.
-2. Simple enough that you don't have to struggle.
-3. If a feature makes it harder — cut it. If it makes it easier — keep it.
+### In Progress
+- **Remote Docker nodes** — multi-host container monitoring via socket proxy; Portainer integration is live, native remote socket support coming
+
+### Planning
+- **Deeper API polling** — richer metrics and status from Proxmox, Synology, OPNsense, and other infrastructure components
+
+### Considering
+- **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
+- **PostgreSQL support** — for larger installations that outgrow SQLite
+- **SSO / OAuth login** — federated authentication for team deployments
 
 ---
 
 ## Contributing
-
-Profile contributions are welcome. Drop a YAML file in a GitHub issue or discussion — see the profile schema in `/docs/architecture.md` for the format. Profiles are reviewed and merged into the library.
 
 Code contributions: open an issue first so we can align on approach before you build.
 
