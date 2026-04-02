@@ -19,13 +19,13 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 | | |
 |---|---|
-| **Monitor** | Actively checks hosts, services, and SSL certificates on a schedule — no agent required |
+| **Monitor** | Actively checks hosts, services, SSL certificates, and DNS on a schedule — no agent required |
 | **Capture** | Receives webhook events from apps that support them (Sonarr, n8n, Duplicati, and more) |
-| **Observe** | Connects to the Docker socket for container-level visibility across your stack |
-| **Measure** | Collects CPU, memory, and disk from containers and hosts automatically |
-| **Store** | Retains events by severity — errors for 90 days, info for 7 — with monthly rollups kept forever |
-| **Notify** | Fires Web Push notifications to any subscribed browser or mobile device |
-| **Summarize** | Delivers a monthly digest email of what happened across your stack |
+| **Observe** | Connects to Docker, Proxmox, Portainer, Traefik, Synology, and SNMP targets for deep visibility |
+| **Measure** | Collects CPU, memory, and disk from containers, VMs, and hosts automatically |
+| **Store** | Retains events by severity with configurable retention — monthly rollups kept forever |
+| **Alert** | Fires rules-based Web Push notifications to any subscribed browser or mobile device |
+| **Summarize** | Delivers a scheduled digest email of what happened across your stack |
 
 ---
 
@@ -33,7 +33,7 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 - **Not Grafana** — no metrics pipelines, no dashboards you have to build yourself
 - **Not Splunk** — no query language, no complex field extraction, no enterprise pricing
-- **Not Uptime Kuma** — not just uptime; has event history, context, and resource trends
+- **Not Uptime Kuma** — not just uptime; has event history, context, resource trends, and integrations
 - **Not Gotify** — not just notifications; it remembers what your apps told it
 
 ---
@@ -53,42 +53,92 @@ Open `http://localhost:8080` — create your admin account and add your first ap
 
 ---
 
-## App Library
+## Features
 
-NORA ships with pre-built profiles for the most common homelab apps. Pick your app from the library and NORA already knows how to handle its events, what to monitor, and how to summarize it.
+### Monitoring
+- **Ping checks** — ICMP reachability on a schedule
+- **URL checks** — HTTP/HTTPS with status code verification
+- **SSL checks** — certificate expiry detection with configurable warning thresholds
+- **DNS checks** — query validation with record type support
+- Manual run, baseline reset, and per-check event history
 
-**Media** — Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Overseerr  
-**Automation** — n8n · Home Assistant  
-**Infrastructure** — Proxmox · OPNsense · Traefik · Matrix  
-**Backup & Updates** — Duplicati · Watchtower · DIUN · Uptime Kuma  
+### Event Capture
+- Receive webhooks from any app via `POST /api/v1/ingest/{token}`
+- Token-based auth per app — compromise one token, the rest are safe
+- App profiles normalize payloads into NORA's event model automatically
 
-Don't see your app? The custom profile editor lets you map any webhook payload to NORA's event model in minutes.
+### Infrastructure Integrations
+
+| Integration | What NORA collects |
+|---|---|
+| **Docker** | Container discovery, resource metrics, image update detection |
+| **Proxmox** | Node status, VMs and LXC guests, storage, task failures |
+| **Portainer** | Endpoints, container inventory, image status |
+| **Traefik** | Routes, services, SSL certificates |
+| **Synology** | System status, storage information |
+| **SNMP** | Generic metrics and health from any SNMP-capable device |
+
+### Notifications
+- **Web Push** — browser-native push to desktop and mobile, no app store required
+- **Alert Rules** — define conditions on any event field, fire notifications when they match
+- **Digest Email** — scheduled summary of what happened across your stack via SMTP
+- VAPID keys auto-generated on first run
+
+### User Management
+- Admin and Member roles
+- Admin-controlled user creation with optional invite email on creation
+- Per-user password management with configurable policy enforcement
+- **Two-Factor Authentication (TOTP)** — time-based codes via any authenticator app (Google Authenticator, Authy, etc.)
+- Global MFA enforcement with grace login and per-user exempt flag
+- Disable TOTP without losing enrollment — re-enable without re-scanning
+
+### Dashboard
+- Summary counts, sparklines, and status rollup across apps, checks, and infrastructure
+- Event timeline, check status, and resource trends in one view
+- Clickable event cards with full payload detail
+
+### App Library
+
+NORA ships with 29 pre-built profiles. Pick your app and NORA already knows how to handle its events.
+
+**Media** — Plex · Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Overseerr · Tubesync · NZBGet
+**Automation** — n8n · Home Assistant · Mealie
+**Infrastructure** — Traefik · Unifi · WG-Easy
+**Security & DNS** — AdGuard Home · Cloudflare DDNS · Vaultwarden
+**Backup & Updates** — Duplicati · Watchtower · DIUN
+**Notifications & Comms** — Gotify · Ghost · Matrix · Maubot
+**Other** — Uptime Kuma · Homepage · Zwavejs2mqtt
+
+Don't see your app? The custom profile editor lets you map any webhook payload to NORA's event model.
 
 ---
 
-## Roadmap
+## Configuration
 
-### v1 — Foundation *(in development)*
-- Webhook ingest from any app that can fire an HTTP POST
-- Active monitoring — ping, URL checks, SSL certificate expiry
-- Docker socket integration — container events and resource metrics
-- App profile library — 15 apps at launch
-- Dashboard with counts, sparklines, and status rollup
-- Monthly digest email via SMTP
-- Web Push notifications (browser-native, no app store)
-- Single Docker image, SQLite, zero external dependencies
+### Environment Variables
 
-### v2 — Intelligence
-- **Notification rules engine** — define conditions on any event field, fire push notifications when they match. Rules created from real events you're looking at, not blank forms.
-- **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
-- **Remote Docker nodes** — monitor containers across multiple hosts via socket proxy
+| Variable | Description | Default |
+|---|---|---|
+| `NORA_SECRET` | JWT signing secret — **required** | — |
+| `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` |
+| `NORA_PORT` | HTTP port | `8080` |
+| `NORA_DEV_MODE` | Inject hardcoded admin session, skip auth | `false` |
+| `NORA_SMTP_HOST` | SMTP server hostname | — |
+| `NORA_SMTP_PORT` | SMTP port | `587` |
+| `NORA_SMTP_USER` | SMTP username | — |
+| `NORA_SMTP_PASS` | SMTP password | — |
+| `NORA_SMTP_FROM` | From address for outbound email | — |
+| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email | `0 8 1 * *` |
+| `NORA_VAPID_PUBLIC` | VAPID public key (auto-generated if absent) | — |
+| `NORA_VAPID_PRIVATE` | VAPID private key (auto-generated if absent) | — |
+| `NORA_ADMIN_EMAIL` | Bootstrap admin email (first run only) | — |
+| `NORA_ADMIN_PASSWORD` | Bootstrap admin password (first run only) | — |
 
-### v3 — Scale
-- PostgreSQL support for larger installations
-- SSO / OAuth login
-- Community profile library — import profiles contributed by other users
-- API polling for apps without webhook support (deeper Proxmox, Synology, OPNsense integration)
-- Multi-instance federation
+### In-App Settings
+- SMTP configuration and test email
+- Password policy (minimum length, uppercase, numbers, special characters)
+- Global MFA requirement
+- Digest email schedule
 
 ---
 
@@ -98,9 +148,29 @@ Don't see your app? The custom profile editor lets you map any webhook payload t
 |---|---|
 | Backend | Go — single binary, zero runtime dependencies |
 | Database | SQLite — single file, zero ops |
-| Frontend | React + Vite — PWA, installable, works offline |
+| Frontend | React + Vite — PWA, installable |
 | Push | Web Push / VAPID — browser-native, no third party |
-| Deployment | Single Docker image |
+| Deployment | Single Docker image (~50 MB) |
+
+3-stage Docker build: frontend → Go binary → `alpine:3.19` final image. No node_modules, no Go toolchain, no source in the final image.
+
+---
+
+## Roadmap
+
+### In Progress
+- **Alert rules UI** — rules API is shipped; in-app rule builder coming next
+- **Visual topology** — clickable network map of your infrastructure and apps
+
+### v2 — Intelligence
+- **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
+- **Remote Docker nodes** — monitor containers across multiple hosts via socket proxy
+- **Deeper API polling** — richer Proxmox, Synology, and OPNsense integration
+
+### v3 — Scale
+- PostgreSQL support for larger installations
+- SSO / OAuth login
+- Community profile library — import profiles contributed by other users
 
 ---
 
