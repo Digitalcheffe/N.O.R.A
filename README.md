@@ -29,15 +29,6 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 ---
 
-## What It Is Not
-
-- **Not Grafana** — no metrics pipelines, no dashboards you have to build yourself
-- **Not Splunk** — no query language, no complex field extraction, no enterprise pricing
-- **Not Uptime Kuma** — not just uptime; has event history, context, resource trends, and integrations
-- **Not Gotify** — not just notifications; it remembers what your apps told it
-
----
-
 ## Quick Start
 
 ```bash
