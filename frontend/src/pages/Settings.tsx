@@ -1025,42 +1025,42 @@ function UsersTab() {
         <div className="section-header">
           <span className="section-title">Password Policy</span>
         </div>
-        <div className="pw-policy-requirements">
-          <label className="pw-policy-req-item">
-            Min length
-            <input
-              className="pw-policy-length-input"
-              type="number"
-              min={1}
-              max={128}
-              value={policy.min_length}
-              onChange={e => setPolicy(p => ({ ...p, min_length: parseInt(e.target.value, 10) || 8 }))}
-            />
-          </label>
-          <label className="pw-policy-req-item">
-            <input
-              type="checkbox"
-              checked={policy.require_uppercase}
-              onChange={e => setPolicy(p => ({ ...p, require_uppercase: e.target.checked }))}
-            />
-            Uppercase
-          </label>
-          <label className="pw-policy-req-item">
-            <input
-              type="checkbox"
-              checked={policy.require_number}
-              onChange={e => setPolicy(p => ({ ...p, require_number: e.target.checked }))}
-            />
-            Number
-          </label>
-          <label className="pw-policy-req-item">
-            <input
-              type="checkbox"
-              checked={policy.require_special}
-              onChange={e => setPolicy(p => ({ ...p, require_special: e.target.checked }))}
-            />
-            Special character
-          </label>
+        <div className="settings-field-row">
+          <span className="settings-label">Min length</span>
+          <input
+            className="pw-policy-length-input"
+            type="number"
+            min={1}
+            max={128}
+            value={policy.min_length}
+            onChange={e => setPolicy(p => ({ ...p, min_length: parseInt(e.target.value, 10) || 8 }))}
+          />
+          <div className="pw-policy-requirements">
+            <label className="pw-policy-req-item">
+              <input
+                type="checkbox"
+                checked={policy.require_uppercase}
+                onChange={e => setPolicy(p => ({ ...p, require_uppercase: e.target.checked }))}
+              />
+              Uppercase
+            </label>
+            <label className="pw-policy-req-item">
+              <input
+                type="checkbox"
+                checked={policy.require_number}
+                onChange={e => setPolicy(p => ({ ...p, require_number: e.target.checked }))}
+              />
+              Number
+            </label>
+            <label className="pw-policy-req-item">
+              <input
+                type="checkbox"
+                checked={policy.require_special}
+                onChange={e => setPolicy(p => ({ ...p, require_special: e.target.checked }))}
+              />
+              Special character
+            </label>
+          </div>
         </div>
         <div className="settings-actions">
           <button className="settings-btn primary" onClick={handleSavePolicy} disabled={savingPolicy}>

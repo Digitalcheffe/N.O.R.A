@@ -980,7 +980,7 @@
 .pw-policy-requirements {
   display: flex;
   gap: 20px;
-  padding: 6px 0 2px;
+  align-items: center;
 }
 
 .pw-policy-req-item {
