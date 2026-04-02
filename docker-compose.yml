@@ -7,10 +7,8 @@ services:
       - nora-data:/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      - NORA_DEV_MODE=true
       - NORA_SECRET=dev-secret-change-me
       - NORA_DB_PATH=/data/nora.db
       - NORA_PORT=8081
-
 volumes:
   nora-data:
