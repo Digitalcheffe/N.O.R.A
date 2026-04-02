@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { DetailPageLayout } from '../components/DetailPageLayout'
-import { checks as checksApi, integrations as integrationsApi } from '../api/client'
+import { checks as checksApi, integrations as integrationsApi, apps as appsApi } from '../api/client'
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
-import type { MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
+import type { MonitorCheck, InfraIntegration, TraefikCert, App } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
 import {
   type FormFields,
@@ -22,6 +22,7 @@ import './CheckDetail.css'
 
 interface EditModalProps {
   check: MonitorCheck
+  apps: App[]
   traefikIntegrations: InfraIntegration[]
   traefikCerts: TraefikCert[]
   onIntegrationChange: (id: string) => void
@@ -32,6 +33,7 @@ interface EditModalProps {
 
 function EditModal({
   check,
+  apps,
   traefikIntegrations,
   traefikCerts,
   onIntegrationChange,
@@ -99,6 +101,7 @@ function EditModal({
             traefikIntegrations={traefikIntegrations}
             traefikCerts={traefikCerts}
             onIntegrationChange={onIntegrationChange}
+            apps={apps}
             extraAction={
               check.source_component_id ? (
                 <span
@@ -140,6 +143,7 @@ export function CheckDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
   const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
+  const [appsList, setAppsList] = useState<App[]>([])
 
   useEffect(() => {
     if (!id) return
@@ -148,6 +152,10 @@ export function CheckDetail() {
       .then(setCheck)
       .catch(() => navigate('/checks'))
       .finally(() => setLoading(false))
+
+    appsApi.list()
+      .then(res => setAppsList(res.data))
+      .catch(() => {})
 
     integrationsApi.list()
       .then(res => {
@@ -302,6 +310,7 @@ export function CheckDetail() {
       {showEdit && (
         <EditModal
           check={check}
+          apps={appsList}
           traefikIntegrations={traefikIntegrations}
           traefikCerts={traefikCerts}
           onIntegrationChange={handleIntegrationChange}

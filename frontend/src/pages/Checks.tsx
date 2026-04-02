@@ -83,9 +83,10 @@ interface CheckCardProps {
   onToggleEnabled: () => void
   onRun: () => void
   onClick: () => void
+  onSettings: () => void
 }
 
-function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: CheckCardProps) {
+function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick, onSettings }: CheckCardProps) {
   const disabled = !check.enabled
 
   return (
@@ -116,7 +117,7 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
         </span>
       </div>
 
-      {/* Footer: interval · last checked · run · pause */}
+      {/* Footer: interval · last checked · run · pause · settings */}
       <div className="check-card-footer">
         <span className="check-card-interval">every {check.interval_secs}s</span>
         <span className="check-card-last">{formatEventTime(check.last_checked_at)}</span>
@@ -135,6 +136,13 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
             onClick={e => { e.stopPropagation(); onToggleEnabled() }}
           >
             {check.enabled ? '⏸' : '▶'}
+          </button>
+          <button
+            className="check-settings-btn"
+            title="Settings"
+            onClick={e => { e.stopPropagation(); onSettings() }}
+          >
+            ⚙
           </button>
         </div>
       </div>
@@ -307,6 +315,7 @@ export function Checks() {
                 onToggleEnabled={() => void handleToggleEnabled(check)}
                 onRun={() => void handleRun(check.id)}
                 onClick={() => navigate(`/checks/${check.id}`)}
+                onSettings={() => navigate(`/checks/${check.id}`)}
               />
             ))}
           </div>

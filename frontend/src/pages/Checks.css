@@ -210,6 +210,24 @@
 .check-toggle-btn.paused { color: var(--green); border-color: #166534; background: var(--green-dim); }
 .check-toggle-btn.paused:hover { opacity: 0.85; }
 
+/* ── SETTINGS BUTTON ── */
+.check-settings-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text3);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.check-settings-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ── RUN BUTTON ── */
 .check-run-btn {
   width: 28px;

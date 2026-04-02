@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
@@ -24,6 +24,35 @@ import type {
 } from '../api/types'
 
 import './Settings.css'
+
+// ── App template icon (tries CDN, falls back to initial letter) ───────────────
+
+function AppTemplateIcon({ id, name }: { id: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  const onError = useCallback(() => setFailed(true), [])
+  if (!failed) {
+    return (
+      <img
+        src={`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${id}.svg`}
+        alt={name}
+        style={{ width: 20, height: 20, flexShrink: 0 }}
+        onError={onError}
+      />
+    )
+  }
+  return (
+    <span style={{
+      width: 20, height: 20, flexShrink: 0,
+      borderRadius: 4,
+      background: 'var(--bg4)',
+      border: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text3)',
+    }}>
+      {name.charAt(0).toUpperCase()}
+    </span>
+  )
+}
 
 type Tab = 'apps' | 'notifications' | 'notify_rules' | 'metrics' | 'users' | 'jobs'
 
@@ -170,6 +199,7 @@ function AppsTab() {
           <div className="apps-pills">
             {builtins.map(t => (
               <span key={t.id} className="app-pill">
+                <AppTemplateIcon id={t.id} name={t.name} />
                 {t.name}
                 <span className="app-pill-type">{t.category}</span>
               </span>

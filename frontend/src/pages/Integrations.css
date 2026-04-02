@@ -105,6 +105,9 @@
 }
 
 .int-driver-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-family: var(--sans);
   font-size: 13px;
   font-weight: 600;
