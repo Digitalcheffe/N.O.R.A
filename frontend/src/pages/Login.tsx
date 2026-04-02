@@ -63,7 +63,7 @@ export function Login() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
-          <img src="/icons/icon.svg" alt="NORA" className="login-logo-icon" />
+          <img src="/favicon.svg" alt="NORA" className="login-logo-icon" />
         </div>
         <h1 className="login-title">NORA</h1>
         <p className="login-subtitle">Nexus Operations Recon &amp; Alerts</p>
