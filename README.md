@@ -145,8 +145,8 @@ Profile contributions are welcome — drop a YAML file in a GitHub issue or disc
 | `NORA_SMTP_PASS` | SMTP password | — | No |
 | `NORA_SMTP_FROM` | From address for outbound email | — | No |
 | `NORA_DIGEST_SCHEDULE` | Cron expression for digest email (default: 8am on the 1st of each month) | `0 8 1 * *` | No |
-| `NORA_VAPID_PUBLIC` | VAPID public key — auto-generated at startup if absent; set to persist push subscriptions across restarts | — | No |
-| `NORA_VAPID_PRIVATE` | VAPID private key — auto-generated at startup if absent; set to persist push subscriptions across restarts | — | No |
+| `NORA_VAPID_PUBLIC` | VAPID public key — auto-generated and saved to `/data/vapid_keys/vapid.json` if absent; override only if managing your own keys | — | No |
+| `NORA_VAPID_PRIVATE` | VAPID private key — auto-generated and saved to `/data/vapid_keys/vapid.json` if absent; override only if managing your own keys | — | No |
 | `NORA_ADMIN_EMAIL` | Bootstrap admin email | — | Required (first run) |
 | `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | Required (first run) |
 
