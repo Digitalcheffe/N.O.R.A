@@ -4,6 +4,7 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { checks as checksApi, integrations as integrationsApi } from '../api/client'
+import { CheckTypeIcon } from '../components/CheckTypeIcon'
 import type { MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
 import {
@@ -243,6 +244,7 @@ export function CheckDetail() {
         breadcrumb="Checks"
         breadcrumbPath="/checks"
         name={check.name}
+        icon={<CheckTypeIcon type={check.type} size={20} />}
         status={{ status: dplStatus }}
         lastPolled={check.last_checked_at ? formatEventTime(check.last_checked_at) : undefined}
         keyDataPoints={keyDataPoints}

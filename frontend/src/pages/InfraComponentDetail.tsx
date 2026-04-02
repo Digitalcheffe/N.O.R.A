@@ -22,6 +22,7 @@ import type {
   TraefikOverview,
 } from '../api/types'
 import { timeAgo, formatBytes } from '../utils/format'
+import { InfraTypeIcon } from '../components/CheckTypeIcon'
 import './InfraComponentDetail.css'
 
 const TYPE_LABEL: Record<string, string> = {
@@ -375,6 +376,7 @@ function TraefikShell({ component, ep }: { component: InfrastructureComponent; e
       breadcrumb="Infrastructure"
       breadcrumbPath="/infrastructure"
       name={component.name}
+      icon={<InfraTypeIcon type={component.type} size={24} />}
       status={{ status: dplStatus(component.last_status) }}
       lastPolled={overview?.updated_at ? `Polled ${timeAgo(overview.updated_at)}` : undefined}
       keyDataPoints={keyDataPoints}
@@ -437,6 +439,7 @@ function SynologyShell({ component, ep }: { component: InfrastructureComponent; 
       breadcrumb="Infrastructure"
       breadcrumbPath="/infrastructure"
       name={component.name}
+      icon={<InfraTypeIcon type={component.type} size={24} />}
       status={{ status: dplStatus(component.last_status) }}
       lastPolled={synDetail?.polled_at ? `Polled ${timeAgo(synDetail.polled_at)}` : undefined}
       keyDataPoints={keyDataPoints}
@@ -804,6 +807,7 @@ export function InfraComponentDetail() {
       breadcrumb="Infrastructure"
       breadcrumbPath="/infrastructure"
       name={component.name}
+      icon={<InfraTypeIcon type={component.type} size={24} />}
       status={{ status: dplStatus(component.last_status) }}
       lastPolled={component.last_polled_at ? `Polled ${timeAgo(component.last_polled_at)}` : undefined}
       keyDataPoints={keyDataPoints}

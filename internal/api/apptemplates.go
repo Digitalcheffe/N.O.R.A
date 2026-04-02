@@ -46,12 +46,7 @@ type appTemplateMeta struct {
 	Logo        string `json:"logo"`
 	Description string `json:"description"`
 	Capability  string `json:"capability"`
-}
-
-// appTemplateDetail is the full response shape returned by GET /app-templates/{id}.
-type appTemplateDetail struct {
-	ID          string                   `json:"id"`
-	AppTemplate *apptemplate.AppTemplate `json:"app_template"`
+	Homepage    string `json:"homepage,omitempty"`
 }
 
 // List handles GET /app-templates — returns meta for all registered app templates.
@@ -67,6 +62,7 @@ func (h *AppTemplatesHandler) List(w http.ResponseWriter, r *http.Request) {
 			Logo:        t.Meta.Logo,
 			Description: t.Meta.Description,
 			Capability:  t.Meta.Capability,
+			Homepage:    t.Meta.Homepage,
 		})
 	}
 
@@ -76,7 +72,7 @@ func (h *AppTemplatesHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Get handles GET /app-templates/{id} — returns the full template including setup instructions.
+// Get handles GET /app-templates/{id} — returns meta fields for the template.
 func (h *AppTemplatesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -86,9 +82,14 @@ func (h *AppTemplatesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, appTemplateDetail{
+	writeJSON(w, http.StatusOK, appTemplateMeta{
 		ID:          id,
-		AppTemplate: t,
+		Name:        t.Meta.Name,
+		Category:    t.Meta.Category,
+		Logo:        t.Meta.Logo,
+		Description: t.Meta.Description,
+		Capability:  t.Meta.Capability,
+		Homepage:    t.Meta.Homepage,
 	})
 }
 
