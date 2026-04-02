@@ -155,12 +155,17 @@
   border-color: #854d0e;
 }
 
+.check-card-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .check-card-footer {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-top: 2px;
-  flex-wrap: wrap;
 }
 
 .check-card-footer-actions {

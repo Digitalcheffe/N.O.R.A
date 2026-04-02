@@ -143,7 +143,17 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
         {check.skip_tls_verify && <span className="check-card-target-tag warn">self-signed</span>}
       </div>
 
-      {/* Footer: interval · last checked · run · pause · status · type */}
+      {/* Status + type row (between target and buttons) */}
+      <div className="check-card-status-row">
+        <div className={statusClass(check.last_status)}>
+          {statusLabel(check)}
+        </div>
+        <span className={`check-type-badge check-type-${check.type}`}>
+          {check.type.toUpperCase()}
+        </span>
+      </div>
+
+      {/* Footer: interval · last checked · run · pause */}
       <div className="check-card-footer">
         <span className="check-card-interval">every {check.interval_secs}s</span>
         <span className="check-card-last">{formatEventTime(check.last_checked_at)}</span>
@@ -163,12 +173,6 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
           >
             {check.enabled ? '⏸' : '▶'}
           </button>
-          <div className={statusClass(check.last_status)}>
-            {statusLabel(check)}
-          </div>
-          <span className={`check-type-badge check-type-${check.type}`}>
-            {check.type.toUpperCase()}
-          </span>
         </div>
       </div>
     </div>
