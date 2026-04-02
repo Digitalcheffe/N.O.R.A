@@ -169,17 +169,18 @@ Don't see your app? The custom profile editor lets you map any webhook payload t
 
 ---
 
-## Roadmap
+## What's Next
 
-### v2 — Intelligence
+### In Progress
+- **Remote Docker nodes** — multi-host container monitoring via socket proxy; Portainer integration is live, native remote socket support coming
+
+### Planning
+- **Deeper API polling** — richer metrics and status from Proxmox, Synology, OPNsense, and other infrastructure components
+
+### Considering
 - **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
-- **Remote Docker nodes** — monitor containers across multiple hosts via socket proxy
-- **Deeper API polling** — richer Proxmox, Synology, and OPNsense integration
-
-### v3 — Scale
-- PostgreSQL support for larger installations
-- SSO / OAuth login
-- Community profile library — import profiles contributed by other users
+- **PostgreSQL support** — for larger installations that outgrow SQLite
+- **SSO / OAuth login** — federated authentication for team deployments
 
 ---
 
