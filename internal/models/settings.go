@@ -31,3 +31,18 @@ type SMTPSettings struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 }
+
+// PasswordPolicy defines password complexity requirements enforced at every
+// password entry point (create user, change password, registration).
+// It is stored in the settings table under key "password_policy" as JSON.
+type PasswordPolicy struct {
+	MinLength        int  `json:"min_length"`
+	RequireUppercase bool `json:"require_uppercase"`
+	RequireNumber    bool `json:"require_number"`
+	RequireSpecial   bool `json:"require_special"`
+}
+
+// DefaultPasswordPolicy returns sensible defaults (min 8 chars, no other rules).
+func DefaultPasswordPolicy() PasswordPolicy {
+	return PasswordPolicy{MinLength: 8}
+}

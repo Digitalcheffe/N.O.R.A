@@ -18,6 +18,7 @@ export type FormFields = {
   dns_record_type: DNSRecordType
   dns_expected_value: string
   dns_resolver: string
+  app_id: string
 }
 
 export const defaultForm: FormFields = {
@@ -35,6 +36,7 @@ export const defaultForm: FormFields = {
   dns_record_type: 'A',
   dns_expected_value: '',
   dns_resolver: '',
+  app_id: '',
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -85,6 +87,7 @@ export function checkToForm(check: MonitorCheck): FormFields {
     dns_record_type: (check.dns_record_type ?? 'A') as DNSRecordType,
     dns_expected_value: check.dns_expected_value ?? '',
     dns_resolver: check.dns_resolver ?? '',
+    app_id: check.app_id ?? '',
   }
 }
 
@@ -96,6 +99,7 @@ export function formToInput(form: FormFields, integrationID?: string): CreateChe
       ? form.traefik_domain
       : form.target.trim(),
     interval_secs: parseInt(form.interval_secs, 10),
+    app_id: form.app_id || undefined,
   }
   if (form.type === 'url') {
     input.expected_status = parseInt(form.expected_status, 10)

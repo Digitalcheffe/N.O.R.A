@@ -4,6 +4,7 @@ meta:
   logo: n8n.png
   description: Workflow automation platform
   capability: full
+  homepage: https://n8n.io
 
 webhook:
   setup_instructions: |

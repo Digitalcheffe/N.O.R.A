@@ -4,6 +4,7 @@ meta:
   logo: prowlarr.png
   description: Indexer manager and proxy for Usenet and torrents
   capability: full
+  homepage: https://prowlarr.com
 
 webhook:
   setup_instructions: |

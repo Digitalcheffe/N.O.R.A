@@ -20,11 +20,32 @@ export interface AuthUser {
   id: string
   email: string
   role: 'admin' | 'member'
+  totp_enabled: boolean
+  totp_enrolled: boolean
+  totp_grace: boolean
+  totp_exempt: boolean
 }
 
 export interface LoginResponse {
   token: string
   user: AuthUser
+  mfa_enrollment_required?: boolean
+  pw_policy_noncompliant?: boolean
+}
+
+export interface MFARequiredResponse {
+  mfa_required: true
+  mfa_token: string
+}
+
+export interface TOTPSetupResponse {
+  uri: string
+  secret: string
+}
+
+export interface TOTPVerifyInput {
+  mfa_token: string
+  code: string
 }
 
 export interface ChangePasswordInput {
@@ -39,11 +60,20 @@ export interface User {
   email: string
   role: 'admin' | 'member'
   created_at: string
+  totp_enabled: boolean
+  totp_enrolled: boolean
+  totp_grace: boolean
+  totp_exempt: boolean
 }
 
 export interface CreateUserInput {
   email: string
   password: string
+  role: 'admin' | 'member'
+}
+
+export interface UpdateUserInput {
+  email: string
   role: 'admin' | 'member'
 }
 
@@ -262,6 +292,8 @@ export interface AppSummary {
   id: string
   name: string
   profile_id: string
+  icon_url?: string
+  capability?: string
   status: 'online' | 'warn' | 'down'
   last_event_at: string | null
   last_event_text: string | null
@@ -305,6 +337,8 @@ export interface AppTemplate {
   category: string
   description: string
   capability: AppTemplateCapability
+  homepage?: string
+  icon?: string  // CDN icon slug override; falls back to id
 }
 
 // ── Custom App Templates ───────────────────────────────────────────────────────
@@ -349,6 +383,13 @@ export interface SMTPSettings {
   pass: string
   from: string
   to: string
+}
+
+export interface PasswordPolicy {
+  min_length: number
+  require_uppercase: boolean
+  require_number: boolean
+  require_special: boolean
 }
 
 export interface SendNowResult {

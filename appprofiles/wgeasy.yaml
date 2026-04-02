@@ -2,8 +2,10 @@ meta:
   name: WG Easy
   category: Network
   logo: wgeasy.png
+  icon: wireguard
   description: Easy WireGuard VPN server with web UI
   capability: monitor_only
+  homepage: https://github.com/wg-easy/wg-easy
 
 webhook:
   setup_instructions: |

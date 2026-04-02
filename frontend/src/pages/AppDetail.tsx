@@ -2,8 +2,16 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { DetailPageLayout } from '../components/DetailPageLayout'
-import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi } from '../api/client'
-import type { App, AppSummary, AppTemplate } from '../api/types'
+import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi, integrations as integrationsApi } from '../api/client'
+import type { App, AppSummary, AppTemplate, MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
+import { CheckTypeIcon } from '../components/CheckTypeIcon'
+import { CheckForm } from '../components/CheckForm'
+import {
+  type FormFields,
+  defaultForm,
+  validateForm,
+  formToInput,
+} from '../components/checkFormHelpers'
 import '../styles/Modal.css'
 import './AppDetail.css'
 
@@ -309,6 +317,15 @@ function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsMod
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function statusColor(s: string | null) {
+  if (s === 'up')   return 'var(--green)'
+  if (s === 'warn') return 'var(--yellow)'
+  if (s === 'down') return 'var(--red)'
+  return 'var(--text3)'
+}
+
 // ── AppDetail ─────────────────────────────────────────────────────────────────
 
 export function AppDetail() {
@@ -320,13 +337,29 @@ export function AppDetail() {
 
   const [app, setApp] = useState<App | null>(null)
   const [appSummary, setAppSummary] = useState<AppSummary | null>(null)
+  const [appChecks, setAppChecks] = useState<MonitorCheck[]>([])
+  const [appTemplate, setAppTemplate] = useState<AppTemplate | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+
+  const [showAddCheck, setShowAddCheck] = useState(false)
+  const [addCheckForm, setAddCheckForm] = useState<FormFields>({ ...defaultForm })
+  const [addCheckError, setAddCheckError] = useState<string | null>(null)
+  const [addCheckSubmitting, setAddCheckSubmitting] = useState(false)
+  const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
+  const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
 
   const appId = id ?? ''
 
   useEffect(() => {
     if (!appId) return
-    appsApi.get(appId).then(setApp).catch(console.error)
+    appsApi.get(appId).then(a => {
+      setApp(a)
+      if (a.profile_id) {
+        templatesApi.get(a.profile_id)
+          .then(setAppTemplate)
+          .catch(() => {})
+      }
+    }).catch(console.error)
   }, [appId, tick])
 
   useEffect(() => {
@@ -339,8 +372,59 @@ export function AppDetail() {
   }, [appId, timeFilter, tick])
 
   useEffect(() => {
+    if (!appId) return
+    checksApi.list()
+      .then(res => setAppChecks(res.data.filter(c => c.app_id === appId)))
+      .catch(() => {})
+  }, [appId, tick])
+
+  useEffect(() => {
     if (!id) navigate('/apps')
   }, [id, navigate])
+
+  useEffect(() => {
+    integrationsApi.list()
+      .then(res => {
+        const traefik = res.data.filter(i => i.type === 'traefik' && i.enabled)
+        setTraefikIntegrations(traefik)
+        if (traefik.length > 0) {
+          return integrationsApi.certs(traefik[0].id)
+            .then(certsRes => setTraefikCerts(certsRes.data))
+            .catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  function openAddCheck() {
+    setAddCheckForm({ ...defaultForm, app_id: appId })
+    setAddCheckError(null)
+    setShowAddCheck(true)
+  }
+
+  async function handleAddCheckSubmit() {
+    const err = validateForm(addCheckForm)
+    if (err) { setAddCheckError(err); return }
+    setAddCheckSubmitting(true)
+    try {
+      const integrationId = addCheckForm.ssl_source === 'traefik' ? addCheckForm.integration_id : undefined
+      const created = await checksApi.create(formToInput(addCheckForm, integrationId))
+      setAppChecks(prev => [...prev, created])
+      setShowAddCheck(false)
+      setAddCheckForm({ ...defaultForm })
+    } catch (e: unknown) {
+      setAddCheckError(e instanceof Error ? e.message : 'Failed to create check')
+    } finally {
+      setAddCheckSubmitting(false)
+    }
+  }
+
+  function handleIntegrationChange(integrationId: string) {
+    if (!integrationId) return
+    integrationsApi.certs(integrationId)
+      .then(res => setTraefikCerts(res.data))
+      .catch(() => {})
+  }
 
   if (!id) return null
 
@@ -355,11 +439,36 @@ export function AppDetail() {
       })
     : null
 
+  const capability = appSummary?.capability
   const keyDataPoints = [
     { label: 'Profile', value: app?.profile_id || 'Generic' },
+    ...(capability ? [{ label: 'Type', value: CAPABILITY_LABEL[capability] ?? capability }] : []),
     { label: 'Rate limit', value: app?.rate_limit ? `${app.rate_limit}/min` : 'Unlimited' },
     ...(baseUrl ? [{ label: 'URL', value: baseUrl }] : []),
   ]
+
+  // Icon shown next to the name
+  const appIcon = appSummary?.icon_url ? (
+    <img
+      src={appSummary.icon_url}
+      alt={appName}
+      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+    />
+  ) : undefined
+
+  // Description + homepage shown below the KDP badges
+  const AppExtraHeader = (appTemplate?.description || appTemplate?.homepage) ? (
+    <div className="detail-app-icon-row">
+      {appTemplate.description && (
+        <span className="detail-app-description">{appTemplate.description}</span>
+      )}
+      {appTemplate.homepage && (
+        <a className="detail-app-homepage" href={appTemplate.homepage} target="_blank" rel="noopener noreferrer">
+          ↗ {appTemplate.homepage.replace(/^https?:\/\//, '')}
+        </a>
+      )}
+    </div>
+  ) : undefined
 
   return (
     <>
@@ -370,6 +479,8 @@ export function AppDetail() {
         status={{ status: dplStatus }}
         lastPolled={lastEvent ? `Last event: ${lastEvent}` : undefined}
         keyDataPoints={keyDataPoints}
+        icon={appIcon}
+        headerExtra={AppExtraHeader}
         actions={
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {baseUrl && (
@@ -394,8 +505,8 @@ export function AppDetail() {
         sourceType="app"
         sourceId={appId}
       >
-        {/* ── Stats row ── */}
-        {appSummary && (
+        {/* ── Stats row (when available) ── */}
+        {appSummary && (appSummary.stats ?? []).length > 0 && (
           <div className="detail-stats-row">
             {(appSummary.stats ?? []).map(stat => (
               <div key={stat.label} className="detail-stat-card">
@@ -413,6 +524,33 @@ export function AppDetail() {
             )}
           </div>
         )}
+
+        {/* ── Monitor checks — shown for all apps ── */}
+        <div className="service-checks-section">
+          <div className="service-checks-header">
+            <span className="service-checks-title">Monitor Checks</span>
+            <button className="service-add-check-btn" onClick={openAddCheck}>+ Add check</button>
+          </div>
+          {appChecks.length === 0 ? (
+            <div className="service-checks-empty">
+              No monitor checks linked to this app yet.
+            </div>
+          ) : (
+            <div className="service-checks-list">
+              {appChecks.map(c => (
+                <div key={c.id} className="service-check-row" onClick={() => navigate(`/checks/${c.id}`)}>
+                  <CheckTypeIcon type={c.type} size={14} />
+                  <span className="service-check-type">{c.type.toUpperCase()}</span>
+                  <span className="service-check-target">{c.target}</span>
+                  <span className="service-check-name">{c.name !== c.target ? c.name : ''}</span>
+                  <span className="service-check-status" style={{ color: statusColor(c.last_status) }}>
+                    {c.last_status?.toUpperCase() ?? '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </DetailPageLayout>
 
       {showSettings && app && (
@@ -422,6 +560,29 @@ export function AppDetail() {
           onUpdated={updated => { setApp(updated); setShowSettings(false) }}
           onDeleted={() => navigate('/apps')}
         />
+      )}
+
+      {showAddCheck && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ width: 560 }}>
+            <CheckForm
+              form={addCheckForm}
+              onChange={(field, value) => {
+                setAddCheckForm(prev => ({ ...prev, [field]: value }))
+                setAddCheckError(null)
+              }}
+              onSubmit={() => void handleAddCheckSubmit()}
+              onCancel={() => setShowAddCheck(false)}
+              error={addCheckError}
+              submitting={addCheckSubmitting}
+              title={`Add Check — ${app?.name ?? ''}`}
+              submitLabel="Add Check"
+              traefikIntegrations={traefikIntegrations}
+              traefikCerts={traefikCerts}
+              onIntegrationChange={handleIntegrationChange}
+            />
+          </div>
+        </div>
       )}
     </>
   )

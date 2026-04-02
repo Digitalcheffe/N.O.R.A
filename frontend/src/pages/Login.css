@@ -125,3 +125,29 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.login-btn--secondary {
+  background: var(--bg3);
+  color: var(--text2);
+  border: 1px solid var(--border2);
+}
+
+.login-btn--secondary:hover:not(:disabled) {
+  background: var(--bg4);
+  opacity: 1;
+}
+
+.login-mfa-hint {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text2);
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+.login-input--code {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 22px;
+  letter-spacing: 0.25em;
+}

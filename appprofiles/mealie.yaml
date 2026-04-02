@@ -4,6 +4,7 @@ meta:
   logo: mealie.png
   description: Self-hosted recipe manager and meal planner
   capability: monitor_only
+  homepage: https://mealie.io
 
 webhook:
   setup_instructions: |

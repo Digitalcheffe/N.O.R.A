@@ -33,7 +33,7 @@ func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
-	h := api.NewAppsHandler(appRepo)
+	h := api.NewAppsHandler(appRepo, nil, nil)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r

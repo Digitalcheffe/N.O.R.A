@@ -16,6 +16,8 @@ import type {
 import './Infrastructure.css'
 import '../components/CheckForm.css'
 
+import { InfraTypeIcon } from '../components/CheckTypeIcon'
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 type ActiveTab = 'components' | 'map'
@@ -505,6 +507,7 @@ export function Infrastructure() {
     return (
       <div key={c.id} className="infra-card">
         <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/${c.id}`)}>
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -564,6 +567,7 @@ export function Infrastructure() {
           style={{ cursor: 'pointer' }}
           onClick={() => navigate(`/infrastructure/${c.id}`)}
         >
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">{c.name}</div>
             <div className="infra-card-meta">Docker Engine · {c.ip || 'local socket'}</div>
@@ -623,6 +627,7 @@ export function Infrastructure() {
     return (
       <div key={c.id} className="infra-card">
         <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(`/infrastructure/${c.id}`)}>
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}
@@ -686,6 +691,7 @@ export function Infrastructure() {
     return (
       <div key={c.id} className="infra-card">
         <div className="infra-card-header" style={{ cursor: 'pointer' }} onClick={() => navigate(detailPath)}>
+          <InfraTypeIcon type={c.type} />
           <div className="infra-card-title-group">
             <div className="infra-card-name">
               {c.name}

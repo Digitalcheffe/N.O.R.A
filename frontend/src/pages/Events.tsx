@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { EventRow } from '../components/EventRow'
@@ -203,9 +203,13 @@ function EventsLineChart({
 
 export function Events() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { tick } = useAutoRefresh()
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
-  const [severity, setSeverity] = useState<Severity | ''>('')
+  const initialLevel = searchParams.get('level') as Severity | null
+  const [severity, setSeverity] = useState<Severity | ''>(
+    SEVERITIES.includes(initialLevel as Severity) ? (initialLevel as Severity) : ''
+  )
   const [sourceType, setSourceType] = useState<SourceType>('')
   const [search, setSearch] = useState('')
   const [searchDraft, setSearchDraft] = useState('')

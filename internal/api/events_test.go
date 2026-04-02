@@ -24,7 +24,7 @@ func newEventsTestSetup(t *testing.T) (http.Handler, *sqlx.DB) {
 	appRepo := repo.NewAppRepo(db)
 	eventRepo := repo.NewEventRepo(db)
 	r := chi.NewRouter()
-	api.NewAppsHandler(appRepo).Routes(r)
+	api.NewAppsHandler(appRepo, nil, nil).Routes(r)
 	api.NewEventsHandler(eventRepo).Routes(r)
 	return r, db
 }

@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useAuth } from '../context/AuthContext'
 
@@ -7,7 +7,8 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isLoading, isAuthenticated, setupRequired } = useAuth()
+  const { isLoading, isAuthenticated, setupRequired, mfaEnrollmentRequired, pwPolicyNoncompliant } = useAuth()
+  const location = useLocation()
 
   if (isLoading) {
     return null
@@ -19,6 +20,12 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  // Force user to profile page until they address warnings.
+  const needsProfileAction = mfaEnrollmentRequired || pwPolicyNoncompliant
+  if (needsProfileAction && location.pathname !== '/profile') {
+    return <Navigate to="/profile" replace />
   }
 
   return <>{children}</>

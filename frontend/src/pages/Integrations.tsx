@@ -1,3 +1,4 @@
+import { InfraTypeIcon } from '../components/CheckTypeIcon'
 import './Integrations.css'
 
 // ── Static driver definitions ─────────────────────────────────────────────────
@@ -67,10 +68,13 @@ const DRIVERS = [
 
 // ── Driver card ───────────────────────────────────────────────────────────────
 
-function DriverCard({ label, capabilities }: typeof DRIVERS[number]) {
+function DriverCard({ name, label, capabilities }: typeof DRIVERS[number]) {
   return (
     <div className="int-driver-card">
-      <div className="int-driver-name">{label}</div>
+      <div className="int-driver-name">
+        <InfraTypeIcon type={name} size={18} />
+        {label}
+      </div>
       <div className="int-driver-caps">
         {capabilities.map(c => (
           <span key={c} className="int-cap-pill">{c}</span>

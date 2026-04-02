@@ -426,6 +426,18 @@
   font-size: 11px;
 }
 
+.settings-btn--edit {
+  background: var(--bg4);
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+.settings-btn--edit:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ── Profile avatar ───────────────────────────────────────────────────────── */
 
 .settings-avatar-row {
@@ -976,3 +988,92 @@
 @keyframes job-spin {
   to { transform: rotate(360deg); }
 }
+
+.pw-policy-requirements {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.pw-policy-req-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pw-policy-req-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--border2);
+  border-radius: 3px;
+  background: var(--bg3);
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pw-policy-req-item input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.pw-policy-req-item input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+.pw-policy-req-item input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pw-policy-length-input {
+  width: 48px;
+  padding: 2px 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text1);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ── TOTP enrollment ─────────────────────────────────────────────────────── */
+
+.totp-enabled-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--green, #4ade80);
+  background: color-mix(in srgb, var(--green, #4ade80) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green, #4ade80) 40%, transparent);
+  border-radius: 4px;
+  padding: 2px 7px;
+  letter-spacing: 0.04em;
+}
+
+.totp-qr-container {
+  display: flex;
+  justify-content: flex-start;
+  padding: 12px 0 4px;
+}
+
+.totp-qr-container svg {
+  border: 6px solid white;
+  border-radius: 6px;
+}
+

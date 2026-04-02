@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/icons"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -16,12 +18,14 @@ import (
 
 // AppsHandler holds dependencies for the apps resource handlers.
 type AppsHandler struct {
-	apps repo.AppRepo
+	apps         repo.AppRepo
+	checks       repo.CheckRepo  // may be nil
+	iconsFetcher *icons.Fetcher  // may be nil
 }
 
 // NewAppsHandler creates an AppsHandler with the given repository.
-func NewAppsHandler(apps repo.AppRepo) *AppsHandler {
-	return &AppsHandler{apps: apps}
+func NewAppsHandler(apps repo.AppRepo, fetcher *icons.Fetcher, checks repo.CheckRepo) *AppsHandler {
+	return &AppsHandler{apps: apps, iconsFetcher: fetcher, checks: checks}
 }
 
 // Routes registers all app endpoints on r.
@@ -112,6 +116,10 @@ func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if h.iconsFetcher != nil {
+		h.iconsFetcher.EnsureIcon(app.ProfileID)
+	}
+	h.syncMonitorCheck(r.Context(), app, monitorURLFromConfig(app.Config))
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -168,6 +176,10 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if h.iconsFetcher != nil {
+		h.iconsFetcher.EnsureIcon(existing.ProfileID)
+	}
+	h.syncMonitorCheck(r.Context(), existing, monitorURLFromConfig(existing.Config))
 	writeJSON(w, http.StatusOK, existing)
 }
 
@@ -209,6 +221,55 @@ func (h *AppsHandler) RegenerateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, regenerateTokenResponse{Token: token})
+}
+
+// syncMonitorCheck ensures a URL monitor check exists for the given app when
+// monitor_url is set in its config. It creates the check on first use and
+// updates the target if the URL changes. Errors are logged but not fatal.
+func (h *AppsHandler) syncMonitorCheck(ctx context.Context, app *models.App, monitorURL string) {
+	if h.checks == nil || monitorURL == "" {
+		return
+	}
+	all, err := h.checks.List(ctx)
+	if err != nil {
+		return
+	}
+	// Look for an existing auto-managed URL check for this app.
+	for i := range all {
+		c := &all[i]
+		if c.AppID == app.ID && c.Type == "url" {
+			if c.Target != monitorURL {
+				c.Target = monitorURL
+				c.Name = app.Name + " — uptime"
+				_ = h.checks.Update(ctx, c)
+			}
+			return
+		}
+	}
+	// None found — create one.
+	check := &models.MonitorCheck{
+		ID:           uuid.New().String(),
+		AppID:        app.ID,
+		Name:         app.Name + " — uptime",
+		Type:         "url",
+		Target:       monitorURL,
+		IntervalSecs: 60,
+		SSLWarnDays:  30,
+		SSLCritDays:  7,
+		Enabled:      true,
+		CreatedAt:    time.Now().UTC(),
+	}
+	_ = h.checks.Create(ctx, check)
+}
+
+// monitorURLFromConfig extracts the monitor_url string from app config JSON.
+func monitorURLFromConfig(cfg models.ConfigJSON) string {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(cfg), &m); err != nil {
+		return ""
+	}
+	s, _ := m["monitor_url"].(string)
+	return s
 }
 
 // --- helpers ---

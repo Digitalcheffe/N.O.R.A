@@ -17,6 +17,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/config"
 	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/frontend"
+	"github.com/digitalcheffe/nora/internal/icons"
 	"github.com/digitalcheffe/nora/internal/ingest"
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/jobs"
@@ -102,10 +103,14 @@ func main() {
 	// NORA_ADMIN_EMAIL + NORA_ADMIN_PASSWORD are both set.
 	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
 		if n, err := userRepo.Count(context.Background()); err == nil && n == 0 {
-			if err := seedAdmin(context.Background(), userRepo, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+			if u, err := seedAdmin(context.Background(), userRepo, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 				log.Printf("admin bootstrap failed: %v", err)
 			} else {
 				log.Printf("admin bootstrap: created admin account for %s", cfg.AdminEmail)
+				// Bootstrap admin is exempt from global MFA enforcement.
+				if exemptErr := userRepo.SetTOTPExempt(context.Background(), u.ID, true); exemptErr != nil {
+					log.Printf("admin bootstrap: could not set TOTP exempt: %v", exemptErr)
+				}
 			}
 		}
 	}
@@ -138,6 +143,24 @@ func main() {
 		log.Fatalf("app template registry init failed: %v", err)
 	}
 	log.Printf("loaded %d app templates from %s", len(registry.List()), cfg.TemplatesPath)
+
+	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
+	iconFetcher, err := icons.New(cfg.IconsPath)
+	if err != nil {
+		log.Printf("icon fetcher init failed: %v — icons disabled", err)
+		iconFetcher = nil
+	}
+	if iconFetcher != nil {
+		// Pre-fetch icons for all existing apps in the background.
+		existingApps, err := appRepo.List(context.Background())
+		if err == nil {
+			profileIDs := make([]string, 0, len(existingApps))
+			for _, a := range existingApps {
+				profileIDs = append(profileIDs, a.ProfileID)
+			}
+			iconFetcher.FetchAll(context.Background(), profileIDs)
+		}
+	}
 
 	limiter := ingest.NewRateLimiter()
 
@@ -445,13 +468,18 @@ func main() {
 	r.Post("/api/v1/ingest/{token}", api.HandleIngest(store, registry, limiter))
 	pushHandler := api.NewPushHandler(cfg, store, pushSender)
 	pushHandler.RegisterPublicRoutes(r)
-	authHandler := api.NewAuthHandler(userRepo, cfg.Secret)
+	authHandler := api.NewAuthHandler(userRepo, store.Settings, cfg.Secret)
 	authHandler.RegisterPublicRoutes(r)
+	totpHandler := api.NewTOTPHandler(userRepo, cfg.Secret)
+	totpHandler.RegisterPublicRoutes(r)
 
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Secret))
-		api.NewAppsHandler(appRepo).Routes(r)
+		api.NewAppsHandler(appRepo, iconFetcher, checkRepo).Routes(r)
+		if iconFetcher != nil {
+			api.NewIconsHandler(iconFetcher).Routes(r)
+		}
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
@@ -464,7 +492,8 @@ func main() {
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
 		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
-		api.NewUsersHandler(userRepo).Routes(r)
+		api.NewUsersHandler(userRepo, store.Settings, cfg).Routes(r)
+		totpHandler.Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)
 		pushHandler.Routes(r)
 		api.NewRulesHandler(store, rulesEngine).Routes(r)
@@ -496,17 +525,20 @@ func main() {
 
 // seedAdmin creates the first admin user from the bootstrap env vars.
 // It must only be called when the users table is empty.
-func seedAdmin(ctx context.Context, users repo.UserRepo, email, password string) error {
+func seedAdmin(ctx context.Context, users repo.UserRepo, email, password string) (*models.User, error) {
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	u := &models.User{
 		ID:    uuid.NewString(),
 		Email: email,
 		Role:  "admin",
 	}
-	return users.Create(ctx, u, string(hashed))
+	if err := users.Create(ctx, u, string(hashed)); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 // spaHandler serves static files when they exist, and falls back to index.html

@@ -2,6 +2,7 @@ meta:
   name: Cloudflare DDNS
   category: Network
   logo: cloudflare-ddns.png
+  icon: cloudflare
   description: Automatic Cloudflare DNS updater for dynamic IP addresses
   capability: docker_only
 

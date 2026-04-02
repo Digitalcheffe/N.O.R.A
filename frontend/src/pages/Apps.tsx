@@ -15,6 +15,23 @@ function monogram(name: string): string {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
+function AppIcon({ name, profileId }: { name: string; profileId: string | null }) {
+  const [failed, setFailed] = useState(false)
+  // reset if profileId changes
+  useEffect(() => { setFailed(false) }, [profileId])
+  if (profileId && !failed) {
+    return (
+      <img
+        src={`/api/v1/icons/${profileId}`}
+        alt={name}
+        className="app-icon-img"
+        onError={() => setFailed(true)}
+      />
+    )
+  }
+  return <>{monogram(name)}</>
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
@@ -357,7 +374,7 @@ export function Apps() {
           <button className="section-action" onClick={() => setShowAdd(true)}>+ Add app</button>
         </div>
 
-        <div className="widget-grid">
+        <div className="apps-page-grid widget-grid">
           {loading ? (
             [0, 1, 2].map(i => (
               <div key={i} className="app-widget skeleton" style={{ height: 100 }} />
@@ -373,21 +390,9 @@ export function Apps() {
             appList.map(app => (
               <div
                 key={app.id}
-                className="app-widget"
+                className={`app-widget${openMenuId === app.id ? ' menu-open' : ''}`}
                 onClick={() => navigate(`/apps/${app.id}`)}
               >
-                {/* kebab menu button */}
-                <button
-                  className={`app-card-menu-btn${openMenuId === app.id ? ' open' : ''}`}
-                  title="Options"
-                  onClick={e => {
-                    e.stopPropagation()
-                    setOpenMenuId(prev => prev === app.id ? null : app.id)
-                  }}
-                >
-                  ···
-                </button>
-
                 {openMenuId === app.id && (
                   <div className="app-card-dropdown" onClick={e => e.stopPropagation()}>
                     <button className="card-dropdown-item" onClick={() => { setOpenMenuId(null); navigate(`/apps/${app.id}`) }}>
@@ -400,11 +405,24 @@ export function Apps() {
                 )}
 
                 <div className="app-widget-header">
-                  <div className="app-icon">{monogram(app.name)}</div>
+                  <div className="app-icon"><AppIcon name={app.name} profileId={app.profile_id} /></div>
                   <div className="app-name">{app.name}</div>
                   {app.profile_id && (
                     <div className="app-profile-badge">{app.profile_id}</div>
                   )}
+                  <button
+                    className={`app-card-menu-btn${openMenuId === app.id ? ' open' : ''}`}
+                    title="Settings"
+                    onClick={e => {
+                      e.stopPropagation()
+                      setOpenMenuId(prev => prev === app.id ? null : app.id)
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </button>
                 </div>
                 <div className="app-last-event">
                   Added {formatDate(app.created_at)}

@@ -4,6 +4,7 @@ meta:
   logo: adguardhome.png
   description: Network-wide ad and tracker blocking DNS server
   capability: monitor_only
+  homepage: https://adguard.com/adguard-home
 
 webhook:
   setup_instructions: |

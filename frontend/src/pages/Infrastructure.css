@@ -161,11 +161,29 @@
   gap: 12px;
 }
 
+.infra-type-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: contain;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.infra-type-icon-svg {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  color: var(--text3);
+  align-self: flex-start;
+}
+
 .infra-card-title-group {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 
 .infra-card-name {

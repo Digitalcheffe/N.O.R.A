@@ -16,6 +16,7 @@ interface CheckFormProps {
   traefikIntegrations: InfraIntegration[]
   traefikCerts: TraefikCert[]
   onIntegrationChange: (integrationId: string) => void
+  apps?: { id: string; name: string }[]
 }
 
 const CHECK_TYPES: CheckType[] = ['ping', 'url', 'ssl', 'dns']
@@ -34,6 +35,7 @@ export function CheckForm({
   traefikIntegrations,
   traefikCerts,
   onIntegrationChange,
+  apps,
 }: CheckFormProps) {
   const hasTraefik = traefikIntegrations.length > 0
   const selectedIntegration = traefikIntegrations.find(i => i.id === form.integration_id)
@@ -62,6 +64,22 @@ export function CheckForm({
             placeholder="e.g. Proxmox Web UI"
           />
         </div>
+
+        {apps && apps.length > 0 && (
+          <div className="form-field">
+            <div className="form-label">Linked App <span style={{ fontWeight: 400, opacity: 0.6 }}>(optional)</span></div>
+            <select
+              className="form-input"
+              value={form.app_id}
+              onChange={e => onChange('app_id', e.target.value)}
+            >
+              <option value="">None</option>
+              {apps.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {form.type === 'ssl' && (
           <div className="form-field">

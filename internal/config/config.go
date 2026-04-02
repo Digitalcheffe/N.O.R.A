@@ -19,6 +19,7 @@ type Config struct {
 	VAPIDPublic    string
 	VAPIDPrivate   string
 	TemplatesPath string
+	IconsPath     string
 	// Bootstrap admin credentials — used only when the users table is empty.
 	AdminEmail    string
 	AdminPassword string
@@ -33,6 +34,7 @@ func Load() *Config {
 		Secret:         os.Getenv("NORA_SECRET"),
 		DBPath:         getEnvStr("NORA_DB_PATH", "/data/nora.db"),
 		TemplatesPath:  getEnvStr("NORA_TEMPLATES_PATH", "/data/templates"),
+		IconsPath:      getEnvStr("NORA_ICONS_PATH", "/data/icons"),
 		Port:           getEnvStr("NORA_PORT", "8081"),
 		SMTPHost:       os.Getenv("NORA_SMTP_HOST"),
 		SMTPPort:       getEnvInt("NORA_SMTP_PORT", 587),

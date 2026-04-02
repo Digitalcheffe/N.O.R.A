@@ -73,6 +73,8 @@ function extractSSLCerts(checkList: MonitorCheck[]): SSLCert[] {
     .sort((a, b) => a.days_remaining - b.days_remaining)
 }
 
+import { CheckTypeIcon } from '../components/CheckTypeIcon'
+
 // ── Check card ────────────────────────────────────────────────────────────────
 
 interface CheckCardProps {
@@ -81,36 +83,21 @@ interface CheckCardProps {
   onToggleEnabled: () => void
   onRun: () => void
   onClick: () => void
+  onSettings: () => void
 }
 
-function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: CheckCardProps) {
+function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick, onSettings }: CheckCardProps) {
   const disabled = !check.enabled
 
   return (
     <div className={`check-card${disabled ? ' disabled' : ''}`} onClick={onClick}>
 
-      {/* Top row: status block + type badge */}
+      {/* Top row: type icon + name */}
       <div className="check-card-top">
-        <div className={statusClass(check.last_status)}>
-          {statusLabel(check)}
-        </div>
-        <span className={`check-type-badge check-type-${check.type}`}>
-          {check.type.toUpperCase()}
-        </span>
+        <CheckTypeIcon type={check.type} />
+        <span className="check-card-name">{check.name}</span>
         {disabled && <span className="check-paused-badge">PAUSED</span>}
-        <button
-          className={`check-run-btn${runningIds.has(check.id) ? ' running' : ''}`}
-          title="Run now"
-          onClick={e => { e.stopPropagation(); onRun() }}
-          disabled={runningIds.has(check.id)}
-          style={{ marginLeft: 'auto' }}
-        >
-          {runningIds.has(check.id) ? <span className="check-spinner" /> : '▶'}
-        </button>
       </div>
-
-      {/* Name */}
-      <div className="check-card-name">{check.name}</div>
 
       {/* Target */}
       <div className="check-card-target" title={check.target}>
@@ -120,17 +107,44 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick }: Check
         {check.skip_tls_verify && <span className="check-card-target-tag warn">self-signed</span>}
       </div>
 
-      {/* Footer: interval + last checked + pause toggle */}
+      {/* Status + type row (between target and buttons) */}
+      <div className="check-card-status-row">
+        <div className={statusClass(check.last_status)}>
+          {statusLabel(check)}
+        </div>
+        <span className={`check-type-badge check-type-${check.type}`}>
+          {check.type.toUpperCase()}
+        </span>
+      </div>
+
+      {/* Footer: interval · last checked · run · pause · settings */}
       <div className="check-card-footer">
         <span className="check-card-interval">every {check.interval_secs}s</span>
         <span className="check-card-last">{formatEventTime(check.last_checked_at)}</span>
-        <button
-          className={`check-toggle-btn${check.enabled ? ' enabled' : ' paused'}`}
-          title={check.enabled ? 'Pause check' : 'Resume check'}
-          onClick={e => { e.stopPropagation(); onToggleEnabled() }}
-        >
-          {check.enabled ? '⏸' : '▶'}
-        </button>
+        <div className="check-card-footer-actions">
+          <button
+            className={`check-run-btn${runningIds.has(check.id) ? ' running' : ''}`}
+            title="Run now"
+            onClick={e => { e.stopPropagation(); onRun() }}
+            disabled={runningIds.has(check.id)}
+          >
+            {runningIds.has(check.id) ? <span className="check-spinner" /> : '▶'}
+          </button>
+          <button
+            className={`check-toggle-btn${check.enabled ? ' enabled' : ' paused'}`}
+            title={check.enabled ? 'Pause check' : 'Resume check'}
+            onClick={e => { e.stopPropagation(); onToggleEnabled() }}
+          >
+            {check.enabled ? '⏸' : '▶'}
+          </button>
+          <button
+            className="check-settings-btn"
+            title="Settings"
+            onClick={e => { e.stopPropagation(); onSettings() }}
+          >
+            ⚙
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -301,6 +315,7 @@ export function Checks() {
                 onToggleEnabled={() => void handleToggleEnabled(check)}
                 onRun={() => void handleRun(check.id)}
                 onClick={() => navigate(`/checks/${check.id}`)}
+                onSettings={() => navigate(`/checks/${check.id}`)}
               />
             ))}
           </div>

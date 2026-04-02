@@ -4,6 +4,7 @@ meta:
   logo: watchtower.png
   description: Automatic Docker container base image updates
   capability: webhook_only
+  homepage: https://containrrr.dev/watchtower
 
 webhook:
   setup_instructions: |

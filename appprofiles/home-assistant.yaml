@@ -4,6 +4,7 @@ meta:
   logo: homeassistant.png
   description: Open-source home automation platform
   capability: full
+  homepage: https://www.home-assistant.io
 
 webhook:
   setup_instructions: |

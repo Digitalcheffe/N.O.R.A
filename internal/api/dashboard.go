@@ -84,6 +84,8 @@ type appSummary struct {
 	ID            string    `json:"id"`
 	Name          string    `json:"name"`
 	ProfileID     string    `json:"profile_id"`
+	IconURL       string    `json:"icon_url,omitempty"`
+	Capability    string    `json:"capability,omitempty"`
 	Status        string    `json:"status"`
 	LastEventAt   *string   `json:"last_event_at"`
 	LastEventText *string   `json:"last_event_text"`
@@ -349,7 +351,7 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			lastEventText = &ev.Title
 		}
 
-		appSummaries = append(appSummaries, appSummary{
+		sum := appSummary{
 			ID:            a.ID,
 			Name:          a.Name,
 			ProfileID:     a.ProfileID,
@@ -358,7 +360,14 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			LastEventText: lastEventText,
 			Stats:         stats,
 			Sparkline:     appSparkline,
-		})
+		}
+		if a.ProfileID != "" {
+			sum.IconURL = "/api/v1/icons/" + a.ProfileID
+			if p, err := h.profiler.Get(a.ProfileID); err == nil && p != nil {
+				sum.Capability = p.Meta.Capability
+			}
+		}
+		appSummaries = append(appSummaries, sum)
 	}
 
 	// --- 5. Build check summaries ---

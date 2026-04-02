@@ -4,6 +4,7 @@ meta:
   logo: unifi.png
   description: Ubiquiti UniFi network controller
   capability: monitor_only
+  homepage: https://ui.com
 
 webhook:
   setup_instructions: |

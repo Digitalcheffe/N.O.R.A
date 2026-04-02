@@ -4,6 +4,7 @@ meta:
   logo: duplicati.png
   description: Open-source backup software
   capability: webhook_only
+  homepage: https://duplicati.com
 
 webhook:
   setup_instructions: |

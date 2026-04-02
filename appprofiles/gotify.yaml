@@ -4,6 +4,7 @@ meta:
   logo: gotify.png
   description: Self-hosted push notification server
   capability: monitor_only
+  homepage: https://gotify.net
 
 webhook:
   setup_instructions: |

@@ -4,6 +4,7 @@ meta:
   logo: lidarr.png
   description: Music management and download automation
   capability: full
+  homepage: https://lidarr.audio
 
 webhook:
   setup_instructions: |

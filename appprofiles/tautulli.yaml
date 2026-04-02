@@ -4,6 +4,7 @@ meta:
   logo: tautulli.png
   description: Plex media server monitoring and statistics
   capability: full
+  homepage: https://tautulli.com
 
 webhook:
   setup_instructions: |

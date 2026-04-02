@@ -4,6 +4,7 @@ meta:
   logo: nzbget.png
   description: Efficient Usenet downloader
   capability: monitor_only
+  homepage: https://nzbget.com
 
 webhook:
   setup_instructions: |
