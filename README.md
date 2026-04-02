@@ -97,6 +97,17 @@ Open `http://localhost:8080` — create your admin account and add your first ap
 - Event timeline, check status, and resource trends in one view
 - Clickable event cards with full payload detail
 
+### Alert Rules
+- Define conditions on any event field (severity, source, app, message, etc.)
+- Combine conditions with AND / OR logic
+- Fire Web Push or email notifications when a rule matches
+- Enable, disable, or delete rules from the Settings → Notify Rules tab
+
+### Topology
+- Visual network map of your infrastructure, containers, apps, and routes
+- Clickable nodes drill into component detail
+- Automatically populated from Docker, Traefik, and infrastructure discovery
+
 ### App Library
 
 NORA ships with 29 pre-built profiles. Pick your app and NORA already knows how to handle its events.
@@ -159,10 +170,6 @@ Don't see your app? The custom profile editor lets you map any webhook payload t
 ---
 
 ## Roadmap
-
-### In Progress
-- **Alert rules UI** — rules API is shipped; in-app rule builder coming next
-- **Visual topology** — clickable network map of your infrastructure and apps
 
 ### v2 — Intelligence
 - **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
