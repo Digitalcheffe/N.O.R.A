@@ -1,7 +1,7 @@
 meta:
   name: Overseerr
   category: Media
-  logo: overseerr.png
+  icon: overseerr
   description: Media request management for Plex
   capability: full
   homepage: https://overseerr.dev

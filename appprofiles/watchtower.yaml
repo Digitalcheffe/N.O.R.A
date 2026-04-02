@@ -1,7 +1,7 @@
 meta:
   name: Watchtower
   category: Infrastructure
-  logo: watchtower.png
+  icon: watchtower
   description: Automatic Docker container base image updates
   capability: webhook_only
   homepage: https://containrrr.dev/watchtower

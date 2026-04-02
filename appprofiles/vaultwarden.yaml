@@ -1,7 +1,7 @@
 meta:
   name: Vaultwarden
   category: Security
-  logo: vaultwarden.png
+  icon: vaultwarden
   description: Lightweight self-hosted Bitwarden-compatible password manager
   capability: monitor_only
   homepage: https://github.com/dani-garcia/vaultwarden

@@ -1,7 +1,7 @@
 meta:
   name: Matrix (Synapse)
   category: Communication
-  logo: matrix.png
+  icon: matrix
   description: Synapse Matrix homeserver
   capability: monitor_only
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/icons"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -19,13 +20,14 @@ import (
 // AppsHandler holds dependencies for the apps resource handlers.
 type AppsHandler struct {
 	apps         repo.AppRepo
-	checks       repo.CheckRepo  // may be nil
-	iconsFetcher *icons.Fetcher  // may be nil
+	checks       repo.CheckRepo       // may be nil
+	iconsFetcher *icons.Fetcher       // may be nil
+	profiler     apptemplate.Loader   // may be nil; used to resolve icon slug overrides
 }
 
 // NewAppsHandler creates an AppsHandler with the given repository.
-func NewAppsHandler(apps repo.AppRepo, fetcher *icons.Fetcher, checks repo.CheckRepo) *AppsHandler {
-	return &AppsHandler{apps: apps, iconsFetcher: fetcher, checks: checks}
+func NewAppsHandler(apps repo.AppRepo, fetcher *icons.Fetcher, checks repo.CheckRepo, profiler apptemplate.Loader) *AppsHandler {
+	return &AppsHandler{apps: apps, iconsFetcher: fetcher, checks: checks, profiler: profiler}
 }
 
 // Routes registers all app endpoints on r.
@@ -36,6 +38,19 @@ func (h *AppsHandler) Routes(r chi.Router) {
 	r.Put("/apps/{id}", h.Update)
 	r.Delete("/apps/{id}", h.Delete)
 	r.Post("/apps/{id}/token/regenerate", h.RegenerateToken)
+}
+
+// iconSlugForProfile returns the CDN icon slug override for a profileID by
+// looking it up in the app template. Returns "" if no override or no profiler.
+func (h *AppsHandler) iconSlugForProfile(profileID string) string {
+	if h.profiler == nil || profileID == "" {
+		return ""
+	}
+	t, err := h.profiler.Get(profileID)
+	if err != nil || t == nil {
+		return ""
+	}
+	return t.Meta.Icon
 }
 
 // --- request / response types ---
@@ -117,7 +132,7 @@ func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.iconsFetcher != nil {
-		h.iconsFetcher.EnsureIcon(app.ProfileID)
+		h.iconsFetcher.EnsureIcon(app.ProfileID, h.iconSlugForProfile(app.ProfileID))
 	}
 	h.syncMonitorCheck(r.Context(), app, monitorURLFromConfig(app.Config))
 	writeJSON(w, http.StatusCreated, app)
@@ -177,7 +192,7 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.iconsFetcher != nil {
-		h.iconsFetcher.EnsureIcon(existing.ProfileID)
+		h.iconsFetcher.EnsureIcon(existing.ProfileID, h.iconSlugForProfile(existing.ProfileID))
 	}
 	h.syncMonitorCheck(r.Context(), existing, monitorURLFromConfig(existing.Config))
 	writeJSON(w, http.StatusOK, existing)

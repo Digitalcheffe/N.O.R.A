@@ -25,8 +25,7 @@ type Loader interface {
 type AppTemplateMeta struct {
 	Name        string `yaml:"name"`
 	Category    string `yaml:"category"`
-	Logo        string `yaml:"logo"`
-	Icon        string `yaml:"icon"`         // CDN icon name override (dashboard-icons slug); defaults to template ID
+	Icon        string `yaml:"icon"`         // dashboard-icons CDN slug — used to fetch the app icon
 	Description string `yaml:"description"`
 	Capability  string `yaml:"capability"`
 	Homepage    string `yaml:"homepage"`

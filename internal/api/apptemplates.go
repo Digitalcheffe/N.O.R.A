@@ -43,8 +43,7 @@ type appTemplateMeta struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Category    string `json:"category"`
-	Logo        string `json:"logo"`
-	Icon        string `json:"icon,omitempty"` // CDN icon slug override; falls back to ID on the client
+	Icon        string `json:"icon,omitempty"` // dashboard-icons CDN slug; icon served at /api/v1/icons/{id}
 	Description string `json:"description"`
 	Capability  string `json:"capability"`
 	Homepage    string `json:"homepage,omitempty"`
@@ -60,7 +59,6 @@ func (h *AppTemplatesHandler) List(w http.ResponseWriter, r *http.Request) {
 			ID:          id,
 			Name:        t.Meta.Name,
 			Category:    t.Meta.Category,
-			Logo:        t.Meta.Logo,
 			Icon:        t.Meta.Icon,
 			Description: t.Meta.Description,
 			Capability:  t.Meta.Capability,
@@ -88,7 +86,6 @@ func (h *AppTemplatesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		ID:          id,
 		Name:        t.Meta.Name,
 		Category:    t.Meta.Category,
-		Logo:        t.Meta.Logo,
 		Icon:        t.Meta.Icon,
 		Description: t.Meta.Description,
 		Capability:  t.Meta.Capability,

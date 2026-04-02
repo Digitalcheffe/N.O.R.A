@@ -193,8 +193,8 @@ func TestRenderHTML_NoActivity(t *testing.T) {
 
 func TestEffectiveSendHour_Default(t *testing.T) {
 	sched := models.DigestSchedule{Frequency: "daily"}
-	if got := sched.EffectiveSendHour(); got != 8 {
-		t.Errorf("expected 8, got %d", got)
+	if got := sched.EffectiveSendHour(); got != 17 {
+		t.Errorf("expected 17, got %d", got)
 	}
 }
 

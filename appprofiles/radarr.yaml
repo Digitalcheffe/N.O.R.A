@@ -1,7 +1,7 @@
 meta:
   name: Radarr
   category: Media
-  logo: radarr.png
+  icon: radarr
   description: Movie management and download automation
   capability: full
   homepage: https://radarr.video

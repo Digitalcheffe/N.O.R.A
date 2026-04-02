@@ -11,6 +11,7 @@ type Config struct {
 	Port           string
 	LogLevel       string // "debug" enables verbose request logging; default is minimal
 	DigestSchedule string
+	Timezone       string // IANA timezone name used for digest scheduling (e.g. "America/New_York")
 	VAPIDPublic    string
 	VAPIDPrivate   string
 	TemplatesPath  string
@@ -33,6 +34,7 @@ func Load() *Config {
 		Port:           getEnvStr("NORA_PORT", "8081"),
 		LogLevel:       getEnvStr("NORA_LOG_LEVEL", "info"),
 		DigestSchedule: getEnvStr("NORA_DIGEST_SCHEDULE", "0 8 1 * *"),
+		Timezone:       getEnvStr("NORA_TIMEZONE", "UTC"),
 		VAPIDPublic:    os.Getenv("NORA_VAPID_PUBLIC"),
 		VAPIDPrivate:   os.Getenv("NORA_VAPID_PRIVATE"),
 		AdminEmail:     os.Getenv("NORA_ADMIN_EMAIL"),

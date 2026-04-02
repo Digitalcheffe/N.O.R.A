@@ -1,5 +1,8 @@
 data/
 *.db
+*.db-shm
+*.db-wal
+*.log
 .env
 dist/
 node_modules/
@@ -7,8 +10,13 @@ frontend/dist/
 frontend/.vite/
 bin/
 *.exe
-.claude/worktrees/
-.claude/settings.local.json
+# Claude Code and local docs — keep local, do not publish
+CLAUDE.md
+AGENTS.md
+ARCHITECTURE.md
+.claude/
+wiki/
+docs/
 # Allow the embed placeholder so the Go build works locally
 !internal/frontend/dist/
 !internal/frontend/dist/.gitkeep

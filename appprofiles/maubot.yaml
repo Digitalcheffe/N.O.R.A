@@ -1,7 +1,7 @@
 meta:
   name: Maubot
   category: Automation
-  logo: maubot.png
+  icon: maubot
   description: Plugin-based Matrix bot manager
   capability: monitor_only
 

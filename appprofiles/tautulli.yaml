@@ -1,7 +1,7 @@
 meta:
   name: Tautulli
   category: Media
-  logo: tautulli.png
+  icon: tautulli
   description: Plex media server monitoring and statistics
   capability: full
   homepage: https://tautulli.com

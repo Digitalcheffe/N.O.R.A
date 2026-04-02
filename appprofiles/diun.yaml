@@ -1,7 +1,7 @@
 meta:
   name: Diun
   category: Infrastructure
-  logo: diun.png
+  icon: diun
   description: Docker image update notifier
   capability: webhook_only
   homepage: https://crazymax.dev/diun

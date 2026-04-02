@@ -1,7 +1,7 @@
 meta:
   name: Gotify
   category: Infrastructure
-  logo: gotify.png
+  icon: gotify
   description: Self-hosted push notification server
   capability: monitor_only
   homepage: https://gotify.net

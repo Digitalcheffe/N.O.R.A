@@ -1,7 +1,7 @@
 meta:
   name: Traefik
   category: Infrastructure
-  logo: traefik.png
+  icon: traefik
   description: Cloud-native reverse proxy and load balancer
   capability: monitor_only
   homepage: https://traefik.io

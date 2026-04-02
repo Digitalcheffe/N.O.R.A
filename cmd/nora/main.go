@@ -159,13 +159,19 @@ func main() {
 	}
 	if iconFetcher != nil {
 		// Pre-fetch icons for all existing apps in the background.
+		// Build a slug override map from the app template registry so the fetcher
+		// can try the template's icon: slug before falling back to the profileID.
 		existingApps, err := appRepo.List(context.Background())
 		if err == nil {
 			profileIDs := make([]string, 0, len(existingApps))
+			slugOverrides := make(map[string]string, len(existingApps))
 			for _, a := range existingApps {
 				profileIDs = append(profileIDs, a.ProfileID)
+				if t, err := registry.Get(a.ProfileID); err == nil && t != nil && t.Meta.Icon != "" {
+					slugOverrides[a.ProfileID] = t.Meta.Icon
+				}
 			}
-			iconFetcher.FetchAll(context.Background(), profileIDs)
+			iconFetcher.FetchAll(context.Background(), profileIDs, slugOverrides)
 		}
 	}
 
@@ -492,9 +498,9 @@ func main() {
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Secret))
-		api.NewAppsHandler(appRepo, iconFetcher, checkRepo).Routes(r)
+		api.NewAppsHandler(appRepo, iconFetcher, checkRepo, registry).Routes(r)
 		if iconFetcher != nil {
-			api.NewIconsHandler(iconFetcher).Routes(r)
+			api.NewIconsHandler(iconFetcher, registry).Routes(r)
 		}
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)

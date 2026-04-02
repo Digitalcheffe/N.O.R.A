@@ -398,7 +398,7 @@ function NotificationsTab() {
   const [smtpConfigured, setSmtpConfigured] = useState(false)
 
   // Digest schedule state
-  const [schedule, setSchedule] = useState<DigestSchedule>({ frequency: 'monthly', day_of_week: 1, day_of_month: 1, send_hour: 8 })
+  const [schedule, setSchedule] = useState<DigestSchedule>({ frequency: 'weekly', day_of_week: 5, day_of_month: 1, send_hour: 17 })
   const [schedSaving, setSchedSaving] = useState(false)
   const [schedMsg, setSchedMsg] = useState('')
   const [sendingNow, setSendingNow] = useState(false)
@@ -454,20 +454,25 @@ function NotificationsTab() {
 
   // Compute period string from the currently selected frequency so both
   // Send now and Preview report always reflect what's shown in the UI.
+  // All calculations use local (browser) date parts — never toISOString() which is UTC.
   const currentPeriod = (): string => {
     const now = new Date()
+    const y = now.getFullYear()
+    const mo = now.getMonth()
+    const day = now.getDate()
     if (schedule.frequency === 'daily') {
-      return now.toISOString().slice(0, 10) // YYYY-MM-DD
+      return `${y}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }
     if (schedule.frequency === 'weekly') {
-      const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
-      const day = d.getUTCDay() || 7
-      d.setUTCDate(d.getUTCDate() + 4 - day)
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+      // ISO week number using local date parts
+      const d = new Date(y, mo, day)
+      const dow = d.getDay() || 7           // Mon=1 … Sun=7
+      d.setDate(d.getDate() + 4 - dow)      // nearest Thursday
+      const yearStart = new Date(d.getFullYear(), 0, 1)
       const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7)
-      return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+      return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`
     }
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` // YYYY-MM
+    return `${y}-${String(mo + 1).padStart(2, '0')}` // YYYY-MM
   }
 
   const sendNow = async () => {
@@ -631,7 +636,7 @@ function NotificationsTab() {
           <label className="settings-label">Send time</label>
           <select
             className="settings-input settings-select"
-            value={schedule.send_hour ?? 8}
+            value={schedule.send_hour ?? 17}
             onChange={e => setSchedule(s => ({ ...s, send_hour: Number(e.target.value) }))}
           >
             {Array.from({ length: 24 }, (_, h) => (
@@ -640,6 +645,9 @@ function NotificationsTab() {
               </option>
             ))}
           </select>
+          {schedule.timezone && (
+            <span className="settings-hint">{schedule.timezone}</span>
+          )}
         </div>
 
         <div className="settings-actions">
