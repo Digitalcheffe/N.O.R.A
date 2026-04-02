@@ -802,12 +802,6 @@ function UsersTab() {
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Change password state
-  const [currentPw, setCurrentPw] = useState('')
-  const [newPw, setNewPw] = useState('')
-  const [changingPw, setChangingPw] = useState(false)
-  const [changePwMsg, setChangePwMsg] = useState('')
-
   // Password policy state
   const [policy, setPolicy] = useState<PasswordPolicy>(DEFAULT_POLICY)
   const [savingPolicy, setSavingPolicy] = useState(false)
@@ -865,6 +859,7 @@ function UsersTab() {
   }
 
   const handleSavePolicy = async () => {
+
     setSavingPolicy(true)
     setPolicyMsg('')
     try {
@@ -875,30 +870,6 @@ function UsersTab() {
       setPolicyMsg(e instanceof Error ? e.message : 'Save failed')
     } finally {
       setSavingPolicy(false)
-    }
-  }
-
-  const handleChangePassword = async () => {
-    if (!currentPw || !newPw) {
-      setChangePwMsg('Both fields are required.')
-      return
-    }
-    const policyErr = checkPasswordPolicy(newPw, policy)
-    if (policyErr) {
-      setChangePwMsg(policyErr)
-      return
-    }
-    setChangingPw(true)
-    setChangePwMsg('')
-    try {
-      await users.changePassword({ current_password: currentPw, new_password: newPw })
-      setCurrentPw('')
-      setNewPw('')
-      setChangePwMsg('Password updated.')
-    } catch (e: unknown) {
-      setChangePwMsg(e instanceof Error ? e.message : 'Failed to update password')
-    } finally {
-      setChangingPw(false)
     }
   }
 
@@ -986,38 +957,6 @@ function UsersTab() {
             {creating ? 'Creating…' : 'Add User'}
           </button>
           {createMsg && <span className="settings-status-msg">{createMsg}</span>}
-        </div>
-      </section>
-
-      <section className="settings-section">
-        <div className="section-header">
-          <span className="section-title">Change Password</span>
-        </div>
-        <div className="settings-field-row">
-          <label className="settings-label">Current password</label>
-          <input
-            className="settings-input"
-            type="password"
-            placeholder="Current password"
-            value={currentPw}
-            onChange={e => setCurrentPw(e.target.value)}
-          />
-        </div>
-        <div className="settings-field-row">
-          <label className="settings-label">New password</label>
-          <input
-            className="settings-input"
-            type="password"
-            placeholder="New password"
-            value={newPw}
-            onChange={e => setNewPw(e.target.value)}
-          />
-        </div>
-        <div className="settings-actions">
-          <button className="settings-btn primary" onClick={handleChangePassword} disabled={changingPw}>
-            {changingPw ? 'Updating…' : 'Update Password'}
-          </button>
-          {changePwMsg && <span className="settings-status-msg">{changePwMsg}</span>}
         </div>
       </section>
 
