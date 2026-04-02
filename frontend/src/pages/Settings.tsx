@@ -27,13 +27,23 @@ import './Settings.css'
 
 // ── App template icon (tries CDN, falls back to initial letter) ───────────────
 
+// Maps template IDs (filename without .yaml) to their dashboard-icons CDN names
+const APP_ICON_CDN_NAMES: Record<string, string> = {
+  adguardhome:    'adguard-home',
+  homeassistant:  'home-assistant',
+  matrixadmin:    'matrix',
+  wgeasy:         'wireguard',
+  'cloudflare-ddns': 'cloudflare',
+}
+
 function AppTemplateIcon({ id, name }: { id: string; name: string }) {
   const [failed, setFailed] = useState(false)
   const onError = useCallback(() => setFailed(true), [])
+  const cdnName = APP_ICON_CDN_NAMES[id] ?? id
   if (!failed) {
     return (
       <img
-        src={`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${id}.svg`}
+        src={`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${cdnName}.svg`}
         alt={name}
         style={{ width: 20, height: 20, flexShrink: 0 }}
         onError={onError}
