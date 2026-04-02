@@ -1,7 +1,7 @@
 meta:
   name: Plex
   category: Media
-  logo: plex.png
+  icon: plex
   description: Personal media server and streaming platform
   capability: full
   homepage: https://www.plex.tv

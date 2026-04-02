@@ -1,7 +1,7 @@
 meta:
   name: Z-Wave JS to MQTT
   category: Automation
-  logo: zwavejs2mqtt.png
+  icon: zwave-js-to-mqtt
   description: Z-Wave to MQTT gateway with web UI
   capability: monitor_only
 

@@ -1,7 +1,7 @@
 meta:
   name: NZBGet
   category: Media
-  logo: nzbget.png
+  icon: nzbget
   description: Efficient Usenet downloader
   capability: monitor_only
   homepage: https://nzbget.com

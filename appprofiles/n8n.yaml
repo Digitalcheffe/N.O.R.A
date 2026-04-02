@@ -1,7 +1,7 @@
 meta:
   name: n8n
   category: Automation
-  logo: n8n.png
+  icon: n8n
   description: Workflow automation platform
   capability: full
   homepage: https://n8n.io

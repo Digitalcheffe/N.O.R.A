@@ -1,7 +1,7 @@
 meta:
   name: Mealie
   category: Automation
-  logo: mealie.png
+  icon: mealie
   description: Self-hosted recipe manager and meal planner
   capability: monitor_only
   homepage: https://mealie.io

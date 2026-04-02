@@ -1,7 +1,7 @@
 meta:
   name: Sonarr
   category: Media
-  logo: sonarr.png
+  icon: sonarr
   description: TV series management and download automation
   capability: full
   homepage: https://sonarr.tv

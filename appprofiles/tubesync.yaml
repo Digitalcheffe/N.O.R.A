@@ -1,7 +1,7 @@
 meta:
   name: TubeSync
   category: Media
-  logo: tubesync.png
+  icon: tubesync
   description: YouTube PVR — automatically downloads and syncs YouTube channels and playlists
   capability: monitor_only
   homepage: https://github.com/meeb/tubesync

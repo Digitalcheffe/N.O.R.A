@@ -1,7 +1,7 @@
 meta:
   name: Home Assistant
   category: Automation
-  logo: homeassistant.png
+  icon: home-assistant
   description: Open-source home automation platform
   capability: full
   homepage: https://www.home-assistant.io

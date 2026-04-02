@@ -1,7 +1,7 @@
 meta:
   name: Lidarr
   category: Media
-  logo: lidarr.png
+  icon: lidarr
   description: Music management and download automation
   capability: full
   homepage: https://lidarr.audio

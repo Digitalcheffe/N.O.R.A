@@ -55,7 +55,7 @@ const noraTheme = EditorView.theme(
 const DEFAULT_YAML = `meta:
   name: My Custom App
   category: Custom
-  logo: ""
+  icon: ""
   description: A brief description of this app
   capability: webhook_only
 
@@ -90,7 +90,7 @@ interface ParsedAppTemplate {
   category: string
   description: string
   capability: string
-  logo: string
+  icon: string
   displayTemplate: string
   fieldMappings: Record<string, string>
   severityMapping: Record<string, string>
@@ -104,7 +104,7 @@ function parseAppTemplateYAML(content: string): ParsedAppTemplate | null {
       category: '',
       description: '',
       capability: '',
-      logo: '',
+      icon: '',
       displayTemplate: '',
       fieldMappings: {},
       severityMapping: {},
@@ -139,7 +139,7 @@ function parseAppTemplateYAML(content: string): ParsedAppTemplate | null {
         else if (key === 'category') result.category = val
         else if (key === 'description') result.description = val
         else if (key === 'capability') result.capability = val
-        else if (key === 'logo') result.logo = val
+        else if (key === 'icon') result.icon = val
       } else if (section === 'webhook') {
         if (indent === 2 && key === 'display_template') result.displayTemplate = val
         else if (subSection === 'field_mappings' && indent === 4) result.fieldMappings[key] = val
@@ -352,8 +352,13 @@ export function AppTemplateEditor() {
           <div style={styles.card}>
             <div style={styles.cardHeader}>
               <div style={styles.appIcon}>
-                {preview?.logo ? (
-                  <img src={preview.logo} alt="" style={styles.logoImg} />
+                {preview?.icon ? (
+                  <img
+                    src={`https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/${preview.icon}.svg`}
+                    alt=""
+                    style={styles.logoImg}
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
                 ) : (
                   <span style={styles.iconPlaceholder}>
                     {(preview?.name ?? '?')[0]?.toUpperCase() ?? '?'}

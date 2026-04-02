@@ -1,7 +1,7 @@
 meta:
   name: Duplicati
   category: Storage
-  logo: duplicati.png
+  icon: duplicati
   description: Open-source backup software
   capability: webhook_only
   homepage: https://duplicati.com

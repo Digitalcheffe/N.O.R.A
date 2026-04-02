@@ -1,7 +1,6 @@
 meta:
   name: Homepage
   category: Infrastructure
-  logo: homepage.png
   icon: homepage
   description: Highly customisable application dashboard
   capability: monitor_only
