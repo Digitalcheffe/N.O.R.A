@@ -184,14 +184,6 @@ Don't see your app? The custom profile editor lets you map any webhook payload t
 
 ---
 
-## Design Principles
-
-1. Store what matters. Surface what's important. Stay out of the way.
-2. Simple enough that you don't have to struggle.
-3. If a feature makes it harder — cut it. If it makes it easier — keep it.
-
----
-
 ## Contributing
 
 Profile contributions are welcome. Drop a YAML file in a GitHub issue or discussion — see the profile schema in `/docs/architecture.md` for the format. Profiles are reviewed and merged into the library.
