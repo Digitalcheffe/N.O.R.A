@@ -1037,29 +1037,31 @@ function UsersTab() {
             onChange={e => setPolicy(p => ({ ...p, min_length: parseInt(e.target.value, 10) || 8 }))}
           />
         </div>
-        <div className="settings-field-row">
-          <label className="settings-label">Require uppercase</label>
-          <input
-            type="checkbox"
-            checked={policy.require_uppercase}
-            onChange={e => setPolicy(p => ({ ...p, require_uppercase: e.target.checked }))}
-          />
-        </div>
-        <div className="settings-field-row">
-          <label className="settings-label">Require number</label>
-          <input
-            type="checkbox"
-            checked={policy.require_number}
-            onChange={e => setPolicy(p => ({ ...p, require_number: e.target.checked }))}
-          />
-        </div>
-        <div className="settings-field-row">
-          <label className="settings-label">Require special character</label>
-          <input
-            type="checkbox"
-            checked={policy.require_special}
-            onChange={e => setPolicy(p => ({ ...p, require_special: e.target.checked }))}
-          />
+        <div className="pw-policy-requirements">
+          <label className="pw-policy-req-item">
+            <input
+              type="checkbox"
+              checked={policy.require_uppercase}
+              onChange={e => setPolicy(p => ({ ...p, require_uppercase: e.target.checked }))}
+            />
+            Uppercase
+          </label>
+          <label className="pw-policy-req-item">
+            <input
+              type="checkbox"
+              checked={policy.require_number}
+              onChange={e => setPolicy(p => ({ ...p, require_number: e.target.checked }))}
+            />
+            Number
+          </label>
+          <label className="pw-policy-req-item">
+            <input
+              type="checkbox"
+              checked={policy.require_special}
+              onChange={e => setPolicy(p => ({ ...p, require_special: e.target.checked }))}
+            />
+            Special character
+          </label>
         </div>
         <div className="settings-actions">
           <button className="settings-btn primary" onClick={handleSavePolicy} disabled={savingPolicy}>

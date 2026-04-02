@@ -976,3 +976,26 @@
 @keyframes job-spin {
   to { transform: rotate(360deg); }
 }
+
+.pw-policy-requirements {
+  display: flex;
+  gap: 20px;
+  padding: 6px 0 2px;
+}
+
+.pw-policy-req-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: var(--text2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.pw-policy-req-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
