@@ -119,22 +119,22 @@ Don't see your app? The custom profile editor lets you map any webhook payload t
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|---|---|---|
-| `NORA_SECRET` | JWT signing secret — **required** | — |
-| `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` |
-| `NORA_PORT` | HTTP port | `8080` |
-| `NORA_DEV_MODE` | Inject hardcoded admin session, skip auth | `false` |
-| `NORA_SMTP_HOST` | SMTP server hostname | — |
-| `NORA_SMTP_PORT` | SMTP port | `587` |
-| `NORA_SMTP_USER` | SMTP username | — |
-| `NORA_SMTP_PASS` | SMTP password | — |
-| `NORA_SMTP_FROM` | From address for outbound email | — |
-| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email | `0 8 1 * *` |
-| `NORA_VAPID_PUBLIC` | VAPID public key (auto-generated if absent) | — |
-| `NORA_VAPID_PRIVATE` | VAPID private key (auto-generated if absent) | — |
-| `NORA_ADMIN_EMAIL` | Bootstrap admin email (first run only) | — |
-| `NORA_ADMIN_PASSWORD` | Bootstrap admin password (first run only) | — |
+| Variable | Description | Default | Required |
+|---|---|---|---|
+| `NORA_SECRET` | JWT signing secret | — | Yes |
+| `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
+| `NORA_PORT` | HTTP port | `8080` | No |
+| `NORA_DEV_MODE` | Inject hardcoded admin session, skip auth | `false` | No |
+| `NORA_SMTP_HOST` | SMTP server hostname | — | No |
+| `NORA_SMTP_PORT` | SMTP port | `587` | No |
+| `NORA_SMTP_USER` | SMTP username | — | No |
+| `NORA_SMTP_PASS` | SMTP password | — | No |
+| `NORA_SMTP_FROM` | From address for outbound email | — | No |
+| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email | `0 8 1 * *` | No |
+| `NORA_VAPID_PUBLIC` | VAPID public key (auto-generated if absent) | — | No |
+| `NORA_VAPID_PRIVATE` | VAPID private key (auto-generated if absent) | — | No |
+| `NORA_ADMIN_EMAIL` | Bootstrap admin email | — | Required (first run) |
+| `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | Required (first run) |
 
 ### In-App Settings
 - SMTP configuration and test email
