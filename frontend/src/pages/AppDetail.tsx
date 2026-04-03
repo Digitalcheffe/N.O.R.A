@@ -39,7 +39,7 @@ function Sparkline({ data, color = 'var(--accent)' }: { data: number[]; color?: 
 
 // ── App Settings Modal ────────────────────────────────────────────────────────
 
-interface AppSettingsModalProps {
+export interface AppSettingsModalProps {
   app: App
   onClose: () => void
   onUpdated: (app: App) => void
@@ -54,7 +54,7 @@ const CAPABILITY_LABEL: Record<string, string> = {
   limited:      'Limited',
 }
 
-function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsModalProps) {
+export function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsModalProps) {
   const [name, setName] = useState(app.name)
   const [profileId, setProfileId] = useState(app.profile_id ?? '')
   const [baseUrl, setBaseUrl] = useState((app.config?.base_url as string) ?? '')
