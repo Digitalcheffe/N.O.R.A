@@ -204,3 +204,28 @@ func TestAppTemplatesCreateCustom_InvalidYAML(t *testing.T) {
 		t.Fatalf("expected 422 got %d: %s", rr.Code, rr.Body.String())
 	}
 }
+
+// TestDeleteCustom_PathTraversal ensures a traversal ID is rejected with 400.
+func TestDeleteCustom_PathTraversal(t *testing.T) {
+	router := newAppTemplatesRouter(t)
+
+	attacks := []string{
+		"../../../etc/passwd",
+		"..%2F..%2Fetc%2Fpasswd",
+		"foo/bar",
+		"foo\\bar",
+		"..",
+	}
+	for _, id := range attacks {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/app-templates/custom/"+id, nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		// chi will strip the traversal segments from the URL before routing,
+		// so the router may return 404 (no match) or 400 (our validation);
+		// either is acceptable — what must NOT happen is 204 (success).
+		if rr.Code == http.StatusNoContent {
+			t.Errorf("DELETE /app-templates/custom/%s: got 204 (traversal succeeded)", id)
+		}
+	}
+}

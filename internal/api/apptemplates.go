@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/apptemplate"
@@ -219,7 +220,15 @@ func (h *AppTemplatesHandler) ListCustom(w http.ResponseWriter, r *http.Request)
 // DeleteCustom handles DELETE /app-templates/custom/{id} — removes a custom app template file.
 func (h *AppTemplatesHandler) DeleteCustom(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !isSafeFilename(id) {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 	path := filepath.Join(h.customDir, id+".yaml")
+	if !strings.HasPrefix(path, filepath.Clean(h.customDir)+string(os.PathSeparator)) {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	if err := os.Remove(path); errors.Is(err, os.ErrNotExist) {
 		writeError(w, http.StatusNotFound, "custom app template not found")
@@ -233,6 +242,22 @@ func (h *AppTemplatesHandler) DeleteCustom(w http.ResponseWriter, r *http.Reques
 	_ = h.registry.Reload()
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// isSafeFilename returns true if s is a non-empty string containing only
+// alphanumeric characters, hyphens, and underscores — safe to use as a
+// filename component with no path traversal risk.
+func isSafeFilename(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // readCustomProfiles reads all *.yaml files from dir and returns them as CustomProfile records.

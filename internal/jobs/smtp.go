@@ -76,12 +76,27 @@ func SendMail(host string, port int, user, pass, from string, to []string, subje
 	return c.Quit()
 }
 
+// sanitizeHeader strips CR and LF characters from a header value to prevent
+// email header injection attacks.
+func sanitizeHeader(v string) string {
+	v = strings.ReplaceAll(v, "\r", "")
+	v = strings.ReplaceAll(v, "\n", "")
+	return v
+}
+
 // buildMIMEMessage constructs an RFC 2822 MIME message with a text/html part.
+// All user-supplied header values are sanitized to strip CRLF sequences before
+// being written into the message, preventing header injection attacks.
 func buildMIMEMessage(from string, to []string, subject, htmlBody string) string {
+	sanitizedTo := make([]string, len(to))
+	for i, addr := range to {
+		sanitizedTo[i] = sanitizeHeader(addr)
+	}
+
 	var b strings.Builder
-	b.WriteString("From: " + from + "\r\n")
-	b.WriteString("To: " + strings.Join(to, ", ") + "\r\n")
-	b.WriteString("Subject: " + subject + "\r\n")
+	b.WriteString("From: " + sanitizeHeader(from) + "\r\n")
+	b.WriteString("To: " + strings.Join(sanitizedTo, ", ") + "\r\n")
+	b.WriteString("Subject: " + sanitizeHeader(subject) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
 	b.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
 	b.WriteString("\r\n")

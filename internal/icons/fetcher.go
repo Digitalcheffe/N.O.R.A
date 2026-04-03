@@ -36,10 +36,14 @@ func New(iconsDir string) (*Fetcher, error) {
 // if non-empty it is tried first on the CDN before falling back to profileID.
 // The result is always stored as profileID.svg so the icon URL stays stable.
 func (f *Fetcher) EnsureIcon(profileID, iconSlug string) {
-	if profileID == "" {
+	if !isValidIconID(profileID) {
 		return
 	}
-	if _, err := os.Stat(f.iconPath(profileID)); err == nil {
+	p, err := f.safeIconPath(profileID)
+	if err != nil {
+		return
+	}
+	if _, err := os.Stat(p); err == nil {
 		return // already cached
 	}
 	go f.fetch(context.Background(), profileID, iconSlug)
@@ -51,11 +55,15 @@ func (f *Fetcher) EnsureIcon(profileID, iconSlug string) {
 func (f *Fetcher) FetchAll(ctx context.Context, profileIDs []string, slugOverrides map[string]string) {
 	seen := make(map[string]bool)
 	for _, id := range profileIDs {
-		if id == "" || seen[id] {
+		if !isValidIconID(id) || seen[id] {
 			continue
 		}
 		seen[id] = true
-		if _, err := os.Stat(f.iconPath(id)); err == nil {
+		p, err := f.safeIconPath(id)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
 			continue // already cached
 		}
 		id := id
@@ -66,7 +74,14 @@ func (f *Fetcher) FetchAll(ctx context.Context, profileIDs []string, slugOverrid
 
 // ServeIcon writes the cached SVG to w, returning true on success.
 func (f *Fetcher) ServeIcon(w http.ResponseWriter, profileID string) bool {
-	data, err := os.ReadFile(f.iconPath(profileID))
+	if !isValidIconID(profileID) {
+		return false
+	}
+	p, err := f.safeIconPath(profileID)
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(p)
 	if err != nil {
 		return false
 	}
@@ -77,8 +92,30 @@ func (f *Fetcher) ServeIcon(w http.ResponseWriter, profileID string) bool {
 	return true
 }
 
-func (f *Fetcher) iconPath(profileID string) string {
-	return filepath.Join(f.iconsDir, profileID+".svg")
+// isValidIconID returns true if id contains only alphanumeric characters,
+// hyphens, or underscores — safe to use as a filename component.
+func isValidIconID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, c := range id {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// safeIconPath returns the absolute path for profileID's cached SVG file,
+// validating that the resolved path stays within iconsDir.
+func (f *Fetcher) safeIconPath(profileID string) (string, error) {
+	base := filepath.Clean(f.iconsDir)
+	candidate := filepath.Join(base, profileID+".svg")
+	if !strings.HasPrefix(candidate, base+string(os.PathSeparator)) {
+		return "", fmt.Errorf("icons: path traversal detected for id %q", profileID)
+	}
+	return candidate, nil
 }
 
 func (f *Fetcher) fetch(ctx context.Context, profileID, iconSlug string) {
@@ -98,13 +135,19 @@ func (f *Fetcher) fetch(ctx context.Context, profileID, iconSlug string) {
 		candidates = append(candidates, profileID[:len(profileID)-4]+"-home")
 	}
 
+	dest, err := f.safeIconPath(profileID)
+	if err != nil {
+		log.Printf("icons: %v", err)
+		return
+	}
+
 	for _, name := range candidates {
 		url := fmt.Sprintf("%s/%s.svg", cdnBase, name)
 		data, err := f.download(ctx, url)
 		if err != nil {
 			continue
 		}
-		if err := os.WriteFile(f.iconPath(profileID), data, 0644); err != nil {
+		if err := os.WriteFile(dest, data, 0644); err != nil {
 			log.Printf("icons: write %s: %v", profileID, err)
 			return
 		}
