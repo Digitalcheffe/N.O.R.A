@@ -14,6 +14,10 @@ import (
 // configured interval. Every check runs in its own goroutine, so a slow or
 // blocked check cannot delay others. The check list is refreshed every 5
 // minutes to pick up newly added or disabled checks without a restart.
+//
+// Callers can also trigger an immediate reload via TriggerSync — used by the
+// API handler so a disabled check's goroutine is cancelled within milliseconds
+// rather than waiting up to 5 minutes for the periodic poll.
 type Scheduler struct {
 	store *repo.Store
 	ping  *PingChecker
@@ -23,6 +27,10 @@ type Scheduler struct {
 
 	mu     sync.Mutex
 	active map[string]context.CancelFunc // check ID → cancel for that goroutine
+
+	// syncCh is a buffered channel used by TriggerSync to request an immediate
+	// syncChecks without blocking the caller.
+	syncCh chan struct{}
 }
 
 // NewScheduler returns a Scheduler wired to store.
@@ -34,6 +42,17 @@ func NewScheduler(store *repo.Store) *Scheduler {
 		ssl:    NewSSLChecker(store),
 		dns:    NewDNSChecker(store),
 		active: make(map[string]context.CancelFunc),
+		syncCh: make(chan struct{}, 1),
+	}
+}
+
+// TriggerSync requests an immediate syncChecks. It is non-blocking: if a sync
+// is already queued the call is a no-op (the buffered channel absorbs the
+// signal without blocking). Safe to call from any goroutine.
+func (s *Scheduler) TriggerSync() {
+	select {
+	case s.syncCh <- struct{}{}:
+	default:
 	}
 }
 
@@ -56,6 +75,10 @@ func (s *Scheduler) Start(ctx context.Context) {
 			log.Printf("monitor scheduler: context cancelled — shutting down")
 			s.cancelAll()
 			return
+		case <-s.syncCh:
+			if err := s.syncChecks(ctx); err != nil {
+				log.Printf("monitor scheduler: triggered sync: %v", err)
+			}
 		case <-reloadTicker.C:
 			if err := s.syncChecks(ctx); err != nil {
 				log.Printf("monitor scheduler: reload: %v", err)

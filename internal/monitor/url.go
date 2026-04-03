@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/models"
@@ -72,6 +73,12 @@ func (u *URLChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 	expected := check.ExpectedStatus
 	if expected == 0 {
 		expected = 200
+	}
+
+	// Guard against unresolved template variables or missing scheme — Go's HTTP
+	// client URL-encodes curly braces and fails with "unsupported protocol scheme".
+	if !strings.HasPrefix(check.Target, "http://") && !strings.HasPrefix(check.Target, "https://") {
+		return u.recordError(ctx, check, "invalid check target: URL missing scheme — check configuration")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, check.Target, nil)

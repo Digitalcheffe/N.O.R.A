@@ -258,6 +258,38 @@ func TestURLChecker_EventWithoutApp(t *testing.T) {
 	}
 }
 
+// TestURLChecker_MissingScheme verifies that a target without an http/https
+// scheme is recorded as "down" with a descriptive error — the unresolved
+// {base_url} template scenario that produced "%7Bbase_url%7D/..." errors.
+func TestURLChecker_MissingScheme(t *testing.T) {
+	checks := &mockCheckRepo{}
+	events := &mockEventRepo{}
+	checker := newURLChecker(checks, events)
+
+	// Simulate an unresolved template — this is what gets stored when base_url
+	// is missing from the app config at check-creation time.
+	check := makeURLCheck("{base_url}/_matrix/maubot/v1/", "up", "app-1", 200)
+	err := checker.Run(context.Background(), check)
+	// Run may return a non-nil error; either way the check must be recorded as down.
+	_ = err
+
+	if len(checks.updateStatusCalls) != 1 {
+		t.Fatalf("expected 1 UpdateStatus call, got %d", len(checks.updateStatusCalls))
+	}
+	if checks.updateStatusCalls[0].status != "down" {
+		t.Errorf("expected status=down for missing-scheme target, got %s", checks.updateStatusCalls[0].status)
+	}
+
+	// Confirm the stored error message is descriptive, not a raw Go URL parse error.
+	var result urlResult
+	if jsonErr := json.Unmarshal([]byte(checks.updateStatusCalls[0].details), &result); jsonErr != nil {
+		t.Fatalf("last_result not valid JSON: %v", jsonErr)
+	}
+	if result.Error == nil || *result.Error == "" {
+		t.Error("expected non-empty error in last_result")
+	}
+}
+
 // TestURLChecker_NoEventOnFirstRun verifies no event on first execution (LastStatus="").
 func TestURLChecker_NoEventOnFirstRun(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

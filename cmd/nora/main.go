@@ -503,7 +503,7 @@ func main() {
 			api.NewIconsHandler(iconFetcher, registry).Routes(r)
 		}
 		api.NewEventsHandler(eventRepo).Routes(r)
-		api.NewChecksHandler(checkRepo, eventRepo).Routes(r)
+		api.NewChecksHandler(checkRepo, eventRepo, monitorScheduler).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
 		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, eventRepo, store).Routes(r)
