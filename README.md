@@ -29,7 +29,7 @@ NORA is what you get when you commit to the thing none of those tools committed 
 
 ---
 ## Screenshots
-![NORA Dashboard](.github/screenshots/Screenshot2026-04-02 223706.png)
+![NORA Dashboard](.github/screenshots/Screenshot2026040201.png)
 
 ---
 ## Features
