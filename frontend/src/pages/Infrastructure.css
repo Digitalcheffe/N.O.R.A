@@ -148,7 +148,27 @@
   flex-direction: column;
   gap: 12px;
   transition: border-color 0.15s;
+  position: relative;
 }
+
+.infra-card-gear-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.infra-card-gear-btn:hover:not(:disabled) { background: var(--bg4); color: var(--text); }
+.infra-card-gear-btn:disabled { opacity: 0.4; cursor: default; }
 
 .infra-card:hover { border-color: var(--border2); }
 
