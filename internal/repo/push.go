@@ -21,6 +21,8 @@ type WebPushSubscriptionRepo interface {
 	DeleteByEndpoint(ctx context.Context, endpoint string) error
 	// DeleteByUserAndEndpoint removes the subscription for a specific user + endpoint.
 	DeleteByUserAndEndpoint(ctx context.Context, userID, endpoint string) error
+	// DeleteByUserAndID removes the subscription with the given ID belonging to userID.
+	DeleteByUserAndID(ctx context.Context, userID, id string) error
 }
 
 type sqliteWebPushSubscriptionRepo struct {
@@ -94,6 +96,19 @@ func (r *sqliteWebPushSubscriptionRepo) DeleteByUserAndEndpoint(ctx context.Cont
 		DELETE FROM web_push_subscriptions WHERE user_id = ? AND endpoint = ?`, userID, endpoint)
 	if err != nil {
 		return fmt.Errorf("delete push subscription: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteWebPushSubscriptionRepo) DeleteByUserAndID(ctx context.Context, userID, id string) error {
+	res, err := r.db.ExecContext(ctx, `
+		DELETE FROM web_push_subscriptions WHERE user_id = ? AND id = ?`, userID, id)
+	if err != nil {
+		return fmt.Errorf("delete push subscription by id: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {

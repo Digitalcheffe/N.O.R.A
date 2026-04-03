@@ -293,12 +293,29 @@ function WebPushSection() {
   const [testMsg, setTestMsg] = useState('')
   const [testing, setTesting] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [subscriptions, setSubscriptions] = useState<import('../api/client').PushSubscription[]>([])
+  const [removingId, setRemovingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (typeof Notification !== 'undefined') {
       setPermission(Notification.permission)
     }
   }, [])
+
+  const loadSubscriptions = () => {
+    push.listSubscriptions()
+      .then(res => setSubscriptions(res.data))
+      .catch(() => {/* not critical */})
+  }
+
+  useEffect(() => {
+    loadSubscriptions()
+  }, [])
+
+  // Reload the list whenever subscription state changes (subscribe/unsubscribe on this device).
+  useEffect(() => {
+    loadSubscriptions()
+  }, [isSubscribed])
 
   const handleSubscribe = async () => {
     setActionError('')
@@ -325,6 +342,18 @@ function WebPushSection() {
     }
   }
 
+  const handleRemove = async (id: string) => {
+    setRemovingId(id)
+    try {
+      await push.removeSubscription(id)
+      setSubscriptions(prev => prev.filter(s => s.id !== id))
+    } catch (e: unknown) {
+      setActionError(e instanceof Error ? e.message : 'Failed to remove subscription')
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
   const handleTest = async () => {
     setTesting(true)
     setTestMsg('')
@@ -335,6 +364,15 @@ function WebPushSection() {
       setTestMsg(e instanceof Error ? e.message : 'Test failed')
     } finally {
       setTesting(false)
+    }
+  }
+
+  const formatEndpoint = (endpoint: string) => {
+    try {
+      const url = new URL(endpoint)
+      return url.hostname
+    } catch {
+      return endpoint.slice(0, 40) + '…'
     }
   }
 
@@ -365,7 +403,7 @@ function WebPushSection() {
           <div className="settings-actions" style={{ marginTop: 12 }}>
             {isSubscribed ? (
               <button className="settings-btn secondary" onClick={handleUnsubscribe} disabled={isLoading}>
-                {isLoading ? 'Working…' : 'Unsubscribe'}
+                {isLoading ? 'Working…' : 'Unsubscribe this device'}
               </button>
             ) : (
               <button className="settings-btn primary" onClick={handleSubscribe} disabled={isLoading}>
@@ -379,6 +417,36 @@ function WebPushSection() {
             )}
             {actionError && <span className="settings-status-msg" style={{ color: 'var(--red)' }}>{actionError}</span>}
             {testMsg && <span className="settings-status-msg">{testMsg}</span>}
+          </div>
+        </div>
+      )}
+
+      {subscriptions.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Registered devices ({subscriptions.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {subscriptions.map(sub => (
+              <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface2)', borderRadius: 6, padding: '8px 12px', fontSize: 13 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ color: 'var(--text)', fontFamily: 'monospace', fontSize: 12 }}>
+                    {formatEndpoint(sub.endpoint)}
+                  </span>
+                  <span style={{ color: 'var(--text2)', fontSize: 11 }}>
+                    Added {new Date(sub.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <button
+                  className="settings-btn secondary"
+                  style={{ padding: '4px 10px', fontSize: 12 }}
+                  disabled={removingId === sub.id}
+                  onClick={() => handleRemove(sub.id)}
+                >
+                  {removingId === sub.id ? '…' : 'Remove'}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
