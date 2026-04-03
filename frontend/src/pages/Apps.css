@@ -58,12 +58,6 @@
 .app-widget.warn::before  { background: var(--yellow); opacity: 1; }
 .app-widget.down::before  { background: var(--red);    opacity: 1; }
 
-.app-widget-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .app-icon {
   width: 28px;
   height: 28px;
@@ -78,14 +72,6 @@
   font-weight: 600;
   color: var(--text2);
   flex-shrink: 0;
-}
-
-.app-name-group {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
 }
 
 .app-name {
