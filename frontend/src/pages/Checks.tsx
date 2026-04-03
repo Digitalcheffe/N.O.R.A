@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SSLRow } from '../components/SSLRow'
-import { checks as checksApi, integrations as integrationsApi } from '../api/client'
-import type { MonitorCheck, SSLCert, InfraIntegration, TraefikCert } from '../api/types'
+import { checks as checksApi, integrations as integrationsApi, apps as appsApi, appTemplates as appTemplatesApi } from '../api/client'
+import type { App, MonitorCheck, SSLCert, InfraIntegration, TraefikCert } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
 import {
   type FormFields,
@@ -160,12 +160,14 @@ export function Checks() {
 
   const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
   const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
+  const [appList, setAppList] = useState<App[]>([])
 
   // Add form
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState<FormFields>(defaultForm)
   const [addError, setAddError] = useState<string | null>(null)
   const [addSubmitting, setAddSubmitting] = useState(false)
+  const [targetSuggestion, setTargetSuggestion] = useState<string>('')
 
   // Action state
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
@@ -174,6 +176,7 @@ export function Checks() {
     setShowAddForm(false)
     setAddForm(defaultForm)
     setAddError(null)
+    setTargetSuggestion('')
   }
 
   useEffect(() => {
@@ -192,6 +195,10 @@ export function Checks() {
             .catch(() => {})
         }
       })
+      .catch(() => {})
+
+    appsApi.list()
+      .then(res => setAppList(res.data))
       .catch(() => {})
   }, [tick])
 
@@ -222,6 +229,23 @@ export function Checks() {
       return next
     })
     setAddError(null)
+
+    if (field === 'app_id') {
+      setTargetSuggestion('')
+      if (!value) return
+      const app = appList.find(a => a.id === value)
+      if (!app?.profile_id) return
+      appTemplatesApi.get(app.profile_id)
+        .then(tmpl => {
+          if (!tmpl.monitor?.check_url) return
+          const baseUrl = typeof app.config?.base_url === 'string' ? app.config.base_url : ''
+          const resolved = baseUrl
+            ? tmpl.monitor.check_url.replace('{base_url}', baseUrl)
+            : tmpl.monitor.check_url
+          setTargetSuggestion(resolved)
+        })
+        .catch(() => {})
+    }
   }
 
   async function handleAddSubmit() {
@@ -289,6 +313,8 @@ export function Checks() {
                 traefikIntegrations={traefikIntegrations}
                 traefikCerts={traefikCerts}
                 onIntegrationChange={handleIntegrationChange}
+                apps={appList.map(a => ({ id: a.id, name: a.name }))}
+                targetSuggestion={targetSuggestion}
               />
             </div>
           </div>

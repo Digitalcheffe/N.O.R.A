@@ -313,6 +313,60 @@ func (h *AppsHandler) syncProfileMonitorCheck(ctx context.Context, app *models.A
 	}
 }
 
+// SyncAllProfileChecks re-resolves check targets for every app that is linked
+// to a profile. Call this once at startup so that check_url changes shipped in
+// a new version of a built-in profile are propagated to existing checks without
+// requiring the user to manually re-save each app.
+func SyncAllProfileChecks(ctx context.Context, apps repo.AppRepo, checks repo.CheckRepo, profiler apptemplate.Loader) {
+	appList, err := apps.List(ctx)
+	if err != nil {
+		log.Printf("profile sync: failed to list apps: %v", err)
+		return
+	}
+	checkList, err := checks.List(ctx)
+	if err != nil {
+		log.Printf("profile sync: failed to list checks: %v", err)
+		return
+	}
+
+	// Index checks by app ID for O(1) lookup.
+	checksByApp := make(map[string][]*models.MonitorCheck, len(checkList))
+	for i := range checkList {
+		c := &checkList[i]
+		checksByApp[c.AppID] = append(checksByApp[c.AppID], c)
+	}
+
+	updated := 0
+	for _, app := range appList {
+		if app.ProfileID == "" {
+			continue
+		}
+		tmpl, err := profiler.Get(app.ProfileID)
+		if err != nil || tmpl == nil || tmpl.Monitor.CheckURL == "" {
+			continue
+		}
+		newTarget, err := app.Config.ResolveTemplateVars(tmpl.Monitor.CheckURL)
+		if err != nil {
+			// base_url not configured yet — nothing to sync.
+			continue
+		}
+		for _, c := range checksByApp[app.ID] {
+			if c.Type == tmpl.Monitor.CheckType && c.Target != newTarget {
+				c.Target = newTarget
+				if updateErr := checks.Update(ctx, c); updateErr != nil {
+					log.Printf("profile sync: update check %s for app %q: %v", c.ID, app.Name, updateErr)
+				} else {
+					updated++
+				}
+				break
+			}
+		}
+	}
+	if updated > 0 {
+		log.Printf("profile sync: updated %d check target(s) to match current profile templates", updated)
+	}
+}
+
 // monitorURLFromConfig extracts the monitor_url string from app config JSON.
 func monitorURLFromConfig(cfg models.ConfigJSON) string {
 	var m map[string]interface{}

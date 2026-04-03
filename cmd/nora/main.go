@@ -151,6 +151,11 @@ func main() {
 	}
 	log.Printf("  templates: %d loaded from %s", len(registry.List()), cfg.TemplatesPath)
 
+	// Propagate any check_url changes from updated built-in profiles to existing
+	// checks. Runs in the background so startup is not blocked; the monitor
+	// scheduler will pick up the corrected targets on its next sync cycle.
+	go api.SyncAllProfileChecks(context.Background(), appRepo, checkRepo, registry)
+
 	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
 	iconFetcher, err := icons.New(cfg.IconsPath)
 	if err != nil {
