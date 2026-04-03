@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"log"
 	"net/http"
 
@@ -137,7 +138,7 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 </table>
 %s
 <p style="margin:24px 0 0;font-size:12px;color:#475569;">Please change your password after your first login.</p>
-</body></html>`, req.Email, req.Password, role, mfaLine)
+</body></html>`, html.EscapeString(req.Email), html.EscapeString(req.Password), html.EscapeString(role), mfaLine)
 		if err := jobs.SendMail(smtp.Host, smtp.Port, smtp.User, smtp.Pass, smtp.From,
 			[]string{req.Email}, "Your NORA account", body); err != nil {
 			log.Printf("invite email to %s: %v", req.Email, err)

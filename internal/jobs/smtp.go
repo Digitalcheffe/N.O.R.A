@@ -100,6 +100,8 @@ func buildMIMEMessage(from string, to []string, subject, htmlBody string) string
 	b.WriteString("MIME-Version: 1.0\r\n")
 	b.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
 	b.WriteString("\r\n")
-	b.WriteString(htmlBody)
+	// Strip bare CR characters from the body to prevent CRLF injection that
+	// could insert spurious MIME headers into the message stream.
+	b.WriteString(strings.ReplaceAll(htmlBody, "\r", ""))
 	return b.String()
 }
