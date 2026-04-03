@@ -7,6 +7,34 @@ NORA is a self-hosted monitoring, event capture, and notification platform built
 
 ---
 
+## A Note on How This Is Built
+
+NORA is heavily developed with **[Claude Code](https://claude.ai/code)** by Anthropic. That comes with an honest disclaimer and an honest commitment.
+
+The sentiment around AI-generated code is fair — the ecosystem is full of projects that got spun up overnight and abandoned just as fast. This isn't that. Every significant piece of work goes through a tracked GitHub issue, every change is documented in PR notes, and nothing ships without being understood. The goal is a solid, maintainable project — not a demo.
+
+If you're evaluating NORA, read the issue history. Read the PRs. The process is the proof.
+
+### Built On
+
+NORA would not exist without these open-source projects:
+
+| Project | Role |
+|---|---|
+| [Go](https://go.dev/) | Backend runtime — single binary, zero dependencies |
+| [SQLite](https://sqlite.org/) | Embedded database via [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) |
+| [React](https://react.dev/) + [Vite](https://vitejs.dev/) | Frontend framework and build tool |
+| [React Router](https://reactrouter.com/) | Client-side routing |
+| [golang-jwt/jwt](https://github.com/golang-jwt/jwt) | JWT authentication |
+| [SherClockHolmes/webpush-go](https://github.com/SherClockHolmes/webpush-go) | Web Push / VAPID notifications |
+| [pquerna/otp](https://github.com/pquerna/otp) | TOTP two-factor authentication |
+| [gosnmp/gosnmp](https://github.com/gosnmp/gosnmp) | SNMP polling |
+| [robfig/cron](https://github.com/robfig/cron) | Scheduled task execution |
+| [rs/zerolog](https://github.com/rs/zerolog) | Structured logging |
+| [D3.js](https://d3js.org/) | Topology graph visualisation |
+
+---
+
 ## The Problem
 
 Every homelabber knows they *should* have better visibility into their stack. They know they should get notified before things break instead of after. But standing up Grafana + Prometheus + Loki + Alertmanager is a project, not a solution. So it never happens. And they stay blind.
