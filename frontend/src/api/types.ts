@@ -524,6 +524,7 @@ export interface ProxmoxGuestInfo {
   cpus: number
   max_mem_bytes: number
   max_disk_bytes: number
+  ip?: string
   os_type?: string
   network_bridges?: string[]
   tags?: string[]

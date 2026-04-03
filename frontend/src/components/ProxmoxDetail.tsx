@@ -316,6 +316,7 @@ function GuestsSection({
               <th></th>
               <th>Name</th>
               <th>Type</th>
+              <th>IP</th>
               <th>Status</th>
               <th>vCPU</th>
               <th>Memory</th>
@@ -329,7 +330,7 @@ function GuestsSection({
               <SkeletonRows count={5} />
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-empty-cell">
+                <td colSpan={10} className="px-empty-cell">
                   {guests.length === 0
                     ? 'No VMs or containers found.'
                     : 'No guests match the current filters.'}
@@ -356,6 +357,7 @@ function GuestsSection({
                     <td>
                       <span className="px-type-badge">{g.guest_type.toUpperCase()}</span>
                     </td>
+                    <td className="px-mono px-muted">{g.ip || '—'}</td>
                     <td className="px-muted px-status-text">{g.status}</td>
                     <td className="px-muted">{g.cpus}</td>
                     <td className="px-muted">{formatBytes(g.max_mem_bytes)}</td>
