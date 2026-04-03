@@ -31,6 +31,7 @@ NORA is what you get when you commit to the thing none of those tools committed 
 ## Screenshots
 ![NORA Dashboard](.github/screenshots/Screenshot2026040201.png)
 
+More Screen Shots [Screenshots](https://github.com/Digitalcheffe/N.O.R.A/tree/main/.github/screenshots)
 ---
 ## Features
 
