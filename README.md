@@ -28,7 +28,10 @@ NORA is what you get when you commit to the thing none of those tools committed 
 | **Summarize** | Delivers a scheduled digest email of what happened across your stack |
 
 ---
+## Screenshots
+![NORA Dashboard](.github/screenshots/Screenshot 2026-04-02 223706.png)
 
+---
 ## Features
 
 ### Monitoring
