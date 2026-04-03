@@ -19,7 +19,7 @@ func newChecksRouter(t *testing.T) http.Handler {
 	db := newTestDB(t)
 	checkRepo := repo.NewCheckRepo(db)
 	eventRepo := repo.NewEventRepo(db)
-	h := api.NewChecksHandler(checkRepo, eventRepo)
+	h := api.NewChecksHandler(checkRepo, eventRepo, nil)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r

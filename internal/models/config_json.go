@@ -2,8 +2,10 @@ package models
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ConfigJSON is stored as a TEXT JSON string in SQLite but serialises as a
@@ -46,6 +48,25 @@ func (c *ConfigJSON) Scan(src any) error {
 		return fmt.Errorf("ConfigJSON: cannot scan type %T", src)
 	}
 	return nil
+}
+
+// ResolveTemplateVars replaces {base_url} in tmplURL with the base_url value
+// from the config JSON. Returns an error when the placeholder is present but
+// the corresponding key is missing or empty — this prevents an unresolved
+// template from being persisted as a check target or executed by the runner.
+func (c ConfigJSON) ResolveTemplateVars(tmplURL string) (string, error) {
+	if !strings.Contains(tmplURL, "{base_url}") {
+		return tmplURL, nil
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(c, &m); err != nil {
+		return "", fmt.Errorf("parse app config: %w", err)
+	}
+	v, ok := m["base_url"].(string)
+	if !ok || v == "" {
+		return "", errors.New("app config missing base_url — configure base_url before creating checks from this profile")
+	}
+	return strings.ReplaceAll(tmplURL, "{base_url}", v), nil
 }
 
 // Value implements driver.Valuer — stores the JSON as TEXT in SQLite.

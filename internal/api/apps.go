@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -195,6 +196,7 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		h.iconsFetcher.EnsureIcon(existing.ProfileID, h.iconSlugForProfile(existing.ProfileID))
 	}
 	h.syncMonitorCheck(r.Context(), existing, monitorURLFromConfig(existing.Config))
+	h.syncProfileMonitorCheck(r.Context(), existing)
 	writeJSON(w, http.StatusOK, existing)
 }
 
@@ -275,6 +277,40 @@ func (h *AppsHandler) syncMonitorCheck(ctx context.Context, app *models.App, mon
 		CreatedAt:    time.Now().UTC(),
 	}
 	_ = h.checks.Create(ctx, check)
+}
+
+// syncProfileMonitorCheck re-resolves the check target for any profile-derived
+// URL check when the app's config (e.g. base_url) has changed. Called on every
+// app update so the stored target stays in sync with the configured base_url.
+func (h *AppsHandler) syncProfileMonitorCheck(ctx context.Context, app *models.App) {
+	if h.checks == nil || h.profiler == nil || app.ProfileID == "" {
+		return
+	}
+	tmpl, err := h.profiler.Get(app.ProfileID)
+	if err != nil || tmpl == nil || tmpl.Monitor.CheckURL == "" {
+		return
+	}
+	newTarget, err := app.Config.ResolveTemplateVars(tmpl.Monitor.CheckURL)
+	if err != nil {
+		log.Printf("apps: cannot resolve profile check URL for app %q: %v", app.Name, err)
+		return
+	}
+	all, err := h.checks.List(ctx)
+	if err != nil {
+		return
+	}
+	for i := range all {
+		c := &all[i]
+		if c.AppID == app.ID && c.Type == tmpl.Monitor.CheckType {
+			if c.Target != newTarget {
+				c.Target = newTarget
+				if updateErr := h.checks.Update(ctx, c); updateErr != nil {
+					log.Printf("apps: update profile check target for app %q: %v", app.Name, updateErr)
+				}
+			}
+			return
+		}
+	}
 }
 
 // monitorURLFromConfig extracts the monitor_url string from app config JSON.

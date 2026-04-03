@@ -406,21 +406,76 @@ func TestParseIntervalSecs(t *testing.T) {
 }
 
 func TestSubstituteBaseURL(t *testing.T) {
-	cases := []struct {
-		tmpl string
-		cfg  string
-		want string
-	}{
-		{"{base_url}/ping", `{"base_url":"http://host:8989"}`, "http://host:8989/ping"},
-		{"{base_url}/api", `{}`, "{base_url}/api"},             // no base_url in config
-		{"/health", `{"base_url":"http://x"}`, "/health"},      // no placeholder in template
-		{"{base_url}", `{"base_url":"http://x"}`, "http://x"},
-		{"{base_url}", `not-json`, "{base_url}"},               // bad JSON — return as-is
+	type tc struct {
+		tmpl    string
+		cfg     string
+		want    string
+		wantErr bool
+	}
+	cases := []tc{
+		// Happy path: placeholder fully resolved.
+		{"{base_url}/ping", `{"base_url":"http://host:8989"}`, "http://host:8989/ping", false},
+		// No placeholder in template — returned unchanged, no error.
+		{"/health", `{"base_url":"http://x"}`, "/health", false},
+		// Placeholder resolved to bare domain (no scheme) — still returned; scheme
+		// validation is the caller's responsibility.
+		{"{base_url}", `{"base_url":"http://x"}`, "http://x", false},
+		// Missing base_url in config — must error, not return unresolved template.
+		{"{base_url}/api", `{}`, "", true},
+		// Empty base_url value — must error.
+		{"{base_url}/api", `{"base_url":""}`, "", true},
+		// Unparseable config JSON — must error.
+		{"{base_url}", `not-json`, "", true},
 	}
 	for _, tc := range cases {
-		got := substituteBaseURL(tc.tmpl, models.ConfigJSON(tc.cfg))
+		got, err := substituteBaseURL(tc.tmpl, models.ConfigJSON(tc.cfg))
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("substituteBaseURL(%q, %q) expected error, got %q", tc.tmpl, tc.cfg, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("substituteBaseURL(%q, %q) unexpected error: %v", tc.tmpl, tc.cfg, err)
+			continue
+		}
 		if got != tc.want {
 			t.Errorf("substituteBaseURL(%q, %q) = %q, want %q", tc.tmpl, tc.cfg, got, tc.want)
 		}
+	}
+}
+
+// TestEnrichMonitorCheck_MissingBaseURL verifies that enrichment skips check
+// creation (rather than storing an unresolved {base_url} template) when the
+// app config has no base_url set.
+func TestEnrichMonitorCheck_MissingBaseURL(t *testing.T) {
+	appID := "app-no-baseurl"
+
+	apps := &enrichMockAppRepo{apps: map[string]*models.App{
+		appID: {
+			ID:        appID,
+			Name:      "Maubot",
+			ProfileID: "maubot",
+			Config:    models.ConfigJSON(`{}`), // base_url intentionally absent
+		},
+	}}
+	checks := &enrichMockCheckRepo{existsByTarget: map[string]bool{}}
+
+	profiles := &mockProfileLoader{templates: map[string]*apptemplate.AppTemplate{
+		"maubot": {
+			Meta:    apptemplate.AppTemplateMeta{Name: "Maubot"},
+			Monitor: apptemplate.Monitor{CheckType: "url", CheckURL: "{base_url}/_matrix/maubot/v1/", CheckInterval: "5m", HealthyStatus: 200},
+		},
+	}}
+
+	store := buildEnrichStore(apps, checks, nil, nil, nil)
+	if err := EnrichAppOnLink(context.Background(), store, profiles, appID, nil, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No check should be created — storing {base_url}/... would break the runner.
+	if len(checks.created) != 0 {
+		t.Errorf("expected 0 checks created when base_url missing, got %d (target=%q)",
+			len(checks.created), checks.created[0].Target)
 	}
 }

@@ -2,7 +2,6 @@ package docker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -62,7 +61,15 @@ func EnrichAppOnLink(
 // enrichMonitorCheck creates a monitor check from the profile's monitor config
 // if one with the same type and target does not already exist.
 func enrichMonitorCheck(ctx context.Context, store *repo.Store, app *models.App, tmpl *apptemplate.AppTemplate) {
-	target := substituteBaseURL(tmpl.Monitor.CheckURL, app.Config)
+	target, err := substituteBaseURL(tmpl.Monitor.CheckURL, app.Config)
+	if err != nil {
+		log.Printf("enrichment: resolve check URL for app %q: %v — skipping monitor check creation", app.Name, err)
+		return
+	}
+	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
+		log.Printf("enrichment: resolved check URL %q for app %q has no http/https scheme — skipping", target, app.Name)
+		return
+	}
 	exists, err := store.Checks.ExistsForTypeAndTarget(ctx, tmpl.Monitor.CheckType, target)
 	if err != nil {
 		log.Printf("enrichment: check existence query for app %q: %v", app.Name, err)
@@ -148,19 +155,11 @@ func enrichResourceReadings(ctx context.Context, store *repo.Store, app *models.
 }
 
 // substituteBaseURL replaces {base_url} in tmplURL with the base_url value
-// from the app config JSON. Returns tmplURL unchanged if no base_url is found.
-func substituteBaseURL(tmplURL string, cfg models.ConfigJSON) string {
-	if !strings.Contains(tmplURL, "{base_url}") {
-		return tmplURL
-	}
-	var m map[string]interface{}
-	if err := json.Unmarshal(cfg, &m); err != nil {
-		return tmplURL
-	}
-	if v, ok := m["base_url"].(string); ok {
-		return strings.ReplaceAll(tmplURL, "{base_url}", v)
-	}
-	return tmplURL
+// from the app config JSON. Returns an error when the placeholder is present
+// but base_url is missing or empty — this prevents an unresolved template from
+// being stored as a check target.
+func substituteBaseURL(tmplURL string, cfg models.ConfigJSON) (string, error) {
+	return cfg.ResolveTemplateVars(tmplURL)
 }
 
 // parseIntervalSecs converts a duration string (e.g. "5m", "1h", "30s") to

@@ -16,15 +16,24 @@ import (
 	"github.com/google/uuid"
 )
 
+// syncer is the minimal interface ChecksHandler needs from the scheduler —
+// just enough to trigger an immediate re-sync when a check is disabled.
+type syncer interface {
+	TriggerSync()
+}
+
 // ChecksHandler holds dependencies for the monitor checks resource handlers.
 type ChecksHandler struct {
-	checks repo.CheckRepo
-	events repo.EventRepo
+	checks    repo.CheckRepo
+	events    repo.EventRepo
+	scheduler syncer // may be nil; used to push pause/resume immediately to the runner
 }
 
 // NewChecksHandler creates a ChecksHandler with the given repositories.
-func NewChecksHandler(checks repo.CheckRepo, events repo.EventRepo) *ChecksHandler {
-	return &ChecksHandler{checks: checks, events: events}
+// Pass a non-nil scheduler so that pausing or resuming a check takes effect
+// immediately instead of waiting for the next 5-minute scheduler poll.
+func NewChecksHandler(checks repo.CheckRepo, events repo.EventRepo, scheduler syncer) *ChecksHandler {
+	return &ChecksHandler{checks: checks, events: events, scheduler: scheduler}
 }
 
 // Routes registers all check endpoints on r.
@@ -301,6 +310,14 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// When the enabled flag changed, nudge the scheduler immediately so the
+	// goroutine for a paused check is cancelled (or started for a resumed one)
+	// without waiting for the next 5-minute periodic sync.
+	if req.Enabled != nil && h.scheduler != nil {
+		h.scheduler.TriggerSync()
+	}
+
 	writeJSON(w, http.StatusOK, existing)
 }
 
