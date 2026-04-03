@@ -89,6 +89,7 @@ func (r *mockInfraComponentRepo) UpdateSNMPMeta(_ context.Context, _, _ string) 
 func (r *mockInfraComponentRepo) UpdateSynologyMeta(_ context.Context, _, _ string) error {
 	return nil
 }
+func (r *mockInfraComponentRepo) UpdateIP(_ context.Context, _, _ string) error { return nil }
 
 type imageCheckCall struct {
 	id              string
