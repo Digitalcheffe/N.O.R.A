@@ -14,6 +14,7 @@ type Config struct {
 	Timezone       string // IANA timezone name used for digest scheduling (e.g. "America/New_York")
 	VAPIDPublic    string
 	VAPIDPrivate   string
+	VAPIDSubject   string
 	TemplatesPath  string
 	IconsPath      string
 	// Bootstrap admin credentials — used only when the users table is empty.
@@ -37,6 +38,7 @@ func Load() *Config {
 		Timezone:       getEnvStr("NORA_TIMEZONE", "UTC"),
 		VAPIDPublic:    os.Getenv("NORA_VAPID_PUBLIC"),
 		VAPIDPrivate:   os.Getenv("NORA_VAPID_PRIVATE"),
+		VAPIDSubject:   getEnvStr("NORA_VAPID_SUBJECT", "mailto:admin@localhost"),
 		AdminEmail:     os.Getenv("NORA_ADMIN_EMAIL"),
 		AdminPassword:  os.Getenv("NORA_ADMIN_PASSWORD"),
 	}

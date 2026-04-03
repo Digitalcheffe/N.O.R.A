@@ -593,6 +593,11 @@ func spaHandler(distFS fs.FS, fileServer http.Handler) http.HandlerFunc {
 			path = "index.html"
 		}
 
+		// Service worker must never be cached so updates are picked up immediately.
+		if path == "sw.js" {
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		}
+
 		// If the file exists in the embedded FS, serve it directly.
 		if f, err := distFS.Open(path); err == nil {
 			f.Close()
