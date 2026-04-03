@@ -1648,13 +1648,12 @@ function NotifyRulesTab({ smtpConfigured }: NotifyRulesTabProps) {
     setSaveError('')
     try {
       if (editingRule) {
-        const updated = await notifyRules.update(editingRule.id, input)
-        setRuleList(prev => prev.map(r => r.id === updated.id ? updated : r))
+        await notifyRules.update(editingRule.id, input)
       } else {
-        const created = await notifyRules.create(input)
-        setRuleList(prev => [...prev, created])
+        await notifyRules.create(input)
       }
       closePanel()
+      load()
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : 'Save failed')
     } finally {
