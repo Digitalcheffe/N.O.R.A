@@ -80,11 +80,21 @@
   flex-shrink: 0;
 }
 
+.app-name-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
 .app-name {
   font-weight: 500;
   font-size: 13px;
   color: var(--text);
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-status {
@@ -155,6 +165,9 @@
 /* ── Card kebab menu ── */
 
 .app-card-menu-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
   width: 24px;
   height: 24px;
   background: none;
@@ -165,9 +178,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
-  margin-left: auto;
 }
 
 .app-card-menu-btn:hover { background: var(--bg4); color: var(--text); }
