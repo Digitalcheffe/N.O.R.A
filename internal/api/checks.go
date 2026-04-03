@@ -292,18 +292,23 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 		existing.DNSResolver = req.DNSResolver
 	}
 
-	// Re-validate the merged state. Include SSLSource so Traefik-mode checks
-	// are not incorrectly rejected for using a bare domain target.
-	merged := checkRequest{
-		Name:         existing.Name,
-		Type:         existing.Type,
-		Target:       existing.Target,
-		IntervalSecs: existing.IntervalSecs,
-		SSLSource:    existing.SSLSource,
-	}
-	if msg := validateCheck(merged); msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
+	// Re-validate only when core fields were part of the request — a
+	// pause/resume or flag-only update should not be rejected because the
+	// stored target happens to be an unresolved template placeholder.
+	coreFieldsChanged := req.Name != "" || req.Type != "" || req.Target != "" ||
+		req.IntervalSecs != 0 || req.SSLSource != nil
+	if coreFieldsChanged {
+		merged := checkRequest{
+			Name:         existing.Name,
+			Type:         existing.Type,
+			Target:       existing.Target,
+			IntervalSecs: existing.IntervalSecs,
+			SSLSource:    existing.SSLSource,
+		}
+		if msg := validateCheck(merged); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
 	}
 
 	if err := h.checks.Update(r.Context(), existing); err != nil {
