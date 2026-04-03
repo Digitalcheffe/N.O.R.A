@@ -15,23 +15,7 @@ The sentiment around AI-generated code is fair — the ecosystem is full of proj
 
 If you're evaluating NORA, read the issue history. Read the PRs. The process is the proof.
 
-### Built On
-
-NORA would not exist without these open-source projects:
-
-| Project | Role |
-|---|---|
-| [Go](https://go.dev/) | Backend runtime — single binary, zero dependencies |
-| [SQLite](https://sqlite.org/) | Embedded database via [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) |
-| [React](https://react.dev/) + [Vite](https://vitejs.dev/) | Frontend framework and build tool |
-| [React Router](https://reactrouter.com/) | Client-side routing |
-| [golang-jwt/jwt](https://github.com/golang-jwt/jwt) | JWT authentication |
-| [SherClockHolmes/webpush-go](https://github.com/SherClockHolmes/webpush-go) | Web Push / VAPID notifications |
-| [pquerna/otp](https://github.com/pquerna/otp) | TOTP two-factor authentication |
-| [gosnmp/gosnmp](https://github.com/gosnmp/gosnmp) | SNMP polling |
-| [robfig/cron](https://github.com/robfig/cron) | Scheduled task execution |
-| [rs/zerolog](https://github.com/rs/zerolog) | Structured logging |
-| [D3.js](https://d3js.org/) | Topology graph visualisation |
+NORA is built on the shoulders of great open-source work — [see the full list of projects credited below](#built-on).
 
 ---
 
@@ -198,6 +182,26 @@ All email configuration is managed in the app under Settings → Notifications �
 - **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
 - **PostgreSQL support** — for larger installations that outgrow SQLite
 - **SSO / OAuth login** — federated authentication for team deployments
+
+---
+
+## Built On
+
+NORA would not exist without these open-source projects:
+
+| Project | Role |
+|---|---|
+| [Go](https://go.dev/) | Backend runtime — single binary, zero dependencies |
+| [SQLite](https://sqlite.org/) | Embedded database via [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) |
+| [React](https://react.dev/) + [Vite](https://vitejs.dev/) | Frontend framework and build tool |
+| [React Router](https://reactrouter.com/) | Client-side routing |
+| [golang-jwt/jwt](https://github.com/golang-jwt/jwt) | JWT authentication |
+| [SherClockHolmes/webpush-go](https://github.com/SherClockHolmes/webpush-go) | Web Push / VAPID notifications |
+| [pquerna/otp](https://github.com/pquerna/otp) | TOTP two-factor authentication |
+| [gosnmp/gosnmp](https://github.com/gosnmp/gosnmp) | SNMP polling |
+| [robfig/cron](https://github.com/robfig/cron) | Scheduled task execution |
+| [rs/zerolog](https://github.com/rs/zerolog) | Structured logging |
+| [D3.js](https://d3js.org/) | Topology graph visualisation |
 
 ---
 

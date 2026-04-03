@@ -20,7 +20,7 @@ func RunProxmoxPollers(ctx context.Context, store *repo.Store) {
 	}
 
 	for _, c := range components {
-		if c.Type != "proxmox_node" || !c.Enabled {
+		if c.CollectionMethod != "proxmox_api" || !c.Enabled {
 			continue
 		}
 		if c.Credentials == nil || *c.Credentials == "" {
