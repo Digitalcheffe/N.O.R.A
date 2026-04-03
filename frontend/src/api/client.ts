@@ -590,15 +590,28 @@ interface PushSubscribeInput {
   keys: PushKeys
 }
 
+export interface PushSubscription {
+  id: string
+  user_id: string
+  endpoint: string
+  created_at: string
+}
+
 export const push = {
   vapidPublicKey: () =>
     request<{ public_key: string }>('GET', '/push/vapid-public-key'),
+
+  listSubscriptions: () =>
+    request<{ data: PushSubscription[]; total: number }>('GET', '/push/subscriptions'),
 
   subscribe: (input: PushSubscribeInput) =>
     request<void>('POST', '/push/subscribe', input),
 
   unsubscribe: (input: { endpoint: string }) =>
     request<void>('DELETE', '/push/subscribe', input),
+
+  removeSubscription: (id: string) =>
+    request<void>('DELETE', `/push/subscriptions/${id}`),
 
   test: () =>
     request<{ status: string }>('POST', '/push/test'),

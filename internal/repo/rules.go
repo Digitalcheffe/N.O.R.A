@@ -96,7 +96,7 @@ func (r *sqliteRuleRepo) Create(ctx context.Context, rule models.Rule) (models.R
 	if err != nil {
 		return rule, fmt.Errorf("create rule: %w", err)
 	}
-	return rule, nil
+	return r.Get(ctx, rule.ID)
 }
 
 func (r *sqliteRuleRepo) Update(ctx context.Context, rule models.Rule) (models.Rule, error) {
@@ -118,7 +118,7 @@ func (r *sqliteRuleRepo) Update(ctx context.Context, rule models.Rule) (models.R
 	if err != nil {
 		return rule, fmt.Errorf("update rule: %w", err)
 	}
-	return rule, nil
+	return r.Get(ctx, rule.ID)
 }
 
 func (r *sqliteRuleRepo) Delete(ctx context.Context, id string) error {

@@ -20,7 +20,7 @@ func RunSynologyPollers(ctx context.Context, store *repo.Store, pollers map[stri
 	}
 
 	for _, c := range components {
-		if c.Type != "synology" || !c.Enabled {
+		if c.CollectionMethod != "synology_api" || !c.Enabled {
 			continue
 		}
 		if c.Credentials == nil || *c.Credentials == "" {

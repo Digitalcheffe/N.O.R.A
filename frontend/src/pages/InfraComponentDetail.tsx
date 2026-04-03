@@ -13,6 +13,7 @@ import { infrastructure as infraApi, apps as appsApi } from '../api/client'
 import type {
   App,
   InfrastructureComponent,
+  InfrastructureComponentInput,
   ResourceSummary,
   ResourceHistory,
   ResourceRollupPoint,
@@ -23,20 +24,8 @@ import type {
 } from '../api/types'
 import { timeAgo, formatBytes } from '../utils/format'
 import { InfraTypeIcon } from '../components/CheckTypeIcon'
+import { InfraEditModal, TYPE_LABEL } from './InfraEditModal'
 import './InfraComponentDetail.css'
-
-const TYPE_LABEL: Record<string, string> = {
-  proxmox_node:  'Proxmox Node',
-  synology:      'Synology NAS',
-  vm:            'VM',
-  lxc:           'LXC',
-  bare_metal:    'Bare Metal',
-  linux_host:    'Linux Host',
-  windows_host:  'Windows Host',
-  generic_host:  'Generic Host',
-  docker_engine: 'Docker Engine',
-  traefik:       'Traefik',
-}
 
 
 // ── Sparkline ─────────────────────────────────────────────────────────────────
@@ -261,103 +250,17 @@ function SNMPSection({ detail }: { detail: SNMPDetail | null }) {
   )
 }
 
-// ── Inline edit panel ─────────────────────────────────────────────────────────
-// Shown when the user clicks Edit on any detail page. Lets you change name, IP,
-// parent component, notes, and enabled state without touching credentials.
-
-interface EditFields {
-  name: string
-  ip: string
-  parent_id: string | null
-  notes: string
-  enabled: boolean
-}
-
-interface InlineEditPanelProps {
-  component: InfrastructureComponent
-  allComponents: InfrastructureComponent[]
-  saving: boolean
-  onSave: (fields: EditFields) => void
-  onCancel: () => void
-}
-
-function InlineEditPanel({ component, allComponents, saving, onSave, onCancel }: InlineEditPanelProps) {
-  const [name,     setName]     = useState(component.name)
-  const [ip,       setIP]       = useState(component.ip)
-  const [parentId, setParentId] = useState(component.parent_id ?? '')
-  const [notes,    setNotes]    = useState(component.notes)
-  const [enabled,  setEnabled]  = useState(component.enabled)
-
-  const available = allComponents.filter(c => c.id !== component.id)
-
-  return (
-    <>
-      {/* Backdrop — does not dismiss on click; use Cancel or ✕ */}
-      <div className="icd-edit-overlay" />
-
-      {/* Modal card */}
-      <div className="icd-edit-modal">
-        <div className="icd-edit-modal-header">
-          <span className="icd-edit-modal-title">Edit Component</span>
-          <button className="icd-edit-modal-close" onClick={onCancel}>✕</button>
-        </div>
-
-        <div className="icd-edit-fields">
-          <div className="icd-edit-field">
-            <div className="icd-edit-label">Name</div>
-            <input className="icd-edit-input" value={name} onChange={e => setName(e.target.value)} />
-          </div>
-          <div className="icd-edit-field">
-            <div className="icd-edit-label">IP / Host</div>
-            <input className="icd-edit-input" value={ip} onChange={e => setIP(e.target.value)} placeholder="192.168.1.x" />
-          </div>
-          <div className="icd-edit-field icd-edit-field-full">
-            <div className="icd-edit-label">Parent Component</div>
-            <select className="icd-edit-input" value={parentId} onChange={e => setParentId(e.target.value)}>
-              <option value="">None</option>
-              {available.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="icd-edit-field icd-edit-field-full">
-            <div className="icd-edit-label">Notes</div>
-            <input className="icd-edit-input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
-          </div>
-          <div className="icd-edit-field">
-            <label className="icd-edit-check-label">
-              <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
-              {' '}Enabled
-            </label>
-          </div>
-        </div>
-
-        <div className="icd-edit-actions">
-          <button
-            className="icd-link-btn"
-            disabled={saving || !name.trim()}
-            onClick={() => onSave({ name: name.trim(), ip: ip.trim(), parent_id: parentId || null, notes, enabled })}
-          >
-            {saving ? 'Saving…' : 'Save Changes'}
-          </button>
-          <button className="icd-unlink-btn" onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
-    </>
-  )
-}
-
 // ── Shell edit props ──────────────────────────────────────────────────────────
 // Passed into TraefikShell / SynologyShell so they can render the Edit button
-// and inline panel despite being module-level components.
+// and InfraEditModal despite being module-level components.
 
 interface ShellEditProps {
   allComponents: InfrastructureComponent[]
   editOpen: boolean
-  editSaving: boolean
+  hasCreds: boolean
   onEditOpen: () => void
-  onEditSave: (fields: EditFields) => void
-  onEditCancel: () => void
+  onEditSave: (payload: InfrastructureComponentInput) => Promise<void>
+  onEditClose: () => void
 }
 
 // ── Traefik shell ─────────────────────────────────────────────────────────────
@@ -393,12 +296,12 @@ function TraefikShell({ component, ep }: { component: InfrastructureComponent; e
       sourceId={component.id}
     >
       {ep.editOpen && (
-        <InlineEditPanel
+        <InfraEditModal
           component={component}
-          allComponents={ep.allComponents}
-          saving={ep.editSaving}
+          components={ep.allComponents}
+          hasCreds={ep.hasCreds}
           onSave={ep.onEditSave}
-          onCancel={ep.onEditCancel}
+          onClose={ep.onEditClose}
         />
       )}
       <TraefikContent component={component} onOverviewLoaded={setOverview} />
@@ -456,12 +359,12 @@ function SynologyShell({ component, ep }: { component: InfrastructureComponent; 
       sourceId={component.id}
     >
       {ep.editOpen && (
-        <InlineEditPanel
+        <InfraEditModal
           component={component}
-          allComponents={ep.allComponents}
-          saving={ep.editSaving}
+          components={ep.allComponents}
+          hasCreds={ep.hasCreds}
           onSave={ep.onEditSave}
-          onCancel={ep.onEditCancel}
+          onClose={ep.onEditClose}
         />
       )}
       <SynologyContent component={component} onDetailLoaded={handleDetailLoaded} />
@@ -495,7 +398,6 @@ export function InfraComponentDetail() {
   const [dockerCounts,     setDockerCounts]     = useState({ total: 0, running: 0 })
   const [portainerCounts,  setPortainerCounts]  = useState({ total: 0, running: 0 })
   const [editOpen,         setEditOpen]         = useState(false)
-  const [editSaving,       setEditSaving]       = useState(false)
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState<string | null>(null)
 
@@ -560,26 +462,10 @@ export function InfraComponentDetail() {
     setLinkedApps(prev => prev.filter(a => a.id !== appId))
   }
 
-  async function handleEditSave(fields: {
-    name: string; ip: string; parent_id: string | null; notes: string; enabled: boolean
-  }) {
-    if (!id || !component) return
-    setEditSaving(true)
-    try {
-      const updated = await infraApi.update(id, {
-        name: fields.name,
-        ip: fields.ip,
-        type: component.type,
-        collection_method: component.collection_method,
-        parent_id: fields.parent_id,
-        notes: fields.notes,
-        enabled: fields.enabled,
-      })
-      setComponent(updated)
-      setEditOpen(false)
-    } finally {
-      setEditSaving(false)
-    }
+  async function handleEditSave(payload: InfrastructureComponentInput) {
+    if (!id) return
+    const updated = await infraApi.update(id, payload)
+    setComponent(updated)
   }
 
   if (loading) {
@@ -672,12 +558,12 @@ export function InfraComponentDetail() {
         sourceId={component.id}
       >
         {editOpen && (
-          <InlineEditPanel
+          <InfraEditModal
             component={component}
-            allComponents={allComponents}
-            saving={editSaving}
-            onSave={(fields) => void handleEditSave(fields)}
-            onCancel={() => setEditOpen(false)}
+            components={allComponents}
+            hasCreds={component.has_credentials ?? false}
+            onSave={handleEditSave}
+            onClose={() => setEditOpen(false)}
           />
         )}
         <PortainerContent
@@ -715,12 +601,12 @@ export function InfraComponentDetail() {
         sourceId={component.id}
       >
         {editOpen && (
-          <InlineEditPanel
+          <InfraEditModal
             component={component}
-            allComponents={allComponents}
-            saving={editSaving}
-            onSave={(fields) => void handleEditSave(fields)}
-            onCancel={() => setEditOpen(false)}
+            components={allComponents}
+            hasCreds={component.has_credentials ?? false}
+            onSave={handleEditSave}
+            onClose={() => setEditOpen(false)}
           />
         )}
         <ProxmoxContent component={component} />
@@ -731,10 +617,12 @@ export function InfraComponentDetail() {
   // Traefik: render content inline using the shared shell.
   if (component.type === 'traefik') {
     const ep: ShellEditProps = {
-      allComponents, editOpen, editSaving,
+      allComponents,
+      editOpen,
+      hasCreds: component.has_credentials ?? false,
       onEditOpen:  () => setEditOpen(true),
-      onEditSave:  (fields) => void handleEditSave(fields),
-      onEditCancel: () => setEditOpen(false),
+      onEditSave:  handleEditSave,
+      onEditClose: () => setEditOpen(false),
     }
     return <TraefikShell component={component} ep={ep} />
   }
@@ -742,10 +630,12 @@ export function InfraComponentDetail() {
   // Synology: render content inline using the shared shell.
   if (component.type === 'synology') {
     const ep: ShellEditProps = {
-      allComponents, editOpen, editSaving,
+      allComponents,
+      editOpen,
+      hasCreds: component.has_credentials ?? false,
       onEditOpen:  () => setEditOpen(true),
-      onEditSave:  (fields) => void handleEditSave(fields),
-      onEditCancel: () => setEditOpen(false),
+      onEditSave:  handleEditSave,
+      onEditClose: () => setEditOpen(false),
     }
     return <SynologyShell component={component} ep={ep} />
   }
@@ -829,12 +719,12 @@ export function InfraComponentDetail() {
       sourceId={component.id}
     >
       {editOpen && (
-        <InlineEditPanel
+        <InfraEditModal
           component={component}
-          allComponents={allComponents}
-          saving={editSaving}
-          onSave={(fields) => void handleEditSave(fields)}
-          onCancel={() => setEditOpen(false)}
+          components={allComponents}
+          hasCreds={component.has_credentials ?? false}
+          onSave={handleEditSave}
+          onClose={() => setEditOpen(false)}
         />
       )}
 

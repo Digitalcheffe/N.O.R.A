@@ -74,7 +74,12 @@ export function usePushSubscription(): PushSubscriptionState {
       const reg = await navigator.serviceWorker.ready
       const subscription = await reg.pushManager.getSubscription()
       if (subscription) {
-        await push.unsubscribe({ endpoint: subscription.endpoint })
+        // Best-effort backend removal — don't let a 404 block browser cleanup.
+        try {
+          await push.unsubscribe({ endpoint: subscription.endpoint })
+        } catch {
+          // Subscription may already be gone from the server; continue cleanup.
+        }
         await subscription.unsubscribe()
       }
       setIsSubscribed(false)

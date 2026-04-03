@@ -43,7 +43,7 @@ func RunTraefikComponentPollers(ctx context.Context, store *repo.Store) {
 	}
 
 	for _, c := range components {
-		if c.Type != "traefik" || !c.Enabled {
+		if c.CollectionMethod != "traefik_api" || !c.Enabled {
 			continue
 		}
 		creds := resolveTraefikCreds(c)

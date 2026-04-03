@@ -17,6 +17,7 @@ interface CheckFormProps {
   traefikCerts: TraefikCert[]
   onIntegrationChange: (integrationId: string) => void
   apps?: { id: string; name: string }[]
+  targetSuggestion?: string  // ghost-text placeholder derived from the linked app's profile
 }
 
 const CHECK_TYPES: CheckType[] = ['ping', 'url', 'ssl', 'dns']
@@ -36,6 +37,7 @@ export function CheckForm({
   traefikCerts,
   onIntegrationChange,
   apps,
+  targetSuggestion,
 }: CheckFormProps) {
   const hasTraefik = traefikIntegrations.length > 0
   const selectedIntegration = traefikIntegrations.find(i => i.id === form.integration_id)
@@ -158,7 +160,11 @@ export function CheckForm({
               className="form-input"
               value={form.target}
               onChange={e => onChange('target', e.target.value)}
-              placeholder={form.type === 'ping' ? 'e.g. 192.168.1.1' : 'https://example.com'}
+              placeholder={
+                targetSuggestion && !form.target
+                  ? targetSuggestion
+                  : form.type === 'ping' ? 'e.g. 192.168.1.1' : 'https://example.com'
+              }
             />
             {form.type === 'ssl' && form.ssl_source === 'standalone' && (
               <div className="ssl-standalone-warning">

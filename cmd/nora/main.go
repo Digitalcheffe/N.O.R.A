@@ -151,6 +151,11 @@ func main() {
 	}
 	log.Printf("  templates: %d loaded from %s", len(registry.List()), cfg.TemplatesPath)
 
+	// Propagate any check_url changes from updated built-in profiles to existing
+	// checks. Runs in the background so startup is not blocked; the monitor
+	// scheduler will pick up the corrected targets on its next sync cycle.
+	go api.SyncAllProfileChecks(context.Background(), appRepo, checkRepo, registry)
+
 	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
 	iconFetcher, err := icons.New(cfg.IconsPath)
 	if err != nil {
@@ -200,43 +205,30 @@ func main() {
 	scanScheduler.RegisterDiscovery("docker_engine", discovery.NewDockerDiscoveryScanner(store))
 	scanScheduler.RegisterDiscovery("synology", discovery.NewSynologyDiscoveryScanner(store))
 	scanScheduler.RegisterDiscovery("opnsense", discovery.NewOPNsenseDiscoveryScanner(store))
+	scanScheduler.RegisterDiscovery("traefik", discovery.NewTraefikDiscoveryScanner(store))
 	scanScheduler.RegisterDiscoveryByMethod("snmp", discovery.NewSNMPDiscoveryScanner(store))
 
 	// Metrics (REFACTOR-07)
 	scanScheduler.RegisterMetrics("proxmox_node", noraMetrics.NewProxmoxMetricsScanner(store))
 	scanScheduler.RegisterMetrics("synology", noraMetrics.NewSynologyMetricsScanner(store))
 	scanScheduler.RegisterMetrics("opnsense", noraMetrics.NewOPNsenseMetricsScanner(store))
+	scanScheduler.RegisterMetrics("traefik", noraMetrics.NewTraefikMetricsScanner(store))
 	scanScheduler.RegisterMetricsByMethod("snmp", noraMetrics.NewSNMPMetricsScanner(store))
 	// Docker MetricsScanner is wired after the ResourcePoller is created below.
 
 	// Snapshots (REFACTOR-08) — 30-minute condition polling.
 	// Infrastructure component scanners are registered by entity type / collection method.
-	// SSL snapshot scanning runs as a standalone job (iterates monitor_checks, not
-	// infrastructure_components) and is started on its own 30-minute ticker below.
+	// SSL snapshot and monitor-check snapshot run as global snapshot jobs (they iterate
+	// monitor_checks rather than infrastructure_components) and are called at the end of
+	// each snapshot tick by the scheduler.
 	scanScheduler.RegisterSnapshot("proxmox_node", noraSnapshot.NewProxmoxSnapshotScanner(store))
 	scanScheduler.RegisterSnapshot("synology", noraSnapshot.NewSynologySnapshotScanner(store))
 	scanScheduler.RegisterSnapshot("opnsense", noraSnapshot.NewOPNsenseSnapshotScanner(store))
+	scanScheduler.RegisterSnapshot("traefik", noraSnapshot.NewTraefikSnapshotScanner(store))
 	scanScheduler.RegisterSnapshotByMethod("snmp", noraSnapshot.NewSNMPSnapshotScanner(store))
+	scanScheduler.RegisterGlobalSnapshot(noraSnapshot.NewSSLSnapshotJob(store))
 
 	go scanScheduler.Start(scanCtx)
-
-	// SSL snapshot job — runs every SnapshotInterval independently of the scan
-	// scheduler because it iterates monitor_checks rather than infrastructure_components.
-	sslSnapshotCtx, sslSnapshotCancel := context.WithCancel(context.Background())
-	defer sslSnapshotCancel()
-	go func() {
-		sslJob := noraSnapshot.NewSSLSnapshotJob(store)
-		ticker := time.NewTicker(scanner.SnapshotInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-sslSnapshotCtx.Done():
-				return
-			case <-ticker.C:
-				sslJob.Run(sslSnapshotCtx)
-			}
-		}
-	}()
 
 	// Resource rollup jobs — hourly aggregation and daily rollup + retention purge.
 	rollupCtx, rollupCancel := context.WithCancel(context.Background())
@@ -277,11 +269,6 @@ func main() {
 	snmpCtx, snmpCancel := context.WithCancel(context.Background())
 	defer snmpCancel()
 	go jobs.StartSNMPPollers(snmpCtx, store)
-
-	// Traefik component pollers — polls all enabled traefik components every 5 minutes.
-	traefikCtx, traefikCancel := context.WithCancel(context.Background())
-	defer traefikCancel()
-	go jobs.StartTraefikComponentPollers(traefikCtx, store)
 
 	// Portainer enrichment worker — polls all enabled Portainer components every 15 minutes.
 	// Does not require a local Docker Engine component; gate is Portainer-component presence only.
@@ -407,9 +394,11 @@ func main() {
 	})
 	jobRegistry.Register(&jobs.JobEntry{
 		ID: "traefik_pollers", Name: "Traefik Component Pollers", Category: "integration",
-		Description: "Polls routes and service health from all enabled Traefik components.",
+		Description: "Runs discovery, metrics, and snapshot passes for all enabled Traefik components.",
 		RunFn: func(ctx context.Context) error {
-			jobs.RunTraefikComponentPollers(ctx, store)
+			_ = scanScheduler.RunDiscovery(ctx)
+			_ = scanScheduler.RunMetrics(ctx)
+			_ = scanScheduler.RunSnapshot(ctx)
 			return nil
 		},
 	})
@@ -602,6 +591,11 @@ func spaHandler(distFS fs.FS, fileServer http.Handler) http.HandlerFunc {
 		}
 		if path == "" {
 			path = "index.html"
+		}
+
+		// Service worker must never be cached so updates are picked up immediately.
+		if path == "sw.js" {
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		}
 
 		// If the file exists in the embedded FS, serve it directly.

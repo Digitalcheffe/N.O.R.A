@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 
@@ -12,8 +13,6 @@ import (
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 )
-
-const vapidSubject = "mailto:admin@nora"
 
 // pushPayload is the JSON body delivered to the browser service worker.
 type pushPayload struct {
@@ -74,19 +73,20 @@ func (s *Sender) sendToSubscriptions(ctx context.Context, subs []models.WebPushS
 				Auth:   sub.Auth,
 			},
 		}, &webpush.Options{
-			Subscriber:      vapidSubject,
+			Subscriber:      s.cfg.VAPIDSubject,
 			VAPIDPublicKey:  s.cfg.VAPIDPublic,
 			VAPIDPrivateKey: s.cfg.VAPIDPrivate,
-			TTL:             60,
+			TTL:             86400,
+			Urgency:         webpush.UrgencyHigh,
 		})
 		if err != nil {
 			log.Printf("push: send to %s: %v", sub.Endpoint, err)
 			continue
 		}
-		resp.Body.Close()
 
 		if resp.StatusCode == http.StatusGone {
 			// Browser has unsubscribed — clean up the stale record.
+			resp.Body.Close()
 			log.Printf("push: subscription gone, removing endpoint %s", sub.Endpoint)
 			if delErr := s.store.WebPushSubscriptions.DeleteByEndpoint(ctx, sub.Endpoint); delErr != nil {
 				log.Printf("push: delete stale subscription: %v", delErr)
@@ -95,7 +95,11 @@ func (s *Sender) sendToSubscriptions(ctx context.Context, subs []models.WebPushS
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			log.Printf("push: unexpected status %d for endpoint %s", resp.StatusCode, sub.Endpoint)
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
+			log.Printf("push: unexpected status %d for endpoint %s: %s", resp.StatusCode, sub.Endpoint, bodyBytes)
+			continue
 		}
+		resp.Body.Close()
 	}
 }

@@ -12,6 +12,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// GlobalSnapshotJob is a snapshot job that runs at each snapshot tick but
+// operates on entities from tables other than infrastructure_components (e.g.
+// monitor_checks).  It is invoked once per snapshot cycle after the per-entity
+// pass completes.
+type GlobalSnapshotJob interface {
+	Run(ctx context.Context)
+}
+
 // ScanScheduler runs the three scan buckets — Discovery, Metrics, and
 // Snapshots — on their canonical intervals. Each tick fans out to all enabled
 // infrastructure components concurrently with a per-entity timeout.
@@ -34,6 +42,7 @@ type ScanScheduler struct {
 	metricsByMethod          map[string]MetricsScanner   // keyed by collection_method
 	snapshots         map[string]SnapshotScanner // keyed by entity type
 	snapshotsByMethod map[string]SnapshotScanner // keyed by collection_method
+	globalSnapshots   []GlobalSnapshotJob
 	mu                sync.RWMutex
 }
 
@@ -97,6 +106,16 @@ func (s *ScanScheduler) RegisterSnapshotByMethod(collectionMethod string, sc Sna
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshotsByMethod[collectionMethod] = sc
+}
+
+// RegisterGlobalSnapshot registers a GlobalSnapshotJob that is called once per
+// snapshot tick after the per-entity pass.  Use this for jobs that iterate
+// entities from tables other than infrastructure_components (e.g. SSLSnapshotJob
+// which iterates monitor_checks).
+func (s *ScanScheduler) RegisterGlobalSnapshot(job GlobalSnapshotJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.globalSnapshots = append(s.globalSnapshots, job)
 }
 
 // Start launches the three ticker loops and blocks until ctx is cancelled.
@@ -272,6 +291,15 @@ func (s *ScanScheduler) runSnapshotPass(ctx context.Context) {
 		}(c, sc)
 	}
 	wg.Wait()
+
+	// Run global snapshot jobs (iterate non-component tables such as monitor_checks).
+	s.mu.RLock()
+	globals := make([]GlobalSnapshotJob, len(s.globalSnapshots))
+	copy(globals, s.globalSnapshots)
+	s.mu.RUnlock()
+	for _, job := range globals {
+		job.Run(ctx)
+	}
 }
 
 // listEnabled returns all enabled infrastructure components from the store.

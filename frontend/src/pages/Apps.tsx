@@ -4,6 +4,7 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { apps as appsApi, appTemplates as templatesApi } from '../api/client'
 import type { App, AppTemplate } from '../api/types'
+import { AppSettingsModal } from './AppDetail'
 import '../styles/Modal.css'
 import './Apps.css'
 
@@ -42,47 +43,6 @@ const CAPABILITY_LABEL: Record<string, string> = {
   monitor_only: 'Monitor',
   docker_only:  'Docker',
   limited:      'Limited',
-}
-
-// ── Confirm Delete Modal ──────────────────────────────────────────────────────
-
-interface ConfirmDeleteProps {
-  appName: string
-  onCancel: () => void
-  onConfirm: () => void
-  deleting: boolean
-  error: string
-}
-
-function ConfirmDeleteModal({ appName, onCancel, onConfirm, deleting, error }: ConfirmDeleteProps) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
-
-  return (
-    <div className="modal-backdrop">
-      <div className="modal" style={{ width: 400 }}>
-        <div className="modal-header">
-          <div className="modal-title modal-title-danger">Delete App</div>
-          <div className="modal-subtitle">
-            This will permanently delete <strong style={{ color: 'var(--text)' }}>{appName}</strong> and all its events and metrics. This cannot be undone.
-          </div>
-          <button className="modal-close" onClick={onCancel}>✕</button>
-        </div>
-        <div className="modal-body">
-          {error && <div className="modal-error">{error}</div>}
-        </div>
-        <div className="modal-footer">
-          <button className="modal-btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="modal-btn-danger" onClick={onConfirm} disabled={deleting}>
-            {deleting ? 'Deleting…' : 'Delete App'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ── AddApp Modal ──────────────────────────────────────────────────────────────
@@ -326,12 +286,8 @@ export function Apps() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
 
-  // card kebab state
   const { tick } = useAutoRefresh()
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState('')
+  const [editingApp, setEditingApp] = useState<App | null>(null)
 
   useEffect(() => {
     appsApi.list()
@@ -339,31 +295,6 @@ export function Apps() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [tick])
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    if (!openMenuId) return
-    function handler() { setOpenMenuId(null) }
-    window.addEventListener('click', handler)
-    return () => window.removeEventListener('click', handler)
-  }, [openMenuId])
-
-  async function handleDelete() {
-    if (!confirmDeleteId) return
-    setDeleting(true)
-    setDeleteError('')
-    try {
-      await appsApi.delete(confirmDeleteId)
-      setAppList(prev => prev.filter(a => a.id !== confirmDeleteId))
-      setConfirmDeleteId(null)
-    } catch (err: unknown) {
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete app')
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const confirmApp = appList.find(a => a.id === confirmDeleteId)
 
   return (
     <>
@@ -390,43 +321,32 @@ export function Apps() {
             appList.map(app => (
               <div
                 key={app.id}
-                className={`app-widget${openMenuId === app.id ? ' menu-open' : ''}`}
+                className="app-widget"
                 onClick={() => navigate(`/apps/${app.id}`)}
               >
-                {openMenuId === app.id && (
-                  <div className="app-card-dropdown" onClick={e => e.stopPropagation()}>
-                    <button className="card-dropdown-item" onClick={() => { setOpenMenuId(null); navigate(`/apps/${app.id}`) }}>
-                      ⚙ Settings
-                    </button>
-                    <button className="card-dropdown-item danger" onClick={() => { setOpenMenuId(null); setConfirmDeleteId(app.id) }}>
-                      🗑 Delete App
-                    </button>
-                  </div>
-                )}
-
                 <div className="app-widget-header">
                   <div className="app-icon"><AppIcon name={app.name} profileId={app.profile_id} /></div>
                   <div className="app-name">{app.name}</div>
-                  {app.profile_id && (
-                    <div className="app-profile-badge">{app.profile_id}</div>
-                  )}
-                  <button
-                    className={`app-card-menu-btn${openMenuId === app.id ? ' open' : ''}`}
-                    title="Settings"
-                    onClick={e => {
-                      e.stopPropagation()
-                      setOpenMenuId(prev => prev === app.id ? null : app.id)
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                  </button>
                 </div>
+                {app.profile_id && (
+                  <div className="app-profile-badge">{app.profile_id}</div>
+                )}
                 <div className="app-last-event">
                   Added {formatDate(app.created_at)}
                 </div>
+                <button
+                  className="app-card-menu-btn"
+                  title="Settings"
+                  onClick={e => {
+                    e.stopPropagation()
+                    setEditingApp(app)
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </button>
               </div>
             ))
           )}
@@ -443,13 +363,15 @@ export function Apps() {
         />
       )}
 
-      {confirmDeleteId && confirmApp && (
-        <ConfirmDeleteModal
-          appName={confirmApp.name}
-          onCancel={() => { setConfirmDeleteId(null); setDeleteError('') }}
-          onConfirm={handleDelete}
-          deleting={deleting}
-          error={deleteError}
+      {editingApp && (
+        <AppSettingsModal
+          app={editingApp}
+          onClose={() => setEditingApp(null)}
+          onUpdated={updated => setAppList(prev => prev.map(a => a.id === updated.id ? updated : a))}
+          onDeleted={() => {
+            setAppList(prev => prev.filter(a => a.id !== editingApp.id))
+            setEditingApp(null)
+          }}
         />
       )}
     </>

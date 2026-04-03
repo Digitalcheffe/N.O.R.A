@@ -85,6 +85,10 @@
   font-size: 13px;
   color: var(--text);
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-status {
@@ -155,6 +159,9 @@
 /* ── Card kebab menu ── */
 
 .app-card-menu-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
   width: 24px;
   height: 24px;
   background: none;
@@ -165,9 +172,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
-  margin-left: auto;
 }
 
 .app-card-menu-btn:hover { background: var(--bg4); color: var(--text); }

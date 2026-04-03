@@ -82,6 +82,7 @@ type ProxmoxGuestInfo struct {
 	CPUs           int      `json:"cpus"`
 	MaxMemBytes    int64    `json:"max_mem_bytes"`
 	MaxDiskBytes   int64    `json:"max_disk_bytes"`
+	IP             string   `json:"ip,omitempty"`
 	OSType         string   `json:"os_type,omitempty"`
 	NetworkBridges []string `json:"network_bridges,omitempty"`
 	Tags           []string `json:"tags,omitempty"`
@@ -241,20 +242,30 @@ func (p *ProxmoxPoller) enrichGuest(ctx context.Context, g proxmoxGuestRaw, gues
 		info.Onboot = onboot == 1
 	}
 
-	// Extract net0..net9 bridges, deduplicating.
+	// Extract net0..net9 bridges, deduplicating.  For LXC, also capture IP.
 	bridgeSet := make(map[string]struct{})
 	for i := 0; i < 10; i++ {
 		key := fmt.Sprintf("net%d", i)
-		if netConfig, ok := config[key].(string); ok && netConfig != "" {
-			if bridge := parseNetBridge(netConfig); bridge != "" {
-				bridgeSet[bridge] = struct{}{}
-			}
+		netConfig, ok := config[key].(string)
+		if !ok || netConfig == "" {
+			continue
+		}
+		if bridge := parseNetBridge(netConfig); bridge != "" {
+			bridgeSet[bridge] = struct{}{}
+		}
+		if guestType == "lxc" && info.IP == "" {
+			info.IP = parseLXCNetIP(netConfig)
 		}
 	}
 	for bridge := range bridgeSet {
 		info.NetworkBridges = append(info.NetworkBridges, bridge)
 	}
 	sort.Strings(info.NetworkBridges)
+
+	// For VMs, query the guest agent for the primary IPv4 (best-effort).
+	if guestType == "vm" && g.Status == "running" {
+		info.IP = p.fetchVMIP(ctx, node, g.VMID)
+	}
 
 	return info
 }

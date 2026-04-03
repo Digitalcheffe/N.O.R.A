@@ -1,14 +1,14 @@
 meta:
-  name: Overseerr
+  name: Seerr
   category: Media
-  icon: overseerr
-  description: Media request management for Plex
+  icon: seerr
+  description: Media request management for Plex, Jellyfin, and Emby
   capability: full
   homepage: https://overseerr.dev
 
 webhook:
   setup_instructions: |
-    In Overseerr go to Settings → Notifications → Webhook.
+    In Seerr go to Settings → Notifications → Webhook.
     Set the Webhook URL to {base_url}/ingest/{token} and enable the notification types below.
   recommended_events:
     - Media Requested

@@ -29,7 +29,7 @@ webhook:
 
 monitor:
   check_type: url
-  check_url: "{base_url}/api/v2?apikey={api_key}&cmd=status"
+  check_url: "{base_url}"
   healthy_status: 200
   check_interval: 5m
 

@@ -247,6 +247,22 @@ func (c *TraefikClient) FetchServices(ctx context.Context) ([]TraefikServiceStat
 	return out, nil
 }
 
+// ResolveTraefikCreds extracts the Traefik API URL and optional API key from a
+// component's stored credentials JSON.  If the credentials are absent or
+// malformed, the URL falls back to http://{ip}:8080 with an empty key.
+func ResolveTraefikCreds(ip string, credJSON *string) (apiURL, apiKey string) {
+	if credJSON != nil && *credJSON != "" {
+		var creds struct {
+			APIURL string `json:"api_url"`
+			APIKey string `json:"api_key"`
+		}
+		if err := json.Unmarshal([]byte(*credJSON), &creds); err == nil && creds.APIURL != "" {
+			return creds.APIURL, creds.APIKey
+		}
+	}
+	return "http://" + ip + ":8080", ""
+}
+
 // newRequest builds an authenticated GET/POST request.
 func (c *TraefikClient) newRequest(ctx context.Context, method, path string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, nil)

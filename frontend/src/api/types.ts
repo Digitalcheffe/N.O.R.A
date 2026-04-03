@@ -339,6 +339,10 @@ export interface AppTemplate {
   capability: AppTemplateCapability
   homepage?: string
   icon?: string  // CDN icon slug override; falls back to id
+  monitor?: {
+    check_type: string
+    check_url: string   // raw template, e.g. "{base_url}/ping" — substitute before use
+  }
 }
 
 // ── Custom App Templates ───────────────────────────────────────────────────────
@@ -520,6 +524,7 @@ export interface ProxmoxGuestInfo {
   cpus: number
   max_mem_bytes: number
   max_disk_bytes: number
+  ip?: string
   os_type?: string
   network_bridges?: string[]
   tags?: string[]

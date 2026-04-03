@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,6 +76,79 @@ func NewProxmoxPoller(componentID, credJSON string) (*ProxmoxPoller, error) {
 		},
 		lastVMState: make(map[string]string),
 	}, nil
+}
+
+// ── IP helpers ────────────────────────────────────────────────────────────────
+
+// isUsableIPv4 returns true for IPv4 addresses that are not loopback or link-local.
+func isUsableIPv4(addr string) bool {
+	return !strings.HasPrefix(addr, "127.") && !strings.HasPrefix(addr, "169.254.")
+}
+
+// parseLXCNetIP extracts the primary IPv4 address from a Proxmox LXC net config
+// string like "name=eth0,bridge=vmbr0,ip=192.168.1.55/24,gw=192.168.1.1".
+// Returns "" if no usable address is found.
+func parseLXCNetIP(netConfig string) string {
+	for _, part := range strings.Split(netConfig, ",") {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 || strings.TrimSpace(kv[0]) != "ip" {
+			continue
+		}
+		// Strip CIDR prefix; skip DHCP placeholder.
+		ipPart := strings.SplitN(strings.TrimSpace(kv[1]), "/", 2)[0]
+		if ipPart != "" && ipPart != "dhcp" && isUsableIPv4(ipPart) {
+			return ipPart
+		}
+	}
+	return ""
+}
+
+// proxmoxNetIPAddr is one IP address entry from the QEMU guest agent interface list.
+type proxmoxNetIPAddr struct {
+	IPAddress     string `json:"ip-address"`
+	IPAddressType string `json:"ip-address-type"`
+}
+
+// proxmoxNetInterface is one network interface from the QEMU guest agent.
+type proxmoxNetInterface struct {
+	Name        string             `json:"name"`
+	IPAddresses []proxmoxNetIPAddr `json:"ip-addresses"`
+}
+
+// fetchVMIP queries the QEMU guest agent for the VM's primary IPv4 address.
+// Returns "" if the agent is not running or the request fails — never errors.
+func (p *ProxmoxPoller) fetchVMIP(ctx context.Context, node string, vmid int) string {
+	path := fmt.Sprintf("/api2/json/nodes/%s/qemu/%d/agent/network-get-interfaces", node, vmid)
+	var ifaces []proxmoxNetInterface
+	if err := p.get(ctx, path, &ifaces); err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		for _, addr := range iface.IPAddresses {
+			if addr.IPAddressType == "ipv4" && isUsableIPv4(addr.IPAddress) {
+				return addr.IPAddress
+			}
+		}
+	}
+	return ""
+}
+
+// fetchLXCIP queries the LXC config for the container's primary IPv4 address.
+// Returns "" if no usable address is found — never errors.
+func (p *ProxmoxPoller) fetchLXCIP(ctx context.Context, node string, vmid int) string {
+	path := fmt.Sprintf("/api2/json/nodes/%s/lxc/%d/config", node, vmid)
+	var config map[string]interface{}
+	if err := p.get(ctx, path, &config); err != nil {
+		return ""
+	}
+	for i := 0; i < 10; i++ {
+		if val, ok := config[fmt.Sprintf("net%d", i)].(string); ok && val != "" {
+			if ip := parseLXCNetIP(val); ip != "" {
+				return ip
+			}
+		}
+	}
+	return ""
 }
 
 // ── API response shapes ───────────────────────────────────────────────────────
@@ -314,7 +388,7 @@ func (p *ProxmoxPoller) pollNode(ctx context.Context, store *repo.Store, node st
 		log.Printf("proxmox poller %s: list qemu on %s: %v", p.componentID, node, err)
 	} else {
 		p.checkStateChanges(ctx, store, node, "VM", vms)
-		p.upsertChildren(ctx, store, vms, "vm", now)
+		p.upsertChildren(ctx, store, vms, "vm", node, now)
 	}
 
 	var ctrs []proxmoxVM
@@ -322,7 +396,7 @@ func (p *ProxmoxPoller) pollNode(ctx context.Context, store *repo.Store, node st
 		log.Printf("proxmox poller %s: list lxc on %s: %v", p.componentID, node, err)
 	} else {
 		p.checkStateChanges(ctx, store, node, "LXC", ctrs)
-		p.upsertChildren(ctx, store, ctrs, "lxc", now)
+		p.upsertChildren(ctx, store, ctrs, "lxc", node, now)
 	}
 
 	return nil
@@ -330,8 +404,9 @@ func (p *ProxmoxPoller) pollNode(ctx context.Context, store *repo.Store, node st
 
 // upsertChildren creates or updates an InfrastructureComponent child record for
 // each VM or LXC in the list.  Child IDs are derived deterministically from
-// (componentID, vmid) so re-runs are fully idempotent.
-func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, vms []proxmoxVM, kind string, now time.Time) {
+// (componentID, vmid) so re-runs are fully idempotent.  The node name is used
+// to fetch the primary IPv4 address via the guest agent (VMs) or config (LXCs).
+func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, vms []proxmoxVM, kind, node string, now time.Time) {
 	polledAt := now.Format(time.RFC3339Nano)
 
 	for _, vm := range vms {
@@ -342,9 +417,24 @@ func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, v
 			status = "online"
 		}
 
+		// Best-effort IP resolution — failures are swallowed inside fetch helpers.
+		var ip string
+		if vm.Status == "running" {
+			if kind == "vm" {
+				ip = p.fetchVMIP(ctx, node, vm.VMID)
+			} else {
+				ip = p.fetchLXCIP(ctx, node, vm.VMID)
+			}
+		}
+
 		// Try an update-in-place first (fast path for subsequent polls).
 		err := store.InfraComponents.UpdateStatus(ctx, id, status, polledAt)
 		if err == nil {
+			if ip != "" {
+				if ipErr := store.InfraComponents.UpdateIP(ctx, id, ip); ipErr != nil {
+					log.Printf("proxmox poller %s: update ip for %s %q: %v", p.componentID, kind, vm.Name, ipErr)
+				}
+			}
 			continue
 		}
 		if !errors.Is(err, repo.ErrNotFound) {
@@ -357,7 +447,7 @@ func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, v
 		c := &models.InfrastructureComponent{
 			ID:               id,
 			Name:             vm.Name,
-			IP:               "",
+			IP:               ip,
 			Type:             kind,
 			CollectionMethod: "none",
 			ParentID:         &parentID,
@@ -369,8 +459,8 @@ func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, v
 			log.Printf("proxmox poller %s: create child %s %q: %v", p.componentID, kind, vm.Name, err)
 			continue
 		}
-		log.Printf("proxmox poller %s: discovered %s %q (vmid=%d, status=%s)",
-			p.componentID, kind, vm.Name, vm.VMID, vm.Status)
+		log.Printf("proxmox poller %s: discovered %s %q (vmid=%d, status=%s, ip=%s)",
+			p.componentID, kind, vm.Name, vm.VMID, vm.Status, ip)
 	}
 }
 

@@ -13,7 +13,6 @@ webhook:
 
 monitor:
   check_type: url
-  check_url: "{base_url}/jsonrpc"
-  auth_header: "Authorization: Basic {username}:{password}"
+  check_url: "{base_url}"
   healthy_status: 200
   check_interval: 5m

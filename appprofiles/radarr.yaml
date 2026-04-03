@@ -34,8 +34,7 @@ webhook:
 
 monitor:
   check_type: url
-  check_url: "{base_url}/api/v3/system/status"
-  auth_header: "X-Api-Key: {api_key}"
+  check_url: "{base_url}"
   healthy_status: 200
   check_interval: 5m
 

@@ -68,8 +68,7 @@ webhook:
 
 monitor:
   check_type: url
-  check_url: "{base_url}/ghost/api/v4/admin/site/"
-  auth_header: "Authorization: Ghost {admin_api_key}"
+  check_url: "{base_url}"
   healthy_status: 200
   check_interval: 5m
 

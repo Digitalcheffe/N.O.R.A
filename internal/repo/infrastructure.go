@@ -28,6 +28,9 @@ type InfraComponentRepo interface {
 	Delete(ctx context.Context, id string) error
 	// UpdateStatus sets last_polled_at and last_status without touching other fields.
 	UpdateStatus(ctx context.Context, id, status, lastPolledAt string) error
+	// UpdateIP sets the ip field on a child component discovered by Proxmox.
+	// Only the ip column is touched; all other fields are unchanged.
+	UpdateIP(ctx context.Context, id, ip string) error
 	// UpdateSNMPMeta stores the latest SNMP system identity + resource snapshot JSON
 	// on the component without touching any other fields.
 	UpdateSNMPMeta(ctx context.Context, id, metaJSON string) error
@@ -152,6 +155,19 @@ func (r *sqliteInfraComponentRepo) UpdateStatus(ctx context.Context, id, status,
 		status, lastPolledAt, id)
 	if err != nil {
 		return fmt.Errorf("update component status: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *sqliteInfraComponentRepo) UpdateIP(ctx context.Context, id, ip string) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE infrastructure_components SET ip = ? WHERE id = ?`,
+		ip, id)
+	if err != nil {
+		return fmt.Errorf("update component ip: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound

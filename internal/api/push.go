@@ -29,8 +29,10 @@ func NewPushHandler(cfg *config.Config, store *repo.Store, sender *push.Sender) 
 // routes are expected to be mounted inside an authenticated router group.
 func (h *PushHandler) Routes(r chi.Router) {
 	r.Get("/push/vapid-public-key", h.GetVAPIDPublicKey)
+	r.Get("/push/subscriptions", h.ListSubscriptions)
 	r.Post("/push/subscribe", h.Subscribe)
 	r.Delete("/push/subscribe", h.Unsubscribe)
+	r.Delete("/push/subscriptions/{id}", h.DeleteSubscription)
 	r.Post("/push/test", h.Test)
 }
 
@@ -108,6 +110,41 @@ func (h *PushHandler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := h.store.WebPushSubscriptions.DeleteByUserAndEndpoint(r.Context(), userID, req.Endpoint)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "subscription not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListSubscriptions returns all push subscriptions for the current user: GET /api/v1/push/subscriptions
+func (h *PushHandler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserID(r.Context())
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	subs, err := h.store.WebPushSubscriptions.ListByUser(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"data": subs, "total": len(subs)})
+}
+
+// DeleteSubscription removes a push subscription by ID: DELETE /api/v1/push/subscriptions/{id}
+func (h *PushHandler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserID(r.Context())
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	id := chi.URLParam(r, "id")
+	err := h.store.WebPushSubscriptions.DeleteByUserAndID(r.Context(), userID, id)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "subscription not found")

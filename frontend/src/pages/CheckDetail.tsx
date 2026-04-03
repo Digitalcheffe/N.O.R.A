@@ -196,7 +196,9 @@ export function CheckDetail() {
     try {
       const updated = await checksApi.update(id, { enabled: !check.enabled })
       setCheck(updated)
-    } catch { /* noop */ }
+    } catch (err) {
+      console.error('Failed to toggle pause:', err)
+    }
   }
 
   function handleIntegrationChange(integrationId: string) {

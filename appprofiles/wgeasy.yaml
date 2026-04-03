@@ -12,6 +12,6 @@ webhook:
 
 monitor:
   check_type: url
-  check_url: "{base_url}/api/wireguard/client"
+  check_url: "{base_url}"
   healthy_status: 200
   check_interval: 5m
