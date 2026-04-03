@@ -404,8 +404,10 @@ export function Apps() {
                   </div>
                 )}
 
-                <div className="app-icon"><AppIcon name={app.name} profileId={app.profile_id} /></div>
-                <div className="app-name">{app.name}</div>
+                <div className="app-widget-header">
+                  <div className="app-icon"><AppIcon name={app.name} profileId={app.profile_id} /></div>
+                  <div className="app-name">{app.name}</div>
+                </div>
                 {app.profile_id && (
                   <div className="app-profile-badge">{app.profile_id}</div>
                 )}
