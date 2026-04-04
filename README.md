@@ -63,11 +63,12 @@ More Screen Shots [Screenshots](https://github.com/Digitalcheffe/N.O.R.A/tree/ma
 
 | Integration | What NORA collects |
 |---|---|
-| **Docker** | Container discovery, resource metrics, image update detection |
-| **Proxmox** | Node status, VMs and LXC guests, storage, task failures |
-| **Portainer** | Endpoints, container inventory, image status |
+| **Docker** | Container discovery, resource metrics, health state, image update detection |
+| **Proxmox** | Node status, VMs and LXC guests, storage, task failures, uptime |
+| **Portainer** | Endpoints, container inventory, CPU/memory per container, image status |
 | **Traefik** | Routes, services, SSL certificates |
-| **Synology** | System status, storage information |
+| **Synology** | System status, storage, uptime |
+| **OPNsense** | CPU, memory, network throughput |
 | **SNMP** | Generic metrics and health from any SNMP-capable device |
 
 ### Notifications
@@ -138,13 +139,17 @@ Open `http://localhost:8081` — create your admin account and add your first ap
 
 | Variable | Description | Default | Required |
 |---|---|---|---|
-| `NORA_SECRET` | JWT signing secret | — | Yes |
+| `NORA_SECRET` | JWT signing secret | — | **Yes** |
+| `NORA_ADMIN_EMAIL` | Bootstrap admin email — used only when the users table is empty | — | **First run** |
+| `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | **First run** |
 | `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
 | `NORA_PORT` | HTTP port | `8081` | No |
-| `NORA_LOG_LEVEL` | Set to `debug` to enable verbose request logging; default shows startup and errors only | `info` | No |
-| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email (default: 8am on the 1st of each month) | `0 8 1 * *` | No |
-| `NORA_ADMIN_EMAIL` | Bootstrap admin email | — | Required (first run) |
-| `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | Required (first run) |
+| `NORA_LOG_LEVEL` | Set to `debug` for verbose request logging | `info` | No |
+| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email | `0 8 1 * *` | No |
+| `NORA_TIMEZONE` | IANA timezone for digest scheduling (e.g. `America/New_York`) | `UTC` | No |
+| `NORA_VAPID_PUBLIC` | VAPID public key — auto-generated on first run if not set | — | No |
+| `NORA_VAPID_PRIVATE` | VAPID private key — auto-generated on first run if not set | — | No |
+| `NORA_VAPID_SUBJECT` | VAPID subject (mailto or URL) | `mailto:admin@localhost` | No |
 
 ### In-App Settings
 All email configuration is managed in the app under Settings → Notifications — no env vars needed.
@@ -174,9 +179,6 @@ All email configuration is managed in the app under Settings → Notifications �
 
 ### In Progress
 - **Remote Docker nodes** — multi-host container monitoring via socket proxy; Portainer integration is live, native remote socket support coming
-
-### Planning
-- **Deeper API polling** — richer metrics and status from Proxmox, Synology, OPNsense, and other infrastructure components
 
 ### Considering
 - **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
