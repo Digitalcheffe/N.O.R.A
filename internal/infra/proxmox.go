@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -314,6 +315,16 @@ func (p *ProxmoxPoller) Poll(ctx context.Context, store *repo.Store) error {
 	polledAt := now.Format(time.RFC3339Nano)
 	if err := store.InfraComponents.UpdateStatus(ctx, p.componentID, status, polledAt); err != nil {
 		log.Printf("proxmox poller %s: update status: %v", p.componentID, err)
+	}
+
+	// Auto-populate the parent node's IP from the base_url credential so it
+	// appears on the detail page even if the user left the IP field blank.
+	if u, err := url.Parse(p.creds.BaseURL); err == nil {
+		if host := u.Hostname(); host != "" {
+			if ipErr := store.InfraComponents.UpdateIP(ctx, p.componentID, host); ipErr != nil {
+				log.Printf("proxmox poller %s: update parent ip: %v", p.componentID, ipErr)
+			}
+		}
 	}
 
 	return nil
