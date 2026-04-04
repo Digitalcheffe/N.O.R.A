@@ -315,6 +315,7 @@
   justify-content: space-between;
   gap: 8px;
   margin-top: auto;
+  padding-right: 32px;
 }
 
 .infra-last-updated {

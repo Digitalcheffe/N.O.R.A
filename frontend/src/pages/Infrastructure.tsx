@@ -240,7 +240,7 @@ export function Infrastructure() {
           </div>
           <div className="infra-card-actions">
             <button
-              className="infra-card-btn"
+              className="infra-card-btn accent"
               onClick={() => void handleScan(c.id)}
               disabled={isDeleting || isScanning || scanningId !== null}
             >
@@ -294,7 +294,7 @@ export function Infrastructure() {
           </div>
           <div className="infra-card-actions">
             <button
-              className="infra-card-btn"
+              className="infra-card-btn accent"
               onClick={() => void handleScan(c.id)}
               disabled={isDeleting || isScanning || scanningId !== null}
             >
@@ -354,7 +354,7 @@ export function Infrastructure() {
           </div>
           <div className="infra-card-actions">
             <button
-              className="infra-card-btn"
+              className="infra-card-btn accent"
               onClick={() => void handleScan(c.id)}
               disabled={isDeleting || isScanning || scanningId !== null}
             >

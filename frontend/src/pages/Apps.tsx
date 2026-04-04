@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
-import { apps as appsApi, appTemplates as templatesApi } from '../api/client'
+import { apps as appsApi, appTemplates as templatesApi, dashboard as dashboardApi } from '../api/client'
 import type { App, AppTemplate } from '../api/types'
 import { AppSettingsModal } from './AppDetail'
 import '../styles/Modal.css'
@@ -283,6 +283,7 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
 export function Apps() {
   const navigate = useNavigate()
   const [appList, setAppList] = useState<App[]>([])
+  const [statusMap, setStatusMap] = useState<Record<string, 'online' | 'warn' | 'down'>>({})
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
 
@@ -294,6 +295,13 @@ export function Apps() {
       .then(res => setAppList(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
+    dashboardApi.summary()
+      .then(res => {
+        const map: Record<string, 'online' | 'warn' | 'down'> = {}
+        for (const a of res.apps) map[a.id] = a.status
+        setStatusMap(map)
+      })
+      .catch(() => { /* status is best-effort */ })
   }, [tick])
 
   return (
@@ -318,16 +326,23 @@ export function Apps() {
               </button>
             </div>
           ) : (
-            appList.map(app => (
+            appList.map(app => {
+              const status = statusMap[app.id]
+              const baseUrl = app.config?.base_url as string | undefined
+              return (
               <div
                 key={app.id}
-                className="app-widget"
+                className={`app-widget${status === 'warn' ? ' warn' : status === 'down' ? ' down' : ''}`}
                 onClick={() => navigate(`/apps/${app.id}`)}
               >
                 <div className="app-widget-header">
                   <div className="app-icon"><AppIcon name={app.name} profileId={app.profile_id} /></div>
                   <div className="app-name">{app.name}</div>
+                  {status && <span className={`app-status-dot ${status}`} />}
                 </div>
+                {baseUrl && (
+                  <div className="app-url">{baseUrl}</div>
+                )}
                 {app.profile_id && (
                   <div className="app-profile-badge">{app.profile_id}</div>
                 )}
@@ -348,7 +363,8 @@ export function Apps() {
                   </svg>
                 </button>
               </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
