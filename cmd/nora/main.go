@@ -207,12 +207,23 @@ func main() {
 	scanScheduler.RegisterDiscovery("opnsense", discovery.NewOPNsenseDiscoveryScanner(store))
 	scanScheduler.RegisterDiscovery("traefik", discovery.NewTraefikDiscoveryScanner(store))
 	scanScheduler.RegisterDiscoveryByMethod("snmp", discovery.NewSNMPDiscoveryScanner(store))
+	scanScheduler.RegisterGlobalDiscovery(scanner.GlobalDiscoveryFunc(func(ctx context.Context) {
+		if err := discovery.RunHourlyRollup(ctx, store); err != nil {
+			log.Printf("hourly rollup: discovery pass: %v", err)
+		}
+	}))
+	scanScheduler.RegisterGlobalDiscovery(scanner.GlobalDiscoveryFunc(func(ctx context.Context) {
+		if err := discovery.RunMetricsCollection(ctx, store); err != nil {
+			log.Printf("metrics collection: discovery pass: %v", err)
+		}
+	}))
 
 	// Metrics (REFACTOR-07)
 	scanScheduler.RegisterMetrics("proxmox_node", noraMetrics.NewProxmoxMetricsScanner(store))
 	scanScheduler.RegisterMetrics("synology", noraMetrics.NewSynologyMetricsScanner(store))
 	scanScheduler.RegisterMetrics("opnsense", noraMetrics.NewOPNsenseMetricsScanner(store))
 	scanScheduler.RegisterMetrics("traefik", noraMetrics.NewTraefikMetricsScanner(store))
+	scanScheduler.RegisterMetrics("portainer", noraMetrics.NewPortainerMetricsScanner(store))
 	scanScheduler.RegisterMetricsByMethod("snmp", noraMetrics.NewSNMPMetricsScanner(store))
 	// Docker MetricsScanner is wired after the ResourcePoller is created below.
 
@@ -230,18 +241,18 @@ func main() {
 
 	go scanScheduler.Start(scanCtx)
 
-	// Resource rollup jobs — hourly aggregation and daily rollup + retention purge.
+	// Resource rollup jobs — daily rollup + retention purge.
+	// Hourly rollup is driven by the scan scheduler's discovery pass.
 	rollupCtx, rollupCancel := context.WithCancel(context.Background())
 	defer rollupCancel()
-	go jobs.StartHourlyRollup(rollupCtx, store)
 	go jobs.StartDailyRollup(rollupCtx, store)
 
-	// Event jobs — monthly rollup (midnight on 1st), nightly retention (02:00), hourly metrics.
+	// Event jobs — monthly rollup (midnight on 1st), nightly retention (02:00).
+	// Hourly metrics collection is driven by the scan scheduler's discovery pass.
 	eventJobCtx, eventJobCancel := context.WithCancel(context.Background())
 	defer eventJobCancel()
 	go jobs.StartMonthlyRollup(eventJobCtx, store)
 	go jobs.StartEventRetention(eventJobCtx, store)
-	go jobs.StartMetricsCollection(eventJobCtx, store)
 
 	// Digest job — fires at 08:00 daily; checks stored schedule before sending.
 	digestJob := jobs.NewDigestJob(store, cfg, registry)
@@ -249,33 +260,18 @@ func main() {
 	defer digestCancel()
 	go jobs.StartDigestJob(digestCtx, digestJob)
 
-	// Traefik sync worker — polls all enabled Traefik integrations every 60 s.
-	infraCtx, infraCancel := context.WithCancel(context.Background())
-	defer infraCancel()
+	// Sync worker — kept for InfraHandler manual-sync endpoint; background polling removed.
 	syncWorker := infra.NewSyncWorker(store)
-	go syncWorker.Start(infraCtx)
 
-	// Proxmox pollers — polls all enabled proxmox_node components every 5 minutes.
-	proxmoxCtx, proxmoxCancel := context.WithCancel(context.Background())
-	defer proxmoxCancel()
-	go jobs.StartProxmoxPollers(proxmoxCtx, store)
-
-	// Synology pollers — polls all enabled synology components every 5 minutes.
-	synologyCtx, synologyCancel := context.WithCancel(context.Background())
-	defer synologyCancel()
-	go jobs.StartSynologyPollers(synologyCtx, store)
-
-	// SNMP pollers — polls all enabled snmp components every 5 minutes.
-	snmpCtx, snmpCancel := context.WithCancel(context.Background())
-	defer snmpCancel()
-	go jobs.StartSNMPPollers(snmpCtx, store)
-
-	// Portainer enrichment worker — polls all enabled Portainer components every 15 minutes.
-	// Does not require a local Docker Engine component; gate is Portainer-component presence only.
-	portainerCtx, portainerCancel := context.WithCancel(context.Background())
-	defer portainerCancel()
+	// Portainer enrichment worker — container discovery and image-update detection.
+	// Runs as a GlobalSnapshotJob on the 30-minute snapshot interval rather than
+	// a standalone ticker.
 	portainerWorker := infra.NewPortainerEnrichmentWorker(store)
-	go portainerWorker.Start(portainerCtx)
+	scanScheduler.RegisterGlobalSnapshot(scanner.GlobalSnapshotFunc(func(ctx context.Context) {
+		if err := portainerWorker.Run(ctx); err != nil {
+			log.Printf("portainer enrichment: snapshot run: %v", err)
+		}
+	}))
 
 	// Docker socket watcher and resource poller — optional; skipped if the socket is not available.
 	dockerCtx, dockerCancel := context.WithCancel(context.Background())
@@ -292,12 +288,13 @@ func main() {
 	if watcher, err := docker.NewWatcher(store); err != nil {
 		log.Printf("docker watcher: socket not available, skipping (%v)", err)
 	} else {
-		// Wire up health poller so start events trigger an immediate health check.
+		// Wire up health poller — immediate check on start events; periodic polling
+		// is driven by the scan scheduler's metrics pass (every 60 s).
 		if healthPoller, err := docker.NewHealthPoller(store); err != nil {
 			log.Printf("docker health poller: socket not available, skipping (%v)", err)
 		} else {
 			watcher.SetContainerStartHook(healthPoller.CheckContainer)
-			go healthPoller.Start(dockerCtx)
+			scanScheduler.RegisterGlobalMetrics(healthPoller)
 		}
 
 		// Wire up the discovery worker to upsert containers and run profile matching.
@@ -313,20 +310,23 @@ func main() {
 		go watcher.Start(dockerCtx)
 	}
 
-	// Image update poller — checks container registries daily at 02:00 UTC for
-	// newer image versions.  Skipped if the Docker socket is not available.
-	imagePollerCtx, imagePollerCancel := context.WithCancel(context.Background())
-	defer imagePollerCancel()
+	// Image update poller — checks container registries for newer image versions.
+	// Runs as a GlobalSnapshotJob on the 30-minute snapshot interval.
+	// Skipped if the Docker socket is not available.
 	var imagePoller *docker.ImageUpdatePoller
 	if p, err := docker.NewImageUpdatePoller(store); err != nil {
 		log.Printf("image update poller: socket not available, skipping (%v)", err)
 	} else {
 		imagePoller = p
-		go imagePoller.StartEvery(imagePollerCtx, scanner.DiscoveryInterval)
+		scanScheduler.RegisterGlobalSnapshot(scanner.GlobalSnapshotFunc(func(ctx context.Context) {
+			if err := imagePoller.Run(ctx); err != nil {
+				log.Printf("image update poller: snapshot run: %v", err)
+			}
+		}))
 	}
 
 	// Docker ResourcePoller — metrics collection is driven by the scan scheduler
-	// (every 2 minutes via DockerMetricsScanner) rather than a standalone ticker.
+	// (every 60 s via DockerMetricsScanner) rather than a standalone ticker.
 	// The poller is registered with the scheduler so PollAll is called on the
 	// MetricsInterval instead of the legacy 60-second loop.
 	if resourcePoller, err := docker.NewResourcePoller(store, localEngineID); err != nil {
@@ -340,33 +340,36 @@ func main() {
 	// listed and triggered on-demand via the /api/v1/jobs endpoints.
 	jobRegistry := jobs.NewRegistry()
 
-	// MONITOR — per-check-type runners.
+	// MONITOR — single job runs all enabled check types.
 	jobRegistry.Register(&jobs.JobEntry{
-		ID: "ping_checks", Name: "Ping Checks", Category: "monitor",
-		Description: "Runs all enabled ping checks immediately.",
-		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "ping") },
+		ID: "run_monitors", Name: "Run All Monitors", Category: "monitor",
+		Description: "Runs all enabled ping, URL, SSL, and DNS checks immediately.",
+		RunFn:       monitorScheduler.RunAll,
+	})
+
+	// SCAN — one job per scan engine bucket (metrics, snapshots, discovery).
+	// Each pass includes all per-entity scanners and any registered global jobs.
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "scan_metrics", Name: "Metrics Scan", Category: "scan",
+		Description: "Collects CPU, memory, uptime, and container metrics from all enabled infrastructure.",
+		RunFn:       scanScheduler.RunMetrics,
 	})
 	jobRegistry.Register(&jobs.JobEntry{
-		ID: "url_checks", Name: "URL Checks", Category: "monitor",
-		Description: "Runs all enabled URL checks immediately.",
-		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "url") },
+		ID: "scan_snapshots", Name: "Snapshot Scan", Category: "scan",
+		Description: "Polls health, firmware versions, SSL certs, and container image updates.",
+		RunFn:       scanScheduler.RunSnapshot,
 	})
 	jobRegistry.Register(&jobs.JobEntry{
-		ID: "ssl_checks", Name: "SSL Checks", Category: "monitor",
-		Description: "Evaluates certificate expiry for all SSL checks.",
-		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "ssl") },
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "dns_checks", Name: "DNS Checks", Category: "monitor",
-		Description: "Runs all enabled DNS checks immediately.",
-		RunFn:       func(ctx context.Context) error { return monitorScheduler.RunAllByType(ctx, "dns") },
+		ID: "scan_discovery", Name: "Discovery Scan", Category: "scan",
+		Description: "Discovers resources across all enabled infrastructure and runs hourly rollups.",
+		RunFn:       scanScheduler.RunDiscovery,
 	})
 
 	// DATA — aggregation and retention jobs.
 	jobRegistry.Register(&jobs.JobEntry{
-		ID: "resource_rollup", Name: "Resource Rollup", Category: "data",
-		Description: "Collapses raw resource readings into hourly summary rollups.",
-		RunFn:       func(ctx context.Context) error { return jobs.RunHourlyRollup(ctx, store) },
+		ID: "daily_resource_rollup", Name: "Daily Resource Rollup", Category: "data",
+		Description: "Collapses hourly rollups into daily summaries for long-term trending.",
+		RunFn:       func(ctx context.Context) error { return jobs.RunDailyRollup(ctx, store) },
 	})
 	jobRegistry.Register(&jobs.JobEntry{
 		ID: "event_retention", Name: "Event Retention Purge", Category: "data",
@@ -379,86 +382,11 @@ func main() {
 		RunFn:       func(ctx context.Context) error { return jobs.RunMonthlyRollup(ctx, store) },
 	})
 	jobRegistry.Register(&jobs.JobEntry{
-		ID: "monthly_digest", Name: "Monthly Digest", Category: "data",
+		ID: "monthly_digest", Name: "Digest", Category: "data",
 		Description: "Sends the digest email for the current period.",
 		RunFn: func(ctx context.Context) error {
 			return digestJob.Send(ctx, time.Now().UTC().Format("2006-01"))
 		},
-	})
-
-	// INTEGRATION — infrastructure pollers and scan passes.
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "traefik_sync", Name: "Traefik Sync", Category: "integration",
-		Description: "Syncs certificate data from all enabled Traefik integrations.",
-		RunFn:       syncWorker.RunSync,
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "traefik_pollers", Name: "Traefik Component Pollers", Category: "integration",
-		Description: "Runs discovery, metrics, and snapshot passes for all enabled Traefik components.",
-		RunFn: func(ctx context.Context) error {
-			_ = scanScheduler.RunDiscovery(ctx)
-			_ = scanScheduler.RunMetrics(ctx)
-			_ = scanScheduler.RunSnapshot(ctx)
-			return nil
-		},
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "proxmox_pollers", Name: "Proxmox Pollers", Category: "integration",
-		Description: "Polls status and metrics from all enabled Proxmox nodes.",
-		RunFn: func(ctx context.Context) error {
-			jobs.RunProxmoxPollers(ctx, store)
-			return nil
-		},
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "synology_pollers", Name: "Synology Pollers", Category: "integration",
-		Description: "Polls status and storage info from all enabled Synology components.",
-		RunFn: func(ctx context.Context) error {
-			jobs.RunSynologyPollers(ctx, store, make(map[string]*infra.SynologyPoller))
-			return nil
-		},
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "snmp_pollers", Name: "SNMP Pollers", Category: "integration",
-		Description: "Polls all enabled SNMP targets for metrics and status.",
-		RunFn: func(ctx context.Context) error {
-			jobs.RunSNMPPollers(ctx, store)
-			return nil
-		},
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "scan_discovery", Name: "Infrastructure Discovery", Category: "integration",
-		Description: "Discovers resources across all enabled infrastructure components.",
-		RunFn:       scanScheduler.RunDiscovery,
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "scan_metrics", Name: "Infrastructure Metrics", Category: "integration",
-		Description: "Collects metrics from all enabled infrastructure components.",
-		RunFn:       scanScheduler.RunMetrics,
-	})
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "scan_snapshots", Name: "Infrastructure Snapshots", Category: "integration",
-		Description: "Polls health status from all enabled infrastructure components.",
-		RunFn:       scanScheduler.RunSnapshot,
-	})
-	if imagePoller != nil {
-		jobRegistry.Register(&jobs.JobEntry{
-			ID: "docker_image_scan", Name: "Docker Image Scan", Category: "integration",
-			Description: "Checks all running containers for available image updates.",
-			RunFn:       imagePoller.Run,
-		})
-	}
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "portainer_enrichment", Name: "Portainer Enrichment", Category: "integration",
-		Description: "Matches Portainer containers to NORA-known records and updates image update status.",
-		RunFn:       portainerWorker.Run,
-	})
-
-	// SYSTEM — instance-level background jobs.
-	jobRegistry.Register(&jobs.JobEntry{
-		ID: "metrics_collection", Name: "Metrics Collection", Category: "system",
-		Description: "Recalculates per-app event throughput metrics.",
-		RunFn:       func(ctx context.Context) error { return jobs.RunMetricsCollection(ctx, store) },
 	})
 
 	// Router

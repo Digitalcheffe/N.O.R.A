@@ -393,6 +393,7 @@ type SynologyMetricsSnapshot struct {
 	MemUsedGB   float64
 	MemTotalGB  float64
 	TempC       int
+	UptimeSecs  int64
 	VolumeStats []SynologyVolumeMetric
 }
 
@@ -418,6 +419,9 @@ func (p *SynologyPoller) CollectMetrics(ctx context.Context) (*SynologyMetricsSn
 		return nil, fmt.Errorf("system info: %w", err)
 	}
 	snap.TempC = info.Temperature
+	if secs, err := strconv.ParseInt(strings.TrimSpace(info.UpTime), 10, 64); err == nil {
+		snap.UptimeSecs = secs
+	}
 
 	// CPU + memory utilisation
 	utilParams := url.Values{}

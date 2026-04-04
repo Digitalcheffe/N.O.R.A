@@ -1801,11 +1801,10 @@ type RunState = { status: 'idle' | 'running' | 'ok' | 'error'; message?: string;
 
 const CATEGORY_LABELS: Record<string, string> = {
   monitor: 'Monitor',
+  scan: 'Scan Engine',
   data: 'Data',
-  integration: 'Integration',
-  system: 'System',
 }
-const CATEGORY_ORDER = ['monitor', 'data', 'integration', 'system']
+const CATEGORY_ORDER = ['monitor', 'scan', 'data']
 
 function JobsTab() {
   const [jobList, setJobList] = useState<Job[]>([])

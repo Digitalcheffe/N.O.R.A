@@ -20,6 +20,37 @@ type GlobalSnapshotJob interface {
 	Run(ctx context.Context)
 }
 
+// GlobalSnapshotFunc is an adapter so a plain func(context.Context) satisfies
+// GlobalSnapshotJob without defining a named type.
+type GlobalSnapshotFunc func(ctx context.Context)
+
+// Run implements GlobalSnapshotJob.
+func (f GlobalSnapshotFunc) Run(ctx context.Context) { f(ctx) }
+
+// GlobalDiscoveryJob is a discovery job that runs at each discovery tick but
+// operates independently of the per-component scanner loop (e.g. the app
+// event metrics aggregation which reads the events table rather than polling
+// an external system).  It is invoked once per discovery cycle after the
+// per-entity pass completes.
+type GlobalDiscoveryJob interface {
+	Run(ctx context.Context)
+}
+
+// GlobalDiscoveryFunc is an adapter so a plain func(context.Context) satisfies
+// GlobalDiscoveryJob without defining a named type.
+type GlobalDiscoveryFunc func(ctx context.Context)
+
+// Run implements GlobalDiscoveryJob.
+func (f GlobalDiscoveryFunc) Run(ctx context.Context) { f(ctx) }
+
+// GlobalMetricsJob is a metrics job that runs at each metrics tick but
+// operates independently of the per-component scanner loop (e.g. the Docker
+// health poller which polls the local daemon rather than an infra component).
+// It is invoked once per metrics cycle after the per-entity pass completes.
+type GlobalMetricsJob interface {
+	Run(ctx context.Context)
+}
+
 // ScanScheduler runs the three scan buckets — Discovery, Metrics, and
 // Snapshots — on their canonical intervals. Each tick fans out to all enabled
 // infrastructure components concurrently with a per-entity timeout.
@@ -42,7 +73,9 @@ type ScanScheduler struct {
 	metricsByMethod          map[string]MetricsScanner   // keyed by collection_method
 	snapshots         map[string]SnapshotScanner // keyed by entity type
 	snapshotsByMethod map[string]SnapshotScanner // keyed by collection_method
+	globalDiscovery   []GlobalDiscoveryJob
 	globalSnapshots   []GlobalSnapshotJob
+	globalMetrics     []GlobalMetricsJob
 	mu                sync.RWMutex
 }
 
@@ -108,6 +141,16 @@ func (s *ScanScheduler) RegisterSnapshotByMethod(collectionMethod string, sc Sna
 	s.snapshotsByMethod[collectionMethod] = sc
 }
 
+// RegisterGlobalDiscovery registers a GlobalDiscoveryJob that is called once
+// per discovery tick after the per-entity pass.  Use this for hourly
+// aggregation jobs that read internal tables rather than polling external
+// systems (e.g. the app event metrics collection for sparkline charts).
+func (s *ScanScheduler) RegisterGlobalDiscovery(job GlobalDiscoveryJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.globalDiscovery = append(s.globalDiscovery, job)
+}
+
 // RegisterGlobalSnapshot registers a GlobalSnapshotJob that is called once per
 // snapshot tick after the per-entity pass.  Use this for jobs that iterate
 // entities from tables other than infrastructure_components (e.g. SSLSnapshotJob
@@ -116,6 +159,15 @@ func (s *ScanScheduler) RegisterGlobalSnapshot(job GlobalSnapshotJob) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.globalSnapshots = append(s.globalSnapshots, job)
+}
+
+// RegisterGlobalMetrics registers a GlobalMetricsJob that is called once per
+// metrics tick after the per-entity pass.  Use this for jobs that run
+// independently of infrastructure_components (e.g. the Docker health poller).
+func (s *ScanScheduler) RegisterGlobalMetrics(job GlobalMetricsJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.globalMetrics = append(s.globalMetrics, job)
 }
 
 // Start launches the three ticker loops and blocks until ctx is cancelled.
@@ -209,6 +261,15 @@ func (s *ScanScheduler) runDiscoveryPass(ctx context.Context) {
 		}(c, sc)
 	}
 	wg.Wait()
+
+	// Run global discovery jobs (aggregate internal tables rather than poll external systems).
+	s.mu.RLock()
+	globals := make([]GlobalDiscoveryJob, len(s.globalDiscovery))
+	copy(globals, s.globalDiscovery)
+	s.mu.RUnlock()
+	for _, job := range globals {
+		job.Run(ctx)
+	}
 }
 
 // runMetricsPass iterates all enabled components and calls each registered
@@ -250,6 +311,15 @@ func (s *ScanScheduler) runMetricsPass(ctx context.Context) {
 		}(c, sc)
 	}
 	wg.Wait()
+
+	// Run global metrics jobs (operate independently of infrastructure_components).
+	s.mu.RLock()
+	globals := make([]GlobalMetricsJob, len(s.globalMetrics))
+	copy(globals, s.globalMetrics)
+	s.mu.RUnlock()
+	for _, job := range globals {
+		job.Run(ctx)
+	}
 }
 
 // runSnapshotPass iterates all enabled components and calls each registered

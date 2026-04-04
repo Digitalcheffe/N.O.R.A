@@ -82,21 +82,6 @@ func (s *TraefikMetricsScanner) CollectMetrics(ctx context.Context, entityID, en
 			fmt.Sprintf("[metrics] Traefik: all router errors resolved on %s", c.Name))
 	}
 
-	// Write resource readings for key counts.
-	readings := 0
-	for _, m := range []struct {
-		metric string
-		value  float64
-	}{
-		{"routers_total", float64(raw.HTTP.Routers.Total)},
-		{"routers_errors", float64(raw.HTTP.Routers.Errors)},
-		{"services_total", float64(raw.HTTP.Services.Total)},
-		{"services_errors", float64(raw.HTTP.Services.Errors)},
-	} {
-		writeReading(ctx, s.store, entityID, "traefik", m.metric, m.value, now)
-		readings++
-	}
-
 	// Mark component online.
 	polledAt := now.Format(time.RFC3339Nano)
 	if err := s.store.InfraComponents.UpdateStatus(ctx, entityID, "online", polledAt); err != nil {
@@ -109,7 +94,6 @@ func (s *TraefikMetricsScanner) CollectMetrics(ctx context.Context, entityID, en
 	return &scanner.MetricsResult{
 		EntityID:   entityID,
 		EntityType: entityType,
-		Readings:   readings,
 	}, nil
 }
 

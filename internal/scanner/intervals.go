@@ -6,7 +6,7 @@ import "time"
 // type. The scheduler in Scheduler.Start uses these as its ticker durations.
 const (
 	DiscoveryInterval = 1 * time.Hour
-	MetricsInterval   = 2 * time.Minute
+	MetricsInterval   = 60 * time.Second
 	SnapshotInterval  = 30 * time.Minute
 
 	// Per-scan timeouts — individual entity scans are cancelled after these

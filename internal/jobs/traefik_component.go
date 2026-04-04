@@ -33,35 +33,6 @@ func resolveTraefikCreds(c models.InfrastructureComponent) traefikComponentCrede
 	return traefikComponentCredentials{APIURL: "http://" + c.IP + ":8080"}
 }
 
-// RunTraefikComponentPollers iterates all enabled traefik infrastructure components,
-// syncs certs and routes from the Traefik API, and upserts owned SSL checks.
-func RunTraefikComponentPollers(ctx context.Context, store *repo.Store) {
-	components, err := store.InfraComponents.List(ctx)
-	if err != nil {
-		log.Printf("traefik component scheduler: list components: %v", err)
-		return
-	}
-
-	for _, c := range components {
-		if c.CollectionMethod != "traefik_api" || !c.Enabled {
-			continue
-		}
-		creds := resolveTraefikCreds(c)
-		log.Printf("traefik component scheduler: polling %s (%s) → %s", c.Name, c.ID, creds.APIURL)
-		if err := pollTraefikComponent(ctx, store, c, creds); err != nil {
-			log.Printf("traefik component scheduler: poll %s (%s): %v", c.Name, c.ID, err)
-			emitInfraEvent(ctx, store, c.ID, c.Name, "traefik", "scheduled", "failed", err.Error())
-			polledAt := time.Now().UTC().Format(time.RFC3339Nano)
-			if updateErr := store.InfraComponents.UpdateStatus(ctx, c.ID, "offline", polledAt); updateErr != nil {
-				log.Printf("traefik component scheduler: update status %s: %v", c.ID, updateErr)
-			}
-		} else {
-			log.Printf("traefik component scheduler: poll %s (%s): complete", c.Name, c.ID)
-			emitInfraEvent(ctx, store, c.ID, c.Name, "traefik", "scheduled", "ok", "")
-		}
-	}
-}
-
 func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.InfrastructureComponent, creds traefikComponentCredentials) error {
 	client := infra.NewTraefikClient(creds.APIURL, creds.APIKey)
 
@@ -115,22 +86,3 @@ func pollTraefikComponent(ctx context.Context, store *repo.Store, c models.Infra
 	return store.InfraComponents.UpdateStatus(ctx, c.ID, "online", polledAt)
 }
 
-// StartTraefikComponentPollers runs RunTraefikComponentPollers immediately on
-// startup and then every 5 minutes until ctx is cancelled.
-func StartTraefikComponentPollers(ctx context.Context, store *repo.Store) {
-	log.Printf("traefik component scheduler: started (interval=5m)")
-	RunTraefikComponentPollers(ctx, store)
-
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("traefik component scheduler: stopped")
-			return
-		case <-ticker.C:
-			RunTraefikComponentPollers(ctx, store)
-		}
-	}
-}
