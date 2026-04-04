@@ -177,24 +177,22 @@ func TestHealthPoller_FirstPoll_NoEvent(t *testing.T) {
 	}
 }
 
-// TestHealthPoller_StartStop verifies the poller shuts down cleanly.
-func TestHealthPoller_StartStop(t *testing.T) {
+// TestHealthPoller_Run verifies a single poll pass completes without error.
+func TestHealthPoller_Run(t *testing.T) {
 	evRepo := &mockEventRepo{}
 	client := &mockHealthAPI{}
 	p := newTestHealthPoller(client, evRepo)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		p.Start(ctx)
+		p.Run(context.Background())
 		close(done)
 	}()
-	cancel()
 
 	select {
 	case <-done:
-		// clean shutdown
+		// completed cleanly
 	case <-time.After(2 * time.Second):
-		t.Fatal("health poller did not stop within 2 seconds")
+		t.Fatal("health poller did not complete within 2 seconds")
 	}
 }
