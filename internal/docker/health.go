@@ -44,24 +44,10 @@ func NewHealthPoller(store *repo.Store) (*HealthPoller, error) {
 	return &HealthPoller{store: store, client: cli}, nil
 }
 
-// Start polls container health every 60 s until ctx is cancelled.
-func (p *HealthPoller) Start(ctx context.Context) {
-	log.Printf("docker health poller: starting")
-
+// Run performs a single health poll pass.  Implements scanner.GlobalMetricsJob
+// so the scan scheduler drives polling on its metrics interval (60 s).
+func (p *HealthPoller) Run(ctx context.Context) {
 	p.poll(ctx)
-
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("docker health poller: stopped")
-			return
-		case <-ticker.C:
-			p.poll(ctx)
-		}
-	}
 }
 
 // CheckContainer inspects containerID and processes its health state immediately.

@@ -61,6 +61,7 @@ func (s *SynologyMetricsScanner) CollectMetrics(ctx context.Context, entityID st
 		{"mem_used_gb", snap.MemUsedGB},
 		{"mem_total_gb", snap.MemTotalGB},
 		{"temperature_c", float64(snap.TempC)},
+		{"uptime_seconds", float64(snap.UptimeSecs)},
 	} {
 		writeReading(ctx, s.store, entityID, "synology", m.metric, m.value, now)
 		readings++

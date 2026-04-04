@@ -183,6 +183,25 @@ func (s *Scheduler) RunAllByType(ctx context.Context, checkType string) error {
 	return nil
 }
 
+// RunAll runs every enabled monitor check (all types) immediately.
+func (s *Scheduler) RunAll(ctx context.Context) error {
+	checks, err := s.store.Checks.List(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range checks {
+		c := &checks[i]
+		if !c.Enabled {
+			continue
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		s.dispatch(ctx, c)
+	}
+	return nil
+}
+
 // dispatch runs the appropriate checker for one cycle of check.
 func (s *Scheduler) dispatch(ctx context.Context, check *models.MonitorCheck) {
 	var err error

@@ -169,6 +169,7 @@ type proxmoxNodeStatus struct {
 		Used  float64 `json:"used"`
 		Total float64 `json:"total"`
 	} `json:"memory"`
+	Uptime int64 `json:"uptime"` // seconds since last boot
 }
 
 type proxmoxStorage struct {
@@ -224,6 +225,7 @@ type ProxmoxNodeMetrics struct {
 	MemUsedGB   float64
 	MemTotalGB  float64
 	DiskPercent float64
+	UptimeSecs  int64
 }
 
 // CollectNodeMetrics fetches CPU%, memory, and disk metrics for each node in the
@@ -284,6 +286,7 @@ func (p *ProxmoxPoller) fetchNodeMetrics(ctx context.Context, node string) (Prox
 		MemUsedGB:   memUsedGB,
 		MemTotalGB:  memTotalGB,
 		DiskPercent: diskPercent,
+		UptimeSecs:  status.Uptime,
 	}, nil
 }
 

@@ -9,43 +9,6 @@ import (
 	"github.com/digitalcheffe/nora/internal/repo"
 )
 
-// RunHourlyRollup aggregates raw resource readings from the previous complete hour
-// and upserts the results into resource_rollups with period_type="hour".
-func RunHourlyRollup(ctx context.Context, store *repo.Store) error {
-	now := time.Now().UTC()
-	// Previous complete hour: from HH:00 to (HH+1):00
-	hourEnd := now.Truncate(time.Hour)
-	hourStart := hourEnd.Add(-time.Hour)
-
-	aggs, err := store.ResourceRollups.AggregateReadings(ctx, hourStart, hourEnd)
-	if err != nil {
-		return err
-	}
-
-	for i := range aggs {
-		a := &aggs[i]
-		rollup := &models.ResourceRollup{
-			SourceID:    a.SourceID,
-			SourceType:  a.SourceType,
-			Metric:      a.Metric,
-			PeriodType:  "hour",
-			PeriodStart: hourStart,
-			Avg:         a.Avg,
-			Min:         a.Min,
-			Max:         a.Max,
-		}
-		if err := store.ResourceRollups.Upsert(ctx, rollup); err != nil {
-			return err
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-	}
-
-	log.Printf("resource rollup: processed %d sources for hour %s", len(aggs), hourStart.Format("2006-01-02T15:04"))
-	return nil
-}
-
 // RunDailyRollup aggregates hourly rollups from the previous complete day and
 // upserts the results into resource_rollups with period_type="day".
 func RunDailyRollup(ctx context.Context, store *repo.Store) error {
@@ -113,24 +76,6 @@ func durationUntilNextMidnight() time.Duration {
 	now := time.Now().UTC()
 	next := now.Truncate(24 * time.Hour).Add(24 * time.Hour)
 	return next.Sub(now)
-}
-
-// StartHourlyRollup runs RunHourlyRollup every hour until ctx is cancelled.
-func StartHourlyRollup(ctx context.Context, store *repo.Store) {
-	ticker := time.NewTicker(time.Hour)
-	defer ticker.Stop()
-
-	log.Printf("resource rollup: hourly job started")
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := RunHourlyRollup(ctx, store); err != nil && ctx.Err() == nil {
-				log.Printf("resource rollup: hourly job error: %v", err)
-			}
-		}
-	}
 }
 
 // StartDailyRollup waits until the next UTC midnight, then runs RunDailyRollup

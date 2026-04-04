@@ -66,6 +66,7 @@ func (s *ProxmoxMetricsScanner) CollectMetrics(ctx context.Context, entityID str
 			{"mem_used_gb", nm.MemUsedGB},
 			{"mem_total_gb", nm.MemTotalGB},
 			{"disk_percent", nm.DiskPercent},
+			{"uptime_seconds", float64(nm.UptimeSecs)},
 		} {
 			writeReading(ctx, s.store, nodeID, "proxmox_node", m.metric, m.value, now)
 			readings++
