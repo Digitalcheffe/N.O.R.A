@@ -143,6 +143,8 @@ Open `http://localhost:8081` — create your admin account and add your first ap
 | `NORA_ADMIN_EMAIL` | Bootstrap admin email — used only when the users table is empty | — | **First run** |
 | `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | **First run** |
 | `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
+| `NORA_TEMPLATES_PATH` | Path to app template YAML files | `/data/templates` | No |
+| `NORA_ICONS_PATH` | Path to custom app icon overrides | `/data/icons` | No |
 | `NORA_PORT` | HTTP port | `8081` | No |
 | `NORA_LOG_LEVEL` | Set to `debug` for verbose request logging | `info` | No |
 | `NORA_DIGEST_SCHEDULE` | Cron expression for digest email | `0 8 1 * *` | No |
