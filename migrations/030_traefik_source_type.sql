@@ -5,6 +5,7 @@
 
 -- ── resource_readings ─────────────────────────────────────────────────────────
 
+DROP TABLE IF EXISTS resource_readings_new;
 CREATE TABLE resource_readings_new (
     id          TEXT      PRIMARY KEY,
     source_id   TEXT      NOT NULL,
@@ -31,6 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_resource_readings_app         ON resource_reading
 
 -- ── resource_rollups ──────────────────────────────────────────────────────────
 
+DROP TABLE IF EXISTS resource_rollups_new;
 CREATE TABLE resource_rollups_new (
     source_id    TEXT      NOT NULL,
     source_type  TEXT      NOT NULL CHECK (source_type IN (
