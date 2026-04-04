@@ -5,7 +5,6 @@ import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { infrastructure as infraApi } from '../api/client'
 import type {
-  ComponentType,
   InfrastructureComponent,
   ResourceSummary,
   DiscoverResult,
@@ -20,8 +19,6 @@ import { InfraEditModal, TYPE_LABEL } from './InfraEditModal'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 type ActiveTab = 'components' | 'map'
-
-const CAN_HAVE_CHILDREN = new Set<ComponentType>(['proxmox_node', 'bare_metal', 'vm'])
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -92,7 +89,7 @@ export function Infrastructure() {
   const [editingComponent,      setEditingComponent]      = useState<InfrastructureComponent | null>(null)
   const [editingHasCreds,       setEditingHasCreds]       = useState(false)
   const [initialParentId,       setInitialParentId]       = useState<string | undefined>(undefined)
-  const [deletingId,            setDeletingId]            = useState<string | null>(null)
+  const [deletingId]                                       = useState<string | null>(null)
   const [scanningId,            setScanningId]            = useState<string | null>(null)
   const [scanResults,           setScanResults]           = useState<Record<string, DiscoverResult>>({})
 
@@ -164,18 +161,6 @@ export function Infrastructure() {
     setEditingComponent(null)
     setEditingHasCreds(false)
     setInitialParentId(undefined)
-  }
-
-  async function handleDelete(id: string) {
-    setDeletingId(id)
-    try {
-      await infraApi.delete(id)
-      setComponents(prev => prev.filter(c => c.id !== id))
-      setResourcesMap(prev => { const n = { ...prev }; delete n[id]; return n })
-      if (editingComponent?.id === id) closeModal()
-    } catch { /* keep in list */ } finally {
-      setDeletingId(null)
-    }
   }
 
   async function handleScan(id: string) {
@@ -261,22 +246,19 @@ export function Infrastructure() {
             >
               {isScanning ? 'Discovering…' : 'Discover Now'}
             </button>
-            <button
-              className="infra-card-btn"
-              onClick={() => openEdit(c)}
-              disabled={isDeleting || isScanning}
-            >
-              Edit
-            </button>
-            <button
-              className="infra-card-btn danger"
-              onClick={() => void handleDelete(c.id)}
-              disabled={isDeleting || isScanning}
-            >
-              {isDeleting ? 'Deleting…' : 'Delete'}
-            </button>
           </div>
         </div>
+        <button
+          className="infra-card-gear-btn"
+          title="Settings"
+          onClick={e => { e.stopPropagation(); openEdit(c) }}
+          disabled={isDeleting || isScanning}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
     )
   }
@@ -318,22 +300,19 @@ export function Infrastructure() {
             >
               {isScanning ? 'Discovering…' : 'Discover Now'}
             </button>
-            <button
-              className="infra-card-btn"
-              onClick={() => openEdit(c)}
-              disabled={isDeleting || isScanning}
-            >
-              Edit
-            </button>
-            <button
-              className="infra-card-btn danger"
-              onClick={() => void handleDelete(c.id)}
-              disabled={isDeleting || isScanning}
-            >
-              {isDeleting ? 'Deleting…' : 'Delete'}
-            </button>
           </div>
         </div>
+        <button
+          className="infra-card-gear-btn"
+          title="Settings"
+          onClick={e => { e.stopPropagation(); openEdit(c) }}
+          disabled={isDeleting || isScanning}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
     )
   }
@@ -381,22 +360,19 @@ export function Infrastructure() {
             >
               {isScanning ? 'Discovering…' : 'Discover Now'}
             </button>
-            <button
-              className="infra-card-btn"
-              onClick={() => openEdit(c)}
-              disabled={isDeleting || isScanning}
-            >
-              Edit
-            </button>
-            <button
-              className="infra-card-btn danger"
-              onClick={() => void handleDelete(c.id)}
-              disabled={isDeleting || isScanning}
-            >
-              {isDeleting ? 'Deleting…' : 'Delete'}
-            </button>
           </div>
         </div>
+        <button
+          className="infra-card-gear-btn"
+          title="Settings"
+          onClick={e => { e.stopPropagation(); openEdit(c) }}
+          disabled={isDeleting || isScanning}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
     )
   }
@@ -446,8 +422,8 @@ export function Infrastructure() {
             )}
             {renderScanFeedback(c.id)}
           </div>
-          <div className="infra-card-actions">
-            {canScan && (
+          {canScan && (
+            <div className="infra-card-actions">
               <button
                 className="infra-card-btn accent"
                 onClick={() => void handleScan(c.id)}
@@ -455,32 +431,20 @@ export function Infrastructure() {
               >
                 {isScanning ? 'Discovering…' : 'Discover Now'}
               </button>
-            )}
-            <button
-              className="infra-card-btn"
-              onClick={() => openEdit(c)}
-              disabled={isDeleting || isScanning}
-            >
-              Edit
-            </button>
-            <button
-              className="infra-card-btn danger"
-              onClick={() => void handleDelete(c.id)}
-              disabled={isDeleting || isScanning}
-            >
-              {isDeleting ? 'Deleting…' : 'Delete'}
-            </button>
-            {CAN_HAVE_CHILDREN.has(c.type) && (
-              <button
-                className="infra-card-btn accent"
-                onClick={() => openAdd(c.id)}
-                disabled={isDeleting || isScanning}
-              >
-                + Add Child
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+        <button
+          className="infra-card-gear-btn"
+          title="Settings"
+          onClick={e => { e.stopPropagation(); openEdit(c) }}
+          disabled={isDeleting || isScanning}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </div>
     )
   }

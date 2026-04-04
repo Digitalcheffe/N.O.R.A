@@ -280,6 +280,7 @@ export function InfraEditModal({
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   function setField<K extends keyof InfraForm>(key: K, value: InfraForm[K]) {
     setFormState(prev => ({ ...prev, [key]: value }))
@@ -619,14 +620,34 @@ export function InfraEditModal({
           </button>
           <button className="form-btn secondary" onClick={onClose}>Cancel</button>
           {isEdit && onDelete && (
-            <button
-              className="form-btn danger"
-              style={{ marginLeft: 'auto' }}
-              onClick={() => void handleDelete()}
-              disabled={deleting}
-            >
-              {deleting ? 'Deleting…' : 'Delete'}
-            </button>
+            confirmingDelete ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                <span style={{ fontSize: 13, color: 'var(--text2)' }}>Are you sure?</span>
+                <button
+                  className="form-btn danger"
+                  onClick={() => void handleDelete()}
+                  disabled={deleting}
+                >
+                  {deleting ? 'Deleting…' : 'Confirm'}
+                </button>
+                <button
+                  className="form-btn secondary"
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                className="form-btn danger"
+                style={{ marginLeft: 'auto' }}
+                onClick={() => setConfirmingDelete(true)}
+                disabled={deleting}
+              >
+                Delete
+              </button>
+            )
           )}
         </div>
 
