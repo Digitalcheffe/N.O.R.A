@@ -6,13 +6,13 @@ import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesAp
 import type { App, AppSummary, AppTemplate, MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
 import { CheckForm } from '../components/CheckForm'
+import { SlidePanel } from '../components/SlidePanel'
 import {
   type FormFields,
   defaultForm,
   validateForm,
   formToInput,
 } from '../components/checkFormHelpers'
-import '../styles/Modal.css'
 import './AppDetail.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
@@ -40,6 +40,7 @@ function Sparkline({ data, color = 'var(--accent)' }: { data: number[]; color?: 
 // ── App Settings Modal ────────────────────────────────────────────────────────
 
 export interface AppSettingsModalProps {
+  open: boolean
   app: App
   onClose: () => void
   onUpdated: (app: App) => void
@@ -54,7 +55,7 @@ const CAPABILITY_LABEL: Record<string, string> = {
   limited:      'Limited',
 }
 
-export function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSettingsModalProps) {
+export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: AppSettingsModalProps) {
   const [name, setName] = useState(app.name)
   const [profileId, setProfileId] = useState(app.profile_id ?? '')
   const [baseUrl, setBaseUrl] = useState((app.config?.base_url as string) ?? '')
@@ -77,12 +78,6 @@ export function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSett
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   useEffect(() => {
     templatesApi.list()
@@ -168,152 +163,147 @@ export function AppSettingsModal({ app, onClose, onUpdated, onDeleted }: AppSett
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
-        <div className="modal-header">
-          <div className="modal-title">App Settings</div>
-          <div className="modal-subtitle">{app.name}</div>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
+    <SlidePanel
+      open={open}
+      onClose={onClose}
+      title="App Settings"
+      subtitle={app.name}
+      footer={
+        <button
+          className="sp-btn sp-btn--primary"
+          onClick={() => void handleSave()}
+          disabled={saving || !name.trim()}
+        >
+          {saveOk ? '✓ Saved' : saving ? 'Saving…' : 'Save Changes'}
+        </button>
+      }
+    >
+      {/* ── Basic settings ── */}
+      <label className="modal-label">Name</label>
+      <input className="modal-input" value={name} onChange={e => setName(e.target.value)} />
 
-        <div className="modal-body">
-
-          {/* ── Basic settings ── */}
-          <label className="modal-label">Name</label>
-          <input className="modal-input" value={name} onChange={e => setName(e.target.value)} />
-
-          <label className="modal-label" style={{ marginTop: 16 }}>
-            App Template <span className="modal-hint">(controls field mapping and severity)</span>
-          </label>
-          <select
-            className="modal-input"
-            value={profileId}
-            onChange={e => setProfileId(e.target.value)}
-          >
-            <option value="">Generic Webhook — raw JSON, no mapping</option>
-            {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
-              <optgroup key={cat} label={cat}>
-                {items.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} — {CAPABILITY_LABEL[t.capability] ?? t.capability}
-                  </option>
-                ))}
-              </optgroup>
+      <label className="modal-label" style={{ marginTop: 16 }}>
+        App Template <span className="modal-hint">(controls field mapping and severity)</span>
+      </label>
+      <select
+        className="modal-input"
+        value={profileId}
+        onChange={e => setProfileId(e.target.value)}
+      >
+        <option value="">Generic Webhook — raw JSON, no mapping</option>
+        {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
+          <optgroup key={cat} label={cat}>
+            {items.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.name} — {CAPABILITY_LABEL[t.capability] ?? t.capability}
+              </option>
             ))}
-          </select>
+          </optgroup>
+        ))}
+      </select>
 
-          <label className="modal-label" style={{ marginTop: 16 }}>
-            App URL <span className="modal-hint">(optional — enables the Launch button)</span>
-          </label>
-          <input className="modal-input" placeholder="https://app.yourdomain.com"
-            value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+      <label className="modal-label" style={{ marginTop: 16 }}>
+        App URL <span className="modal-hint">(optional — enables the Launch button)</span>
+      </label>
+      <input className="modal-input" placeholder="https://app.yourdomain.com"
+        value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
 
-          <label className="modal-label" style={{ marginTop: 16 }}>
-            Monitor URL <span className="modal-hint">(optional — NORA pings this for uptime)</span>
-          </label>
-          <input className="modal-input" placeholder="https://app.yourdomain.com/ping"
-            value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
+      <label className="modal-label" style={{ marginTop: 16 }}>
+        Monitor URL <span className="modal-hint">(optional — NORA pings this for uptime)</span>
+      </label>
+      <input className="modal-input" placeholder="https://app.yourdomain.com/ping"
+        value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
 
-          <label className="modal-label" style={{ marginTop: 16 }}>
-            API Key <span className="modal-hint">(optional — used for active monitor auth)</span>
-          </label>
-          <input className="modal-input modal-input-mono" placeholder="your-api-key"
-            type="password" autoComplete="new-password"
-            value={apiKey} onChange={e => setApiKey(e.target.value)} />
+      <label className="modal-label" style={{ marginTop: 16 }}>
+        API Key <span className="modal-hint">(optional — used for active monitor auth)</span>
+      </label>
+      <input className="modal-input modal-input-mono" placeholder="your-api-key"
+        type="password" autoComplete="new-password"
+        value={apiKey} onChange={e => setApiKey(e.target.value)} />
 
-          <label className="modal-label" style={{ marginTop: 16 }}>
-            Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>
-          </label>
-          <input className="modal-input modal-input-sm" type="number" min="0"
-            value={rateLimit} onChange={e => setRateLimit(e.target.value)} />
+      <label className="modal-label" style={{ marginTop: 16 }}>
+        Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>
+      </label>
+      <input className="modal-input modal-input-sm" type="number" min="0"
+        value={rateLimit} onChange={e => setRateLimit(e.target.value)} />
 
-          {saveError && <div className="modal-error">{saveError}</div>}
+      {saveError && <div className="modal-error">{saveError}</div>}
 
-          {/* ── Webhook URL ── */}
-          <hr className="modal-section-divider" />
+      {/* ── Webhook URL ── */}
+      <hr className="modal-section-divider" />
 
-          <label className="modal-label">Webhook URL</label>
-          <div className="webhook-url-row">
-            <input className="modal-input modal-input-mono" readOnly
-              value={webhookUrl(currentToken)} onFocus={e => e.target.select()} />
-            <button className={`webhook-copy-btn${copiedUrl ? ' copied' : ''}`} onClick={copyUrl}>
-              {copiedUrl ? '✓ Copied' : 'Copy'}
+      <label className="modal-label">Webhook URL</label>
+      <div className="webhook-url-row">
+        <input className="modal-input modal-input-mono" readOnly
+          value={webhookUrl(currentToken)} onFocus={e => e.target.select()} />
+        <button className={`webhook-copy-btn${copiedUrl ? ' copied' : ''}`} onClick={copyUrl}>
+          {copiedUrl ? '✓ Copied' : 'Copy'}
+        </button>
+      </div>
+
+      {/* Regenerate token */}
+      {!regenConfirm ? (
+        <button className="detail-regen-btn" onClick={() => setRegenConfirm(true)}>
+          Regenerate Token
+        </button>
+      ) : (
+        <div className="detail-regen-confirm">
+          <span className="detail-regen-warn">
+            ⚠ This will invalidate the current token. Any app sending to the old URL will stop working.
+          </span>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="modal-btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }}
+              onClick={() => setRegenConfirm(false)}>
+              Back
+            </button>
+            <button className="modal-btn-danger" style={{ fontSize: 12, padding: '5px 12px' }}
+              onClick={() => void handleRegen()} disabled={regening}>
+              {regening ? 'Regenerating…' : 'Yes, regenerate'}
             </button>
           </div>
-
-          {/* Regenerate token */}
-          {!regenConfirm ? (
-            <button className="detail-regen-btn" onClick={() => setRegenConfirm(true)}>
-              Regenerate Token
-            </button>
-          ) : (
-            <div className="detail-regen-confirm">
-              <span className="detail-regen-warn">
-                ⚠ This will invalidate the current token. Any app sending to the old URL will stop working.
-              </span>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button className="modal-btn-ghost" style={{ fontSize: 12, padding: '5px 12px' }}
-                  onClick={() => setRegenConfirm(false)}>
-                  Cancel
-                </button>
-                <button className="modal-btn-danger" style={{ fontSize: 12, padding: '5px 12px' }}
-                  onClick={handleRegen} disabled={regening}>
-                  {regening ? 'Regenerating…' : 'Yes, regenerate'}
-                </button>
-              </div>
-              {newTokenCopied && (
-                <div style={{ marginTop: 8 }}>
-                  <label className="modal-label">New Webhook URL</label>
-                  <div className="webhook-url-row">
-                    <input className="modal-input modal-input-mono" readOnly
-                      value={webhookUrl(currentToken)} onFocus={e => e.target.select()} />
-                    <button className={`webhook-copy-btn${newTokenCopied ? ' copied' : ''}`} onClick={copyNewToken}>
-                      {newTokenCopied ? '✓ Copied' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Danger zone ── */}
-          <hr className="modal-section-divider" />
-          <div className="modal-danger-label">Danger Zone</div>
-
-          {!deleteConfirm ? (
-            <button className="modal-btn-danger" style={{ width: '100%' }}
-              onClick={() => setDeleteConfirm(true)}>
-              Delete App
-            </button>
-          ) : (
-            <div className="detail-delete-confirm">
-              <p className="detail-delete-warn">
-                Permanently delete <strong>{app.name}</strong> and all its events, metrics, and monitor checks? This cannot be undone.
-              </p>
-              {deleteError && <div className="modal-error">{deleteError}</div>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <button className="modal-btn-ghost" style={{ flex: 1 }}
-                  onClick={() => { setDeleteConfirm(false); setDeleteError('') }}>
-                  Cancel
-                </button>
-                <button className="modal-btn-danger" style={{ flex: 1 }}
-                  onClick={handleDelete} disabled={deleting}>
-                  {deleting ? 'Deleting…' : 'Confirm Delete'}
+          {newTokenCopied && (
+            <div style={{ marginTop: 8 }}>
+              <label className="modal-label">New Webhook URL</label>
+              <div className="webhook-url-row">
+                <input className="modal-input modal-input-mono" readOnly
+                  value={webhookUrl(currentToken)} onFocus={e => e.target.select()} />
+                <button className={`webhook-copy-btn${newTokenCopied ? ' copied' : ''}`} onClick={copyNewToken}>
+                  {newTokenCopied ? '✓ Copied' : 'Copy'}
                 </button>
               </div>
             </div>
           )}
-
         </div>
+      )}
 
-        <div className="modal-footer">
-          <button className="modal-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="modal-btn-primary" onClick={handleSave} disabled={saving || !name.trim()}>
-            {saveOk ? '✓ Saved' : saving ? 'Saving…' : 'Save Changes'}
-          </button>
+      {/* ── Danger zone ── */}
+      <hr className="modal-section-divider" />
+      <div className="modal-danger-label">Danger Zone</div>
+
+      {!deleteConfirm ? (
+        <button className="modal-btn-danger" style={{ width: '100%' }}
+          onClick={() => setDeleteConfirm(true)}>
+          Delete App
+        </button>
+      ) : (
+        <div className="detail-delete-confirm">
+          <p className="detail-delete-warn">
+            Permanently delete <strong>{app.name}</strong> and all its events, metrics, and monitor checks? This cannot be undone.
+          </p>
+          {deleteError && <div className="modal-error">{deleteError}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button className="modal-btn-ghost" style={{ flex: 1 }}
+              onClick={() => { setDeleteConfirm(false); setDeleteError('') }}>
+              Back
+            </button>
+            <button className="modal-btn-danger" style={{ flex: 1 }}
+              onClick={() => void handleDelete()} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Confirm Delete'}
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </SlidePanel>
   )
 }
 
@@ -340,8 +330,10 @@ export function AppDetail() {
   const [appChecks, setAppChecks] = useState<MonitorCheck[]>([])
   const [appTemplate, setAppTemplate] = useState<AppTemplate | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsKey, setSettingsKey] = useState(0)
 
   const [showAddCheck, setShowAddCheck] = useState(false)
+  const [addCheckKey, setAddCheckKey] = useState(0)
   const [addCheckForm, setAddCheckForm] = useState<FormFields>({ ...defaultForm })
   const [addCheckError, setAddCheckError] = useState<string | null>(null)
   const [addCheckSubmitting, setAddCheckSubmitting] = useState(false)
@@ -399,6 +391,7 @@ export function AppDetail() {
   function openAddCheck() {
     setAddCheckForm({ ...defaultForm, app_id: appId })
     setAddCheckError(null)
+    setAddCheckKey(k => k + 1)
     setShowAddCheck(true)
   }
 
@@ -493,7 +486,7 @@ export function AppDetail() {
                 Launch
               </a>
             )}
-            <button className="detail-settings-btn" onClick={() => setShowSettings(true)} title="App Settings">
+            <button className="detail-settings-btn" onClick={() => { setSettingsKey(k => k + 1); setShowSettings(true) }} title="App Settings">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -553,8 +546,10 @@ export function AppDetail() {
         </div>
       </DetailPageLayout>
 
-      {showSettings && app && (
+      {app && (
         <AppSettingsModal
+          key={settingsKey}
+          open={showSettings}
           app={app}
           onClose={() => setShowSettings(false)}
           onUpdated={updated => { setApp(updated); setShowSettings(false) }}
@@ -562,28 +557,39 @@ export function AppDetail() {
         />
       )}
 
-      {showAddCheck && (
-        <div className="modal-backdrop">
-          <div className="modal" style={{ width: 560 }}>
-            <CheckForm
-              form={addCheckForm}
-              onChange={(field, value) => {
-                setAddCheckForm(prev => ({ ...prev, [field]: value }))
-                setAddCheckError(null)
-              }}
-              onSubmit={() => void handleAddCheckSubmit()}
-              onCancel={() => setShowAddCheck(false)}
-              error={addCheckError}
-              submitting={addCheckSubmitting}
-              title={`Add Check — ${app?.name ?? ''}`}
-              submitLabel="Add Check"
-              traefikIntegrations={traefikIntegrations}
-              traefikCerts={traefikCerts}
-              onIntegrationChange={handleIntegrationChange}
-            />
-          </div>
-        </div>
-      )}
+      <SlidePanel
+        key={addCheckKey}
+        open={showAddCheck}
+        onClose={() => setShowAddCheck(false)}
+        title={`Add Check${app ? ` — ${app.name}` : ''}`}
+        footer={
+          <button
+            className="sp-btn sp-btn--primary"
+            onClick={() => void handleAddCheckSubmit()}
+            disabled={addCheckSubmitting}
+          >
+            {addCheckSubmitting ? 'Saving…' : 'Add Check'}
+          </button>
+        }
+      >
+        <CheckForm
+          form={addCheckForm}
+          onChange={(field, value) => {
+            setAddCheckForm(prev => ({ ...prev, [field]: value }))
+            setAddCheckError(null)
+          }}
+          onSubmit={() => void handleAddCheckSubmit()}
+          onCancel={() => setShowAddCheck(false)}
+          error={addCheckError}
+          submitting={addCheckSubmitting}
+          title=""
+          submitLabel="Add Check"
+          traefikIntegrations={traefikIntegrations}
+          traefikCerts={traefikCerts}
+          onIntegrationChange={handleIntegrationChange}
+          hideActions
+        />
+      </SlidePanel>
     </>
   )
 }

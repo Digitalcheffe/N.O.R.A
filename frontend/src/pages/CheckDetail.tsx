@@ -7,6 +7,7 @@ import { checks as checksApi, integrations as integrationsApi, apps as appsApi }
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
 import type { MonitorCheck, InfraIntegration, TraefikCert, App } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
+import { SlidePanel } from '../components/SlidePanel'
 import {
   type FormFields,
   validateForm,
@@ -15,12 +16,12 @@ import {
   renderCheckResult,
 } from '../components/checkFormHelpers'
 import { formatEventTime } from '../utils/formatTime'
-import '../styles/Modal.css'
 import './CheckDetail.css'
 
-// ── Edit Modal ────────────────────────────────────────────────────────────────
+// ── Edit Panel ────────────────────────────────────────────────────────────────
 
-interface EditModalProps {
+interface EditPanelProps {
+  open: boolean
   check: MonitorCheck
   apps: App[]
   traefikIntegrations: InfraIntegration[]
@@ -31,7 +32,8 @@ interface EditModalProps {
   onClose: () => void
 }
 
-function EditModal({
+function EditPanel({
+  open,
   check,
   apps,
   traefikIntegrations,
@@ -40,17 +42,11 @@ function EditModal({
   onSave,
   onDelete,
   onClose,
-}: EditModalProps) {
+}: EditPanelProps) {
   const [form, setForm] = useState<FormFields>(() => checkToForm(check))
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   function handleChange(field: keyof FormFields, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -80,52 +76,59 @@ function EditModal({
     }
   }
 
-  return (
-    <div className="modal-backdrop">
-      <div className="modal">
-        <div className="modal-header">
-          <div className="modal-title">Edit Check</div>
-          <div className="modal-subtitle">{check.name}</div>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body check-edit-modal-body">
-          <CheckForm
-            form={form}
-            onChange={handleChange}
-            onSubmit={handleSubmit}
-            onCancel={onClose}
-            error={error}
-            submitting={submitting}
-            title=""
-            submitLabel="Save Changes"
-            traefikIntegrations={traefikIntegrations}
-            traefikCerts={traefikCerts}
-            onIntegrationChange={onIntegrationChange}
-            apps={apps}
-            extraAction={
-              check.source_component_id ? (
-                <span
-                  className="form-btn secondary"
-                  style={{ marginLeft: 'auto', opacity: 0.5, cursor: 'default' }}
-                  title="This check is managed by a Traefik component. Delete the component to remove it."
-                >
-                  Managed by Traefik
-                </span>
-              ) : (
-                <button
-                  className="form-btn danger"
-                  onClick={() => void handleDelete()}
-                  disabled={deleting}
-                  style={{ marginLeft: 'auto' }}
-                >
-                  {deleting ? 'Deleting…' : 'Delete Check'}
-                </button>
-              )
-            }
-          />
-        </div>
-      </div>
+  const footer = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {check.source_component_id ? (
+        <span
+          className="sp-btn sp-btn--secondary"
+          style={{ opacity: 0.5, cursor: 'default' }}
+          title="This check is managed by a Traefik component. Delete the component to remove it."
+        >
+          Managed by Traefik
+        </span>
+      ) : (
+        <button
+          className="sp-btn sp-btn--danger"
+          onClick={() => void handleDelete()}
+          disabled={deleting}
+        >
+          {deleting ? 'Deleting…' : 'Delete Check'}
+        </button>
+      )}
+      <button
+        className="sp-btn sp-btn--primary"
+        onClick={() => void handleSubmit()}
+        disabled={submitting}
+      >
+        {submitting ? 'Saving…' : 'Save Changes'}
+      </button>
     </div>
+  )
+
+  return (
+    <SlidePanel
+      open={open}
+      onClose={onClose}
+      title="Edit Check"
+      subtitle={check.name}
+      footer={footer}
+    >
+      <CheckForm
+        form={form}
+        onChange={handleChange}
+        onSubmit={handleSubmit}
+        onCancel={onClose}
+        error={error}
+        submitting={submitting}
+        title=""
+        submitLabel="Save Changes"
+        traefikIntegrations={traefikIntegrations}
+        traefikCerts={traefikCerts}
+        onIntegrationChange={onIntegrationChange}
+        apps={apps}
+        hideActions
+      />
+    </SlidePanel>
   )
 }
 
@@ -141,6 +144,7 @@ export function CheckDetail() {
   const [running, setRunning] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [editKey, setEditKey] = useState(0)
   const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
   const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
   const [appsList, setAppsList] = useState<App[]>([])
@@ -283,7 +287,7 @@ export function CheckDetail() {
                 {resetting ? <span className="check-detail-spinner" /> : '⟳'} Reset Baseline
               </button>
             )}
-            <button className="check-detail-action-btn" onClick={() => setShowEdit(true)}>
+            <button className="check-detail-action-btn" onClick={() => { setEditKey(k => k + 1); setShowEdit(true) }}>
               ⚙ Settings
             </button>
           </div>
@@ -309,18 +313,18 @@ export function CheckDetail() {
         </div>
       </DetailPageLayout>
 
-      {showEdit && (
-        <EditModal
-          check={check}
-          apps={appsList}
-          traefikIntegrations={traefikIntegrations}
-          traefikCerts={traefikCerts}
-          onIntegrationChange={handleIntegrationChange}
-          onSave={handleSave}
-          onDelete={handleDelete}
-          onClose={() => setShowEdit(false)}
-        />
-      )}
+      <EditPanel
+        key={editKey}
+        open={showEdit}
+        check={check}
+        apps={appsList}
+        traefikIntegrations={traefikIntegrations}
+        traefikCerts={traefikCerts}
+        onIntegrationChange={handleIntegrationChange}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        onClose={() => setShowEdit(false)}
+      />
     </>
   )
 }

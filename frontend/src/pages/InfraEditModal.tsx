@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ComponentType, CollectionMethod, InfrastructureComponent, InfrastructureComponentInput } from '../api/types'
+import { SlidePanel } from '../components/SlidePanel'
 import './Infrastructure.css'
 import '../components/CheckForm.css'
 
@@ -235,6 +236,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 // ── InfraEditModal ────────────────────────────────────────────────────────────
 
 export interface InfraEditModalProps {
+  open: boolean
   /** The component to edit. Undefined = add mode. */
   component?: InfrastructureComponent
   /** All components, for the parent selector. */
@@ -246,21 +248,22 @@ export interface InfraEditModalProps {
   /**
    * Called with the fully-built payload on save.
    * Should make the API call and update local state.
-   * The modal closes itself after this resolves.
-   * Throw to display an error and keep the modal open.
+   * The panel closes itself after this resolves.
+   * Throw to display an error and keep the panel open.
    */
   onSave: (payload: InfrastructureComponentInput) => Promise<void>
-  /** Called when the modal should close (cancel or after success). */
+  /** Called when the panel should close (cancel or after success). */
   onClose: () => void
   /**
    * Optional delete handler shown as a Delete button in edit mode.
    * Should make the API call and update local state.
-   * The modal closes itself after this resolves.
+   * The panel closes itself after this resolves.
    */
   onDelete?: () => Promise<void>
 }
 
 export function InfraEditModal({
+  open,
   component,
   components,
   hasCreds = false,
@@ -311,347 +314,349 @@ export function InfraEditModal({
     }
   }
 
-  const parentOptions = components.filter(c => !component || c.id !== component.id)
+  const parentOptions = components
+    .filter(c => !component || c.id !== component.id)
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  const panelTitle = isEdit
+    ? `Edit ${TYPE_LABEL[form.type]}`
+    : `Add ${TYPE_LABEL[form.type]}`
+
+  const footer = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      {isEdit && onDelete && (
+        confirmingDelete ? (
+          <>
+            <span style={{ fontSize: 13, color: 'var(--text2)' }}>Are you sure?</span>
+            <button
+              className="sp-btn sp-btn--danger"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting…' : 'Confirm'}
+            </button>
+            <button
+              className="sp-btn sp-btn--secondary"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleting}
+            >
+              Back
+            </button>
+          </>
+        ) : (
+          <button
+            className="sp-btn sp-btn--danger"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            Delete
+          </button>
+        )
+      )}
+      <button
+        className="sp-btn sp-btn--primary"
+        onClick={() => void handleSubmit()}
+        disabled={submitting}
+      >
+        {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Component'}
+      </button>
+    </div>
+  )
 
   return (
-    <div className="infra-modal-overlay" onClick={onClose}>
-      <div className="infra-modal" onClick={e => e.stopPropagation()}>
-
-        <div className="infra-modal-header">
-          <div className="infra-modal-title">{isEdit ? 'Edit Component' : 'Add Component'}</div>
-          <button className="infra-modal-close" onClick={onClose}>✕</button>
+    <SlidePanel
+      open={open}
+      onClose={onClose}
+      title={panelTitle}
+      footer={footer}
+    >
+      {/* ── Basic fields ── */}
+      <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div className="form-field form-field-full">
+          <div className="form-label">Name</div>
+          <input
+            className="form-input"
+            value={form.name}
+            onChange={e => setField('name', e.target.value)}
+            placeholder="e.g. proxmox-node1"
+          />
         </div>
 
-        <div className="infra-modal-body">
+        <div className="form-field">
+          <div className="form-label">Type</div>
+          <select
+            className="form-input"
+            value={form.type}
+            onChange={e => setField('type', e.target.value as ComponentType)}
+          >
+            <option value="bare_metal">Bare Metal</option>
+            <option value="docker_engine">Docker Engine</option>
+            <option value="generic_host">Generic Host</option>
+            <option value="linux_host">Linux Host</option>
+            <option value="portainer">Portainer</option>
+            <option value="proxmox_node">Proxmox Node</option>
+            <option value="synology">Synology NAS</option>
+            <option value="traefik">Traefik</option>
+            <option value="vm">VM</option>
+            <option value="windows_host">Windows Host</option>
+          </select>
+        </div>
 
-          {/* ── Basic fields ── */}
+        <div className="form-field">
+          <div className="form-label">IP Address</div>
+          <input
+            className="form-input"
+            value={form.ip}
+            onChange={e => setField('ip', e.target.value)}
+            placeholder="e.g. 192.168.1.10"
+          />
+        </div>
+
+        <div className="form-field form-field-full">
+          <div className="form-label">Parent Component <span className="infra-optional">(optional)</span></div>
+          <select
+            className="form-input"
+            value={form.parent_id}
+            onChange={e => setField('parent_id', e.target.value)}
+          >
+            <option value="">None</option>
+            {parentOptions.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({TYPE_LABEL[c.type]})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-field form-field-full">
+          <div className="form-label">Notes <span className="infra-optional">(optional)</span></div>
+          <textarea
+            className="form-input infra-textarea"
+            value={form.notes}
+            onChange={e => setField('notes', e.target.value)}
+            placeholder="Optional notes"
+            rows={2}
+          />
+        </div>
+      </div>
+
+      <Toggle checked={form.enabled} onChange={v => setField('enabled', v)} label="Enabled" />
+
+      {/* ── Proxmox credentials ── */}
+      {form.type === 'proxmox_node' && (
+        <>
+          <SectionHeading>
+            Proxmox Credentials{' '}
+            {isEdit && hasCreds
+              ? <span className="infra-cred-saved">Credentials saved</span>
+              : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
+          </SectionHeading>
           <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
             <div className="form-field form-field-full">
-              <div className="form-label">Name</div>
-              <input
-                className="form-input"
-                value={form.name}
-                onChange={e => setField('name', e.target.value)}
-                placeholder="e.g. proxmox-node1"
-              />
+              <div className="form-label">Base URL</div>
+              <input className="form-input" value={form.proxmox_base_url}
+                onChange={e => setField('proxmox_base_url', e.target.value)}
+                placeholder="https://proxmox.local:8006" />
             </div>
-
             <div className="form-field">
-              <div className="form-label">Type</div>
-              <select
-                className="form-input"
-                value={form.type}
-                onChange={e => setField('type', e.target.value as ComponentType)}
-              >
-                <option value="proxmox_node">Proxmox Node</option>
-                <option value="synology">Synology NAS</option>
-                <option value="vm">VM</option>
-                <option value="bare_metal">Bare Metal</option>
-                <option value="linux_host">Linux Host</option>
-                <option value="windows_host">Windows Host</option>
-                <option value="generic_host">Generic Host</option>
-                <option value="docker_engine">Docker Engine</option>
-                <option value="traefik">Traefik</option>
-                <option value="portainer">Portainer</option>
-              </select>
+              <div className="form-label">Token ID</div>
+              <input className="form-input" value={form.proxmox_token_id}
+                onChange={e => setField('proxmox_token_id', e.target.value)}
+                placeholder="user@pam!token-name" />
             </div>
-
             <div className="form-field">
-              <div className="form-label">IP Address</div>
-              <input
-                className="form-input"
-                value={form.ip}
-                onChange={e => setField('ip', e.target.value)}
-                placeholder="e.g. 192.168.1.10"
-              />
-            </div>
-
-            <div className="form-field form-field-full">
-              <div className="form-label">Parent Component <span className="infra-optional">(optional)</span></div>
-              <select
-                className="form-input"
-                value={form.parent_id}
-                onChange={e => setField('parent_id', e.target.value)}
-              >
-                <option value="">None</option>
-                {parentOptions.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({TYPE_LABEL[c.type]})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-field form-field-full">
-              <div className="form-label">Notes <span className="infra-optional">(optional)</span></div>
-              <textarea
-                className="form-input infra-textarea"
-                value={form.notes}
-                onChange={e => setField('notes', e.target.value)}
-                placeholder="Optional notes"
-                rows={2}
-              />
+              <div className="form-label">Token Secret</div>
+              <input className="form-input" type="password" value={form.proxmox_token_secret}
+                onChange={e => setField('proxmox_token_secret', e.target.value)}
+                placeholder={hasCreds ? 'leave blank to keep saved secret' : '••••••••'} />
             </div>
           </div>
+          <Toggle checked={form.proxmox_verify_tls} onChange={v => setField('proxmox_verify_tls', v)} label="Verify TLS" />
+        </>
+      )}
 
-          <Toggle checked={form.enabled} onChange={v => setField('enabled', v)} label="Enabled" />
+      {/* ── Synology credentials ── */}
+      {form.type === 'synology' && (
+        <>
+          <SectionHeading>
+            Synology Credentials{' '}
+            {isEdit && hasCreds
+              ? <span className="infra-cred-saved">Credentials saved</span>
+              : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
+          </SectionHeading>
+          <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="form-field form-field-full">
+              <div className="form-label">Base URL</div>
+              <input className="form-input" value={form.synology_base_url}
+                onChange={e => setField('synology_base_url', e.target.value)}
+                placeholder="https://synology.local:5001" />
+            </div>
+            <div className="form-field">
+              <div className="form-label">Username</div>
+              <input className="form-input" value={form.synology_username}
+                onChange={e => setField('synology_username', e.target.value)}
+                placeholder="admin" />
+            </div>
+            <div className="form-field">
+              <div className="form-label">Password</div>
+              <input className="form-input" type="password" value={form.synology_password}
+                onChange={e => setField('synology_password', e.target.value)}
+                placeholder={hasCreds ? 'leave blank to keep saved password' : '••••••••'} />
+            </div>
+          </div>
+          <Toggle checked={form.synology_verify_tls} onChange={v => setField('synology_verify_tls', v)} label="Verify TLS" />
+        </>
+      )}
 
-          {/* ── Proxmox credentials ── */}
-          {form.type === 'proxmox_node' && (
-            <>
-              <SectionHeading>
-                Proxmox Credentials{' '}
-                {isEdit && hasCreds
-                  ? <span className="infra-cred-saved">Credentials saved</span>
-                  : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
-              </SectionHeading>
-              <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-field form-field-full">
-                  <div className="form-label">Base URL</div>
-                  <input className="form-input" value={form.proxmox_base_url}
-                    onChange={e => setField('proxmox_base_url', e.target.value)}
-                    placeholder="https://proxmox.local:8006" />
-                </div>
-                <div className="form-field">
-                  <div className="form-label">Token ID</div>
-                  <input className="form-input" value={form.proxmox_token_id}
-                    onChange={e => setField('proxmox_token_id', e.target.value)}
-                    placeholder="user@pam!token-name" />
-                </div>
-                <div className="form-field">
-                  <div className="form-label">Token Secret</div>
-                  <input className="form-input" type="password" value={form.proxmox_token_secret}
-                    onChange={e => setField('proxmox_token_secret', e.target.value)}
-                    placeholder={hasCreds ? 'leave blank to keep saved secret' : '••••••••'} />
-                </div>
+      {/* ── SNMP config ── */}
+      {SNMP_TYPES.has(form.type) && (
+        <>
+          <SectionHeading>SNMP Configuration</SectionHeading>
+          <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="form-field">
+              <div className="form-label">SNMP Version</div>
+              <select className="form-input" value={form.snmp_version}
+                onChange={e => setField('snmp_version', e.target.value as '2c' | '3')}>
+                <option value="2c">v2c</option>
+                <option value="3">v3</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <div className="form-label">Port</div>
+              <input className="form-input" value={form.snmp_port}
+                onChange={e => setField('snmp_port', e.target.value)}
+                placeholder="161" />
+            </div>
+            {form.snmp_version === '2c' && (
+              <div className="form-field">
+                <div className="form-label">Community String</div>
+                <input className="form-input" value={form.snmp_community}
+                  onChange={e => setField('snmp_community', e.target.value)}
+                  placeholder="public" />
               </div>
-              <Toggle checked={form.proxmox_verify_tls} onChange={v => setField('proxmox_verify_tls', v)} label="Verify TLS" />
-            </>
-          )}
-
-          {/* ── Synology credentials ── */}
-          {form.type === 'synology' && (
-            <>
-              <SectionHeading>
-                Synology Credentials{' '}
-                {isEdit && hasCreds
-                  ? <span className="infra-cred-saved">Credentials saved</span>
-                  : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
-              </SectionHeading>
-              <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-field form-field-full">
-                  <div className="form-label">Base URL</div>
-                  <input className="form-input" value={form.synology_base_url}
-                    onChange={e => setField('synology_base_url', e.target.value)}
-                    placeholder="https://synology.local:5001" />
-                </div>
+            )}
+            {form.snmp_version === '3' && (
+              <>
                 <div className="form-field">
-                  <div className="form-label">Username</div>
-                  <input className="form-input" value={form.synology_username}
-                    onChange={e => setField('synology_username', e.target.value)}
-                    placeholder="admin" />
-                </div>
-                <div className="form-field">
-                  <div className="form-label">Password</div>
-                  <input className="form-input" type="password" value={form.synology_password}
-                    onChange={e => setField('synology_password', e.target.value)}
-                    placeholder={hasCreds ? 'leave blank to keep saved password' : '••••••••'} />
-                </div>
-              </div>
-              <Toggle checked={form.synology_verify_tls} onChange={v => setField('synology_verify_tls', v)} label="Verify TLS" />
-            </>
-          )}
-
-          {/* ── SNMP config ── */}
-          {SNMP_TYPES.has(form.type) && (
-            <>
-              <SectionHeading>SNMP Configuration</SectionHeading>
-              <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-field">
-                  <div className="form-label">SNMP Version</div>
-                  <select className="form-input" value={form.snmp_version}
-                    onChange={e => setField('snmp_version', e.target.value as '2c' | '3')}>
-                    <option value="2c">v2c</option>
-                    <option value="3">v3</option>
+                  <div className="form-label">Auth Protocol</div>
+                  <select className="form-input" value={form.snmp_auth_protocol}
+                    onChange={e => setField('snmp_auth_protocol', e.target.value)}>
+                    <option value="MD5">MD5</option>
+                    <option value="SHA">SHA</option>
                   </select>
                 </div>
                 <div className="form-field">
-                  <div className="form-label">Port</div>
-                  <input className="form-input" value={form.snmp_port}
-                    onChange={e => setField('snmp_port', e.target.value)}
-                    placeholder="161" />
+                  <div className="form-label">Auth Passphrase</div>
+                  <input className="form-input" type="password" value={form.snmp_auth_passphrase}
+                    onChange={e => setField('snmp_auth_passphrase', e.target.value)}
+                    placeholder="••••••••" />
                 </div>
-                {form.snmp_version === '2c' && (
-                  <div className="form-field">
-                    <div className="form-label">Community String</div>
-                    <input className="form-input" value={form.snmp_community}
-                      onChange={e => setField('snmp_community', e.target.value)}
-                      placeholder="public" />
-                  </div>
-                )}
-                {form.snmp_version === '3' && (
-                  <>
-                    <div className="form-field">
-                      <div className="form-label">Auth Protocol</div>
-                      <select className="form-input" value={form.snmp_auth_protocol}
-                        onChange={e => setField('snmp_auth_protocol', e.target.value)}>
-                        <option value="MD5">MD5</option>
-                        <option value="SHA">SHA</option>
-                      </select>
-                    </div>
-                    <div className="form-field">
-                      <div className="form-label">Auth Passphrase</div>
-                      <input className="form-input" type="password" value={form.snmp_auth_passphrase}
-                        onChange={e => setField('snmp_auth_passphrase', e.target.value)}
-                        placeholder="••••••••" />
-                    </div>
-                    <div className="form-field">
-                      <div className="form-label">Priv Protocol</div>
-                      <select className="form-input" value={form.snmp_priv_protocol}
-                        onChange={e => setField('snmp_priv_protocol', e.target.value)}>
-                        <option value="DES">DES</option>
-                        <option value="AES">AES</option>
-                      </select>
-                    </div>
-                    <div className="form-field">
-                      <div className="form-label">Priv Passphrase</div>
-                      <input className="form-input" type="password" value={form.snmp_priv_passphrase}
-                        onChange={e => setField('snmp_priv_passphrase', e.target.value)}
-                        placeholder="••••••••" />
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="infra-hint">
-                SNMP must be configured on the host. See documentation for setup instructions.
-              </div>
-            </>
-          )}
-
-          {/* ── Docker Engine config ── */}
-          {form.type === 'docker_engine' && (
-            <>
-              <SectionHeading>Docker Socket</SectionHeading>
-              <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div className="form-field">
-                  <div className="form-label">Socket Type</div>
-                  <select className="form-input" value={form.docker_socket_type}
-                    onChange={e => setField('docker_socket_type', e.target.value as 'local' | 'remote_proxy')}>
-                    <option value="local">Local</option>
-                    <option value="remote_proxy">Remote Proxy</option>
+                  <div className="form-label">Priv Protocol</div>
+                  <select className="form-input" value={form.snmp_priv_protocol}
+                    onChange={e => setField('snmp_priv_protocol', e.target.value)}>
+                    <option value="DES">DES</option>
+                    <option value="AES">AES</option>
                   </select>
                 </div>
                 <div className="form-field">
-                  <div className="form-label">Socket Path</div>
-                  <input className="form-input" value={form.docker_socket_path}
-                    onChange={e => setField('docker_socket_path', e.target.value)}
-                    placeholder="/var/run/docker.sock" />
+                  <div className="form-label">Priv Passphrase</div>
+                  <input className="form-input" type="password" value={form.snmp_priv_passphrase}
+                    onChange={e => setField('snmp_priv_passphrase', e.target.value)}
+                    placeholder="••••••••" />
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
+          <div className="infra-hint">
+            SNMP must be configured on the host. See documentation for setup instructions.
+          </div>
+        </>
+      )}
 
-          {/* ── Traefik credentials ── */}
-          {form.type === 'traefik' && (
-            <>
-              <SectionHeading>
-                Traefik API{' '}
-                {isEdit && hasCreds
-                  ? <span className="infra-cred-saved">Credentials saved</span>
-                  : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
-              </SectionHeading>
-              <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-field form-field-full">
-                  <div className="form-label">API URL</div>
-                  <input className="form-input" value={form.traefik_api_url}
-                    onChange={e => setField('traefik_api_url', e.target.value)}
-                    placeholder="http://traefik.local:8080" />
-                </div>
-                <div className="form-field form-field-full">
-                  <div className="form-label">API Key <span className="infra-optional">(optional)</span></div>
-                  <input className="form-input" type="password" value={form.traefik_api_key}
-                    onChange={e => setField('traefik_api_key', e.target.value)}
-                    placeholder={hasCreds ? 'leave blank to keep saved key' : 'Bearer ••••••••'} />
-                </div>
-              </div>
-              <div className="infra-hint">
-                NORA will poll the Traefik API every 5 minutes to discover SSL certs and HTTP routes.
-                SSL checks are auto-created per cert and shown on the Checks page.
-              </div>
-            </>
-          )}
+      {/* ── Docker Engine config ── */}
+      {form.type === 'docker_engine' && (
+        <>
+          <SectionHeading>Docker Socket</SectionHeading>
+          <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="form-field">
+              <div className="form-label">Socket Type</div>
+              <select className="form-input" value={form.docker_socket_type}
+                onChange={e => setField('docker_socket_type', e.target.value as 'local' | 'remote_proxy')}>
+                <option value="local">Local</option>
+                <option value="remote_proxy">Remote Proxy</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <div className="form-label">Socket Path</div>
+              <input className="form-input" value={form.docker_socket_path}
+                onChange={e => setField('docker_socket_path', e.target.value)}
+                placeholder="/var/run/docker.sock" />
+            </div>
+          </div>
+        </>
+      )}
 
-          {/* ── Portainer credentials ── */}
-          {form.type === 'portainer' && (
-            <>
-              <SectionHeading>
-                Portainer API{' '}
-                {isEdit && hasCreds
-                  ? <span className="infra-cred-saved">Credentials saved</span>
-                  : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
-              </SectionHeading>
-              <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="form-field form-field-full">
-                  <div className="form-label">Base URL</div>
-                  <input className="form-input" value={form.portainer_base_url}
-                    onChange={e => setField('portainer_base_url', e.target.value)}
-                    placeholder="http://portainer.local:9000" />
-                </div>
-                <div className="form-field form-field-full">
-                  <div className="form-label">API Key</div>
-                  <input className="form-input" type="password" value={form.portainer_api_key}
-                    onChange={e => setField('portainer_api_key', e.target.value)}
-                    placeholder={hasCreds ? 'leave blank to keep saved key' : '••••••••'} />
-                </div>
-              </div>
-              <div className="infra-hint">
-                Generate an API key in Portainer under My Account → Access Tokens.
-                NORA polls every 15 minutes to enrich container image update status.
-              </div>
-            </>
-          )}
+      {/* ── Traefik credentials ── */}
+      {form.type === 'traefik' && (
+        <>
+          <SectionHeading>
+            Traefik API{' '}
+            {isEdit && hasCreds
+              ? <span className="infra-cred-saved">Credentials saved</span>
+              : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
+          </SectionHeading>
+          <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="form-field form-field-full">
+              <div className="form-label">API URL</div>
+              <input className="form-input" value={form.traefik_api_url}
+                onChange={e => setField('traefik_api_url', e.target.value)}
+                placeholder="http://traefik.local:8080" />
+            </div>
+            <div className="form-field form-field-full">
+              <div className="form-label">API Key <span className="infra-optional">(optional)</span></div>
+              <input className="form-input" type="password" value={form.traefik_api_key}
+                onChange={e => setField('traefik_api_key', e.target.value)}
+                placeholder={hasCreds ? 'leave blank to keep saved key' : 'Bearer ••••••••'} />
+            </div>
+          </div>
+          <div className="infra-hint">
+            NORA will poll the Traefik API every 5 minutes to discover SSL certs and HTTP routes.
+            SSL checks are auto-created per cert and shown on the Checks page.
+          </div>
+        </>
+      )}
 
-          {formError && <div className="form-error">{formError}</div>}
-        </div>
+      {/* ── Portainer credentials ── */}
+      {form.type === 'portainer' && (
+        <>
+          <SectionHeading>
+            Portainer API{' '}
+            {isEdit && hasCreds
+              ? <span className="infra-cred-saved">Credentials saved</span>
+              : isEdit && <span className="infra-optional">(leave blank to keep existing)</span>}
+          </SectionHeading>
+          <div className="form-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="form-field form-field-full">
+              <div className="form-label">Base URL</div>
+              <input className="form-input" value={form.portainer_base_url}
+                onChange={e => setField('portainer_base_url', e.target.value)}
+                placeholder="http://portainer.local:9000" />
+            </div>
+            <div className="form-field form-field-full">
+              <div className="form-label">API Key</div>
+              <input className="form-input" type="password" value={form.portainer_api_key}
+                onChange={e => setField('portainer_api_key', e.target.value)}
+                placeholder={hasCreds ? 'leave blank to keep saved key' : '••••••••'} />
+            </div>
+          </div>
+          <div className="infra-hint">
+            Generate an API key in Portainer under My Account → Access Tokens.
+            NORA polls every 15 minutes to enrich container image update status.
+          </div>
+        </>
+      )}
 
-        <div className="infra-modal-footer">
-          <button className="form-btn primary" onClick={() => void handleSubmit()} disabled={submitting}>
-            {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Component'}
-          </button>
-          <button className="form-btn secondary" onClick={onClose}>Cancel</button>
-          {isEdit && onDelete && (
-            confirmingDelete ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-                <span style={{ fontSize: 13, color: 'var(--text2)' }}>Are you sure?</span>
-                <button
-                  className="form-btn danger"
-                  onClick={() => void handleDelete()}
-                  disabled={deleting}
-                >
-                  {deleting ? 'Deleting…' : 'Confirm'}
-                </button>
-                <button
-                  className="form-btn secondary"
-                  onClick={() => setConfirmingDelete(false)}
-                  disabled={deleting}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                className="form-btn danger"
-                style={{ marginLeft: 'auto' }}
-                onClick={() => setConfirmingDelete(true)}
-                disabled={deleting}
-              >
-                Delete
-              </button>
-            )
-          )}
-        </div>
-
-      </div>
-    </div>
+      {formError && <div className="form-error">{formError}</div>}
+    </SlidePanel>
   )
 }

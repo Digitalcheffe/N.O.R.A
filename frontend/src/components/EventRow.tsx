@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { events as eventsApi } from '../api/client'
 import type { Event } from '../api/types'
 import { formatEventTime } from '../utils/formatTime'
+import { SlidePanel } from './SlidePanel'
 import './EventRow.css'
 
 function getSourceName(event: Event, appName?: string): string {
@@ -20,7 +21,8 @@ interface Props {
 }
 
 export function EventRow({ event, appName, onAppClick }: Props) {
-  const [expanded, setExpanded] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [panelKey, setPanelKey] = useState(0)
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null)
   const [fetching, setFetching] = useState(false)
   const navigate = useNavigate()
@@ -40,7 +42,7 @@ export function EventRow({ event, appName, onAppClick }: Props) {
   }
 
   function handleClick() {
-    if (!expanded && detail === null) {
+    if (detail === null && !fetching) {
       setFetching(true)
       eventsApi
         .get(event.id)
@@ -48,32 +50,54 @@ export function EventRow({ event, appName, onAppClick }: Props) {
         .catch(() => setDetail({}))
         .finally(() => setFetching(false))
     }
-    setExpanded(!expanded)
+    setPanelKey(k => k + 1)
+    setPanelOpen(true)
   }
 
   return (
-    <div className={`event-row-wrapper${expanded ? ' expanded' : ''}`}>
-      <div className="event-row" onClick={handleClick}>
-        <div className="event-time">{formatEventTime(event.created_at)}</div>
-        <div className={`severity-badge ${sev}`} />
-        <div
-          className={`event-app${onAppClick && isAppSource ? ' event-app-link' : ''}`}
-          onClick={onAppClick && isAppSource ? (e) => { e.stopPropagation(); onAppClick(event.source_id) } : undefined}
-          title={onAppClick && isAppSource ? `Go to ${sourceName}` : undefined}
-        >
-          {sourceName}
-        </div>
-        <div className="event-text">{event.title}</div>
-        <div className={`event-sev-label ${sev}`}>{sev}</div>
-      </div>
-      {expanded && (
-        <div className="event-expand">
-          <div className="event-expand-actions">
-            <button className="btn-secondary btn-sm" onClick={handleSaveAsRule}>Save as rule</button>
+    <>
+      <div className="event-row-wrapper">
+        <div className="event-row" onClick={handleClick}>
+          <div className="event-time">{formatEventTime(event.created_at)}</div>
+          <div className={`severity-badge ${sev}`} />
+          <div
+            className={`event-app${onAppClick && isAppSource ? ' event-app-link' : ''}`}
+            onClick={onAppClick && isAppSource ? (e) => { e.stopPropagation(); onAppClick(event.source_id) } : undefined}
+            title={onAppClick && isAppSource ? `Go to ${sourceName}` : undefined}
+          >
+            {sourceName}
           </div>
-          {fetching ? 'Loading…' : JSON.stringify(detail, null, 2)}
+          <div className="event-text">{event.title}</div>
+          <div className={`event-sev-label ${sev}`}>{sev}</div>
         </div>
-      )}
-    </div>
+      </div>
+
+      <SlidePanel
+        key={panelKey}
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        title={event.title}
+        subtitle={sourceName}
+        footer={
+          <button className="sp-btn sp-btn--secondary" onClick={handleSaveAsRule}>
+            Save as rule
+          </button>
+        }
+      >
+        <div className="event-detail-meta">
+          <span className={`event-detail-sev severity-badge ${sev}`} />
+          <span className="event-detail-sev-label">{sev.toUpperCase()}</span>
+          <span className="event-detail-time">{formatEventTime(event.created_at)}</span>
+        </div>
+        <div className="event-detail-payload">
+          {fetching
+            ? <span className="event-detail-loading">Loading…</span>
+            : detail && Object.keys(detail).length > 0
+              ? <pre className="event-detail-pre">{JSON.stringify(detail, null, 2)}</pre>
+              : <span className="event-detail-empty">No payload data</span>
+          }
+        </div>
+      </SlidePanel>
+    </>
   )
 }

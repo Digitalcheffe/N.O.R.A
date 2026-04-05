@@ -1,0 +1,172 @@
+/* ── SlidePanel Dev Test Page ──────────────────────────────────────────────── */
+
+.spdev-page {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.spdev-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.spdev-heading {
+  font-family: var(--sans);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.spdev-hint {
+  font-size: 13px;
+  color: var(--text3);
+}
+
+/* ── Trigger buttons grid ───────────────────────────────────────────────── */
+
+.spdev-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.spdev-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 14px 16px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+
+.spdev-trigger:hover {
+  background: var(--bg4);
+  border-color: var(--border2);
+}
+
+.spdev-trigger-label {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.spdev-trigger-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* ── Info table ─────────────────────────────────────────────────────────── */
+
+.spdev-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.spdev-info-row {
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.spdev-info-row:last-child {
+  border-bottom: none;
+}
+
+.spdev-info-key {
+  font-family: var(--mono);
+  color: var(--accent);
+  flex-shrink: 0;
+  width: 140px;
+}
+
+.spdev-info-val {
+  color: var(--text2);
+}
+
+/* ── Body content helpers ───────────────────────────────────────────────── */
+
+.spdev-body-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.spdev-body-content p {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.spdev-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.spdev-row:last-child {
+  border-bottom: none;
+}
+
+.spdev-row-label { color: var(--text2); }
+.spdev-row-value { color: var(--text); font-family: var(--mono); font-size: 12px; }
+
+/* ── Form elements ──────────────────────────────────────────────────────── */
+
+.spdev-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.spdev-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text2);
+}
+
+.spdev-input {
+  padding: 7px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.spdev-input:focus {
+  border-color: var(--accent);
+}
+
+.spdev-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+select.spdev-input {
+  cursor: pointer;
+}

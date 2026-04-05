@@ -295,15 +295,14 @@ function TraefikShell({ component, ep }: { component: InfrastructureComponent; e
       }
       sourceId={component.id}
     >
-      {ep.editOpen && (
-        <InfraEditModal
-          component={component}
-          components={ep.allComponents}
-          hasCreds={ep.hasCreds}
-          onSave={ep.onEditSave}
-          onClose={ep.onEditClose}
-        />
-      )}
+      <InfraEditModal
+        open={ep.editOpen}
+        component={component}
+        components={ep.allComponents}
+        hasCreds={ep.hasCreds}
+        onSave={ep.onEditSave}
+        onClose={ep.onEditClose}
+      />
       <TraefikContent component={component} onOverviewLoaded={setOverview} />
     </DetailPageLayout>
   )
@@ -358,15 +357,14 @@ function SynologyShell({ component, ep }: { component: InfrastructureComponent; 
       }
       sourceId={component.id}
     >
-      {ep.editOpen && (
-        <InfraEditModal
-          component={component}
-          components={ep.allComponents}
-          hasCreds={ep.hasCreds}
-          onSave={ep.onEditSave}
-          onClose={ep.onEditClose}
-        />
-      )}
+      <InfraEditModal
+        open={ep.editOpen}
+        component={component}
+        components={ep.allComponents}
+        hasCreds={ep.hasCreds}
+        onSave={ep.onEditSave}
+        onClose={ep.onEditClose}
+      />
       <SynologyContent component={component} onDetailLoaded={handleDetailLoaded} />
     </DetailPageLayout>
   )
@@ -557,15 +555,14 @@ export function InfraComponentDetail() {
         }
         sourceId={component.id}
       >
-        {editOpen && (
-          <InfraEditModal
-            component={component}
-            components={allComponents}
-            hasCreds={component.has_credentials ?? false}
-            onSave={handleEditSave}
-            onClose={() => setEditOpen(false)}
-          />
-        )}
+        <InfraEditModal
+          open={editOpen}
+          component={component}
+          components={allComponents}
+          hasCreds={component.has_credentials ?? false}
+          onSave={handleEditSave}
+          onClose={() => setEditOpen(false)}
+        />
         <PortainerContent
           component={component}
           onCountsLoaded={(total, running) => setPortainerCounts({ total, running })}
@@ -600,15 +597,14 @@ export function InfraComponentDetail() {
         }
         sourceId={component.id}
       >
-        {editOpen && (
-          <InfraEditModal
-            component={component}
-            components={allComponents}
-            hasCreds={component.has_credentials ?? false}
-            onSave={handleEditSave}
-            onClose={() => setEditOpen(false)}
-          />
-        )}
+        <InfraEditModal
+          open={editOpen}
+          component={component}
+          components={allComponents}
+          hasCreds={component.has_credentials ?? false}
+          onSave={handleEditSave}
+          onClose={() => setEditOpen(false)}
+        />
         <ProxmoxContent component={component} />
       </DetailPageLayout>
     )
@@ -718,15 +714,14 @@ export function InfraComponentDetail() {
       }
       sourceId={component.id}
     >
-      {editOpen && (
-        <InfraEditModal
-          component={component}
-          components={allComponents}
-          hasCreds={component.has_credentials ?? false}
-          onSave={handleEditSave}
-          onClose={() => setEditOpen(false)}
-        />
-      )}
+      <InfraEditModal
+        open={editOpen}
+        component={component}
+        components={allComponents}
+        hasCreds={component.has_credentials ?? false}
+        onSave={handleEditSave}
+        onClose={() => setEditOpen(false)}
+      />
 
       {/* SNMP hosts: three-section detail view */}
       {component.collection_method === 'snmp' && (

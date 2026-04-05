@@ -17,6 +17,7 @@ import { InfraComponentDetail } from './pages/InfraComponentDetail'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
 import { Profile } from './pages/Profile'
+import { SlidePanelDevPage } from './pages/SlidePanelDevPage'
 
 export default function App() {
   return (
@@ -26,6 +27,9 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/setup" element={<Setup />} />
+            {import.meta.env.DEV && (
+              <Route path="/dev/slide-panel" element={<SlidePanelDevPage />} />
+            )}
             <Route element={
               <AuthGuard>
                 <EnvStatusProvider>

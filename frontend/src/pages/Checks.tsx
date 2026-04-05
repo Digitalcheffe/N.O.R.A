@@ -6,6 +6,7 @@ import { SSLRow } from '../components/SSLRow'
 import { checks as checksApi, integrations as integrationsApi, apps as appsApi, appTemplates as appTemplatesApi } from '../api/client'
 import type { App, MonitorCheck, SSLCert, InfraIntegration, TraefikCert } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
+import { SlidePanel } from '../components/SlidePanel'
 import {
   type FormFields,
   defaultForm,
@@ -13,7 +14,6 @@ import {
   formToInput,
 } from '../components/checkFormHelpers'
 import { formatEventTime } from '../utils/formatTime'
-import '../styles/Modal.css'
 import './Checks.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -202,13 +202,6 @@ export function Checks() {
       .catch(() => {})
   }, [tick])
 
-  useEffect(() => {
-    if (!showAddForm) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') closeAddForm() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [showAddForm])
-
   const sslCerts = extractSSLCerts(checkList)
 
   function handleIntegrationChange(integrationId: string) {
@@ -298,28 +291,6 @@ export function Checks() {
       <Topbar title="Monitor Checks" />
       <div className="content">
 
-        {showAddForm && (
-          <div className="modal-backdrop">
-            <div className="modal" style={{ width: 560 }}>
-              <CheckForm
-                form={addForm}
-                onChange={handleAddChange}
-                onSubmit={handleAddSubmit}
-                onCancel={closeAddForm}
-                error={addError}
-                submitting={addSubmitting}
-                title="New Check"
-                submitLabel="Add Check"
-                traefikIntegrations={traefikIntegrations}
-                traefikCerts={traefikCerts}
-                onIntegrationChange={handleIntegrationChange}
-                apps={appList.map(a => ({ id: a.id, name: a.name }))}
-                targetSuggestion={targetSuggestion}
-              />
-            </div>
-          </div>
-        )}
-
         <div className="section-header">
           <span className="section-title">Active Checks</span>
           <button className="section-action" onClick={() => setShowAddForm(prev => !prev)}>
@@ -361,6 +332,38 @@ export function Checks() {
         )}
 
       </div>
+
+      <SlidePanel
+        open={showAddForm}
+        onClose={closeAddForm}
+        title="Add Check"
+        footer={
+          <button
+            className="sp-btn sp-btn--primary"
+            onClick={() => void handleAddSubmit()}
+            disabled={addSubmitting}
+          >
+            {addSubmitting ? 'Saving…' : 'Add Check'}
+          </button>
+        }
+      >
+        <CheckForm
+          form={addForm}
+          onChange={handleAddChange}
+          onSubmit={handleAddSubmit}
+          onCancel={closeAddForm}
+          error={addError}
+          submitting={addSubmitting}
+          title=""
+          submitLabel="Add Check"
+          traefikIntegrations={traefikIntegrations}
+          traefikCerts={traefikCerts}
+          onIntegrationChange={handleIntegrationChange}
+          apps={appList.map(a => ({ id: a.id, name: a.name }))}
+          targetSuggestion={targetSuggestion}
+          hideActions
+        />
+      </SlidePanel>
     </>
   )
 }
