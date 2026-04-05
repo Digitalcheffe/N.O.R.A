@@ -81,24 +81,22 @@ func pollEntry(
 ) error {
 	rawURL := strings.TrimRight(baseURL, "/") + entry.Path
 
-	// Append API key as query parameter when auth_type is apikey_query.
-	if entry.AuthType == "apikey_query" && entry.AuthHeader != "" && apiKey != "" {
-		if strings.Contains(rawURL, "?") {
-			rawURL += "&" + entry.AuthHeader + "=" + apiKey
-		} else {
-			rawURL += "?" + entry.AuthHeader + "=" + apiKey
-		}
-	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 
+	// Attach auth credentials to the request without embedding secrets in any URL string.
 	switch entry.AuthType {
 	case "apikey_header":
 		if entry.AuthHeader != "" && apiKey != "" {
 			req.Header.Set(entry.AuthHeader, apiKey)
+		}
+	case "apikey_query":
+		if entry.AuthHeader != "" && apiKey != "" {
+			q := req.URL.Query()
+			q.Set(entry.AuthHeader, apiKey)
+			req.URL.RawQuery = q.Encode()
 		}
 	case "bearer":
 		if apiKey != "" {
