@@ -23,6 +23,7 @@ type Store struct {
 	Snapshots            SnapshotRepo
 	Rules                RuleRepo
 	DigestRegistry       DigestRegistryRepo
+	AppMetricSnapshots   AppMetricSnapshotRepo
 }
 
 // NewStore creates a Store backed by the given repositories.
@@ -48,6 +49,7 @@ func NewStore(
 	snapshots SnapshotRepo,
 	rules RuleRepo,
 	digestRegistry DigestRegistryRepo,
+	appMetricSnapshots AppMetricSnapshotRepo,
 ) *Store {
 	return &Store{
 		Apps:                 apps,
@@ -71,5 +73,6 @@ func NewStore(
 		Snapshots:            snapshots,
 		Rules:                rules,
 		DigestRegistry:       digestRegistry,
+		AppMetricSnapshots:   appMetricSnapshots,
 	}
 }

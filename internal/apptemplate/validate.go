@@ -9,6 +9,14 @@ var validValueTypes = map[string]bool{
 	"list":    true,
 }
 
+var validAuthTypes = map[string]bool{
+	"":             true, // none / omitted
+	"none":         true,
+	"apikey_header": true,
+	"apikey_query":  true,
+	"bearer":        true,
+}
+
 // validate checks the structural integrity of a loaded AppTemplate.
 // Returns a descriptive error if any constraint is violated.
 // Called at load time; callers should log the error and skip the profile rather than crashing.
@@ -33,6 +41,9 @@ func validate(id string, t *AppTemplate) error {
 		}
 		if !validValueTypes[p.ValueType] {
 			return fmt.Errorf("%s: api_polling[%d]: name=%q: value_type %q must be one of count, string, boolean, list", id, i, p.Name, p.ValueType)
+		}
+		if !validAuthTypes[p.AuthType] {
+			return fmt.Errorf("%s: api_polling[%d]: name=%q: auth_type %q must be one of apikey_header, apikey_query, bearer, none", id, i, p.Name, p.AuthType)
 		}
 		if _, dup := pollingNames[p.Name]; dup {
 			return fmt.Errorf("%s: api_polling: duplicate name %q", id, p.Name)

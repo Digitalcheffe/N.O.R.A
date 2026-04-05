@@ -47,6 +47,7 @@ func newSynologyTestStore(t *testing.T) *repo.Store {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 }
 

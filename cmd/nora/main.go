@@ -96,6 +96,7 @@ func main() {
 	snapshotRepo := repo.NewSnapshotRepo(db)
 	ruleRepo := repo.NewRuleRepo(db)
 	digestRegistryRepo := repo.NewDigestRegistryRepo(db)
+	appMetricSnapshotRepo := repo.NewAppMetricSnapshotRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
@@ -107,6 +108,7 @@ func main() {
 		snapshotRepo,
 		ruleRepo,
 		digestRegistryRepo,
+		appMetricSnapshotRepo,
 	)
 
 	// Bootstrap admin account — only runs when the users table is empty and
@@ -225,6 +227,11 @@ func main() {
 	scanScheduler.RegisterGlobalDiscovery(scanner.GlobalDiscoveryFunc(func(ctx context.Context) {
 		if err := discovery.RunMetricsCollection(ctx, store); err != nil {
 			log.Printf("metrics collection: discovery pass: %v", err)
+		}
+	}))
+	scanScheduler.RegisterGlobalDiscovery(scanner.GlobalDiscoveryFunc(func(ctx context.Context) {
+		if err := discovery.RunAPIPolling(ctx, store, registry); err != nil {
+			log.Printf("api polling: discovery pass: %v", err)
 		}
 	}))
 
