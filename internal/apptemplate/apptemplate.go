@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -80,24 +81,49 @@ type Monitor struct {
 // DigestCategory defines a named event category used in the dashboard summary bar.
 // A category matches events where the given field equals the given value,
 // and/or where severity equals MatchSeverity. Empty strings are ignored.
+// Source is optional for backward compatibility; defaults to "webhook" in the reconciler.
 type DigestCategory struct {
+	Source        string `yaml:"source"`
 	Label         string `yaml:"label"`
 	MatchField    string `yaml:"match_field"`
 	MatchValue    string `yaml:"match_value"`
 	MatchSeverity string `yaml:"match_severity"`
 }
 
-// Digest holds digest category definitions for the dashboard.
+// DigestWidget defines a widget in the digest dashboard, backed by either an
+// API polling metric (source=api) or a webhook event count (source=webhook).
+type DigestWidget struct {
+	Source     string `yaml:"source"`
+	Label      string `yaml:"label"`
+	Metric     string `yaml:"metric"`
+	MatchField string `yaml:"match_field"`
+	MatchValue string `yaml:"match_value"`
+}
+
+// Digest holds digest category and widget definitions for the dashboard.
 type Digest struct {
 	Categories []DigestCategory `yaml:"categories"`
+	Widgets    []DigestWidget   `yaml:"widgets"`
+}
+
+// APIPollingEntry declares a single API endpoint to poll for a named metric.
+// Auth credentials are not stored here; the poller reads them from the app config at runtime.
+type APIPollingEntry struct {
+	Path         string `yaml:"path"`
+	Name         string `yaml:"name"`
+	Label        string `yaml:"label"`
+	Target       string `yaml:"target"`
+	ValueType    string `yaml:"value_type"`
+	EventMessage string `yaml:"event_message"`
 }
 
 // AppTemplate describes how to process webhooks and render dashboard data for a specific app.
 type AppTemplate struct {
-	Meta    AppTemplateMeta `yaml:"meta"`
-	Webhook Webhook         `yaml:"webhook"`
-	Monitor Monitor         `yaml:"monitor"`
-	Digest  Digest          `yaml:"digest"`
+	Meta       AppTemplateMeta   `yaml:"meta"`
+	Webhook    Webhook           `yaml:"webhook"`
+	Monitor    Monitor           `yaml:"monitor"`
+	Digest     Digest            `yaml:"digest"`
+	APIPolling []APIPollingEntry `yaml:"api_polling"`
 
 	// SourcePath is the absolute path to the YAML file this template was loaded from.
 	// Set at load time; not serialized to YAML.
@@ -139,6 +165,10 @@ func NewRegistry(fsys fs.FS) (*Registry, error) {
 		}
 
 		id := strings.TrimSuffix(e.Name(), ".yaml")
+		if err := validate(id, &t); err != nil {
+			log.Printf("app template %s: validation error: %v — skipping", id, err)
+			continue
+		}
 		reg.templates[id] = &t
 	}
 
@@ -236,10 +266,15 @@ func loadDirIntoMap(dir string, m map[string]*AppTemplate) error {
 		}
 		var t AppTemplate
 		if err := yaml.Unmarshal(data, &t); err != nil {
-			return fmt.Errorf("parse %s: %w", e.Name(), err)
+			log.Printf("app template %s: parse error: %v — skipping", e.Name(), err)
+			continue
 		}
 		t.SourcePath = path
 		id := strings.TrimSuffix(e.Name(), ".yaml")
+		if err := validate(id, &t); err != nil {
+			log.Printf("app template %s: validation error: %v — skipping", id, err)
+			continue
+		}
 		m[id] = &t
 	}
 	return nil

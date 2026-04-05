@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-
 var nonAlphanumRe = regexp.MustCompile(`[^a-z0-9_]+`)
 
 // slugify converts a label to a stable name: lowercase, spaces to underscores,
@@ -40,20 +39,21 @@ func NewRegistryReconciler(r repo.DigestRegistryRepo, registry *apptemplate.Regi
 }
 
 // Reconcile iterates over all loaded app templates, upserts their digest categories
-// into the registry, and deactivates entries no longer present in the template.
+// and widgets into the registry, and deactivates entries no longer present in the template.
 func (rc *RegistryReconciler) Reconcile(ctx context.Context) error {
 	templates := rc.registry.List()
 	now := time.Now().UTC()
 
 	for profileID, tmpl := range templates {
-		if len(tmpl.Digest.Categories) == 0 {
+		hasEntries := len(tmpl.Digest.Categories) > 0 || len(tmpl.Digest.Widgets) > 0
+		if !hasEntries {
 			continue
 		}
 
 		profileSource := tmpl.SourcePath
 
-		// Build the set of names declared in the current template.
-		currentNames := make(map[string]struct{}, len(tmpl.Digest.Categories))
+		// Build the set of names declared in the current template to detect removals.
+		currentNames := make(map[string]struct{})
 
 		for _, cat := range tmpl.Digest.Categories {
 			name := slugify(cat.Label)
@@ -61,6 +61,11 @@ func (rc *RegistryReconciler) Reconcile(ctx context.Context) error {
 				continue
 			}
 			currentNames[name] = struct{}{}
+
+			source := cat.Source
+			if source == "" {
+				source = "webhook"
+			}
 
 			config, err := categoryConfig(cat)
 			if err != nil {
@@ -70,7 +75,7 @@ func (rc *RegistryReconciler) Reconcile(ctx context.Context) error {
 			entry := models.DigestRegistryEntry{
 				ID:            uuid.NewString(),
 				ProfileID:     profileID,
-				Source:        "webhook",
+				Source:        source,
 				EntryType:     "category",
 				Name:          name,
 				Label:         cat.Label,
@@ -85,6 +90,39 @@ func (rc *RegistryReconciler) Reconcile(ctx context.Context) error {
 				return fmt.Errorf("upsert %s/%s: %w", profileID, name, err)
 			}
 			log.Printf("digest registry: upserted %s/%s (%s)", profileID, name, cat.Label)
+		}
+
+		for _, w := range tmpl.Digest.Widgets {
+			// Prefix widget names to avoid UNIQUE(profile_id, name) collisions with categories.
+			name := "widget_" + slugify(w.Label)
+			if name == "widget_" {
+				continue
+			}
+			currentNames[name] = struct{}{}
+
+			config, err := widgetConfig(w)
+			if err != nil {
+				return fmt.Errorf("reconcile widget %s/%s: %w", profileID, name, err)
+			}
+
+			entry := models.DigestRegistryEntry{
+				ID:            uuid.NewString(),
+				ProfileID:     profileID,
+				Source:        w.Source,
+				EntryType:     "widget",
+				Name:          name,
+				Label:         w.Label,
+				Config:        config,
+				ProfileSource: profileSource,
+				Active:        true,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+
+			if err := rc.repo.Upsert(ctx, entry); err != nil {
+				return fmt.Errorf("upsert widget %s/%s: %w", profileID, name, err)
+			}
+			log.Printf("digest registry: upserted widget %s/%s (%s)", profileID, name, w.Label)
 		}
 
 		// Deactivate entries present in DB but not in the current template.
@@ -113,6 +151,25 @@ func categoryConfig(cat apptemplate.DigestCategory) (models.JSONText, error) {
 	}
 	if cat.MatchSeverity != "" {
 		m["match_severity"] = cat.MatchSeverity
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return models.JSONText(b), nil
+}
+
+// widgetConfig encodes the relevant fields from a DigestWidget as a JSON config blob.
+func widgetConfig(w apptemplate.DigestWidget) (models.JSONText, error) {
+	m := map[string]string{}
+	if w.Metric != "" {
+		m["metric"] = w.Metric
+	}
+	if w.MatchField != "" {
+		m["match_field"] = w.MatchField
+	}
+	if w.MatchValue != "" {
+		m["match_value"] = w.MatchValue
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
