@@ -1,4 +1,5 @@
 data/
+vapid_keys/
 *.db
 *.db-shm
 *.db-wal
