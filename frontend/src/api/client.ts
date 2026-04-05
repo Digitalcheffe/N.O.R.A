@@ -16,6 +16,7 @@ import type {
   UpdateUserInput,
   CustomProfile,
   DashboardSummaryResponse,
+  DigestRegistryListResponse,
   DigestSchedule,
   DiscoverResult,
   DiscoveredContainer,
@@ -353,6 +354,9 @@ export const appTemplates = {
 
   reload: () =>
     request<{ loaded: number }>('POST', '/app-templates/reload'),
+
+  getRaw: (id: string) =>
+    request<{ yaml: string }>('GET', `/app-templates/${id}/raw`),
 }
 
 // ── Infrastructure Integrations ───────────────────────────────────────────────
@@ -638,4 +642,17 @@ export const portainer = {
 
   endpointContainers: (componentId: string, endpointId: number) =>
     request<ListResponse<PortainerContainerResource>>('GET', `/integrations/portainer/${componentId}/endpoints/${endpointId}/containers`),
+}
+
+// ── Digest Registry ───────────────────────────────────────────────────────────
+
+export const digestRegistry = {
+  list: () =>
+    request<DigestRegistryListResponse>('GET', '/digest-registry'),
+
+  setActive: (id: string, active: boolean) =>
+    request<void>('PUT', `/digest-registry/${id}/active`, { active }),
+
+  delete: (id: string) =>
+    request<void>('DELETE', `/digest-registry/${id}`),
 }

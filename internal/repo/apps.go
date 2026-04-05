@@ -13,6 +13,9 @@ import (
 // ErrNotFound is returned when a requested record does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrConflict is returned when an operation is not permitted due to the current state of the record.
+var ErrConflict = errors.New("conflict")
+
 // AppRepo defines CRUD operations for apps.
 type AppRepo interface {
 	List(ctx context.Context) ([]models.App, error)

@@ -37,6 +37,7 @@ func (h *AppTemplatesHandler) Routes(r chi.Router) {
 	r.Get("/app-templates/custom", h.ListCustom)
 	r.Delete("/app-templates/custom/{id}", h.DeleteCustom)
 	r.Get("/app-templates/{id}", h.Get)
+	r.Get("/app-templates/{id}/raw", h.GetRaw)
 }
 
 // appTemplateMeta is the list-response shape — meta fields only, no internals.
@@ -114,6 +115,25 @@ func (h *AppTemplatesHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, detail)
+}
+
+// GetRaw handles GET /app-templates/{id}/raw — returns the full template marshaled as YAML.
+func (h *AppTemplatesHandler) GetRaw(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	t, err := h.registry.Get(id)
+	if err != nil || t == nil {
+		writeError(w, http.StatusNotFound, "app template not found")
+		return
+	}
+
+	raw, err := yaml.Marshal(t)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to marshal template")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"yaml": string(raw)})
 }
 
 // Reload handles POST /app-templates/reload — re-reads all templates from disk.

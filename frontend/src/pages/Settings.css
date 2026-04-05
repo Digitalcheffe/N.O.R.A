@@ -589,6 +589,206 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Digest Registry tab ──────────────────────────────────────────────────── */
+
+.dr-overview {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+
+.settings-empty {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text3);
+  padding: 8px 0;
+}
+
+.dr-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dr-row--inactive td {
+  opacity: 0.45;
+}
+
+.dr-profile-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.dr-table-scroll .settings-metrics-table td {
+  white-space: nowrap;
+}
+
+.dr-label-editable {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--border2);
+  color: var(--text1);
+  white-space: nowrap;
+}
+
+.dr-label-editable:hover {
+  border-bottom-color: var(--text2);
+  color: var(--text);
+}
+
+.settings-btn.danger:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ── Digest Registry split layout (desktop) ──────────────────────────────── */
+
+.dr-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.dr-split--open {
+  grid-template-columns: 1fr 380px;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dr-split-list {
+  min-width: 0;
+}
+
+.dr-split--open .dr-split-list {
+  border-right: 1px solid var(--border);
+}
+
+.dr-split-detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg2);
+}
+
+.dr-split-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.dr-split-detail-title {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dr-split-detail-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.dr-row--selected td {
+  background: var(--accent-dim);
+}
+
+.dr-status-dot {
+  font-size: 11px;
+  font-family: var(--sans);
+  white-space: nowrap;
+}
+
+.dr-status-dot--on  { color: var(--green, #4ade80); }
+.dr-status-dot--off { color: var(--text3); }
+
+/* ── Digest Registry entry panel ──────────────────────────────────────────── */
+
+.dr-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 20px;
+}
+
+.dr-panel-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dr-panel-profile-name {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.dr-panel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dr-panel-label {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+}
+
+.dr-panel-code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  align-self: flex-start;
+}
+
+.dr-panel-yaml {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.dr-panel-danger-zone {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.dr-panel-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* ── Web Push section ─────────────────────────────────────────────────────── */
 
 .push-status-row {

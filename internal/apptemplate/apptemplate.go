@@ -98,6 +98,10 @@ type AppTemplate struct {
 	Webhook Webhook         `yaml:"webhook"`
 	Monitor Monitor         `yaml:"monitor"`
 	Digest  Digest          `yaml:"digest"`
+
+	// SourcePath is the absolute path to the YAML file this template was loaded from.
+	// Set at load time; not serialized to YAML.
+	SourcePath string `yaml:"-" json:"-"`
 }
 
 // Registry loads all bundled YAML app templates from an embedded filesystem.
@@ -225,7 +229,8 @@ func loadDirIntoMap(dir string, m map[string]*AppTemplate) error {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		path := filepath.Join(dir, e.Name())
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", e.Name(), err)
 		}
@@ -233,6 +238,7 @@ func loadDirIntoMap(dir string, m map[string]*AppTemplate) error {
 		if err := yaml.Unmarshal(data, &t); err != nil {
 			return fmt.Errorf("parse %s: %w", e.Name(), err)
 		}
+		t.SourcePath = path
 		id := strings.TrimSuffix(e.Name(), ".yaml")
 		m[id] = &t
 	}

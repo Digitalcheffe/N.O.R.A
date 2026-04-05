@@ -831,3 +831,23 @@ export interface PortainerContainerResource {
   image_update_available: boolean
   stack?: string
 }
+
+
+export interface DigestRegistryEntry {
+  id: string
+  profile_id: string
+  source: 'webhook' | 'api'
+  entry_type: 'category' | 'widget'
+  name: string
+  label: string
+  config: Record<string, string>
+  profile_source: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface DigestRegistryListResponse {
+  data: DigestRegistryEntry[]
+  total: number
+}

@@ -23,6 +23,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/jobs"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/monitor"
+	"github.com/digitalcheffe/nora/internal/profile"
 	"github.com/digitalcheffe/nora/internal/push"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/internal/rules"
@@ -94,6 +95,7 @@ func main() {
 	webPushSubscriptionRepo := repo.NewWebPushSubscriptionRepo(db)
 	snapshotRepo := repo.NewSnapshotRepo(db)
 	ruleRepo := repo.NewRuleRepo(db)
+	digestRegistryRepo := repo.NewDigestRegistryRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
@@ -104,6 +106,7 @@ func main() {
 		webPushSubscriptionRepo,
 		snapshotRepo,
 		ruleRepo,
+		digestRegistryRepo,
 	)
 
 	// Bootstrap admin account — only runs when the users table is empty and
@@ -150,6 +153,13 @@ func main() {
 		log.Fatalf("app template registry init failed: %v", err)
 	}
 	log.Printf("  templates: %d loaded from %s", len(registry.List()), cfg.TemplatesPath)
+
+	// Digest registry reconciliation — runs synchronously at startup.
+	// Inserts/updates entries for all profile digest categories and deactivates orphans.
+	reconciler := profile.NewRegistryReconciler(digestRegistryRepo, registry)
+	if err := reconciler.Reconcile(context.Background()); err != nil {
+		log.Printf("digest registry reconcile: %v", err)
+	}
 
 	// Propagate any check_url changes from updated built-in profiles to existing
 	// checks. Runs in the background so startup is not blocked; the monitor
@@ -437,6 +447,7 @@ func main() {
 		pushHandler.Routes(r)
 		api.NewRulesHandler(store, rulesEngine).Routes(r)
 		api.NewJobsHandler(jobRegistry).Routes(r)
+		api.NewDigestRegistryHandler(store).Routes(r)
 		api.NewPortainerHandler(store).Routes(r)
 		authHandler.Routes(r)
 	})
