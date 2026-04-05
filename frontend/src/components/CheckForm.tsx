@@ -18,6 +18,7 @@ interface CheckFormProps {
   onIntegrationChange: (integrationId: string) => void
   apps?: { id: string; name: string }[]
   targetSuggestion?: string  // ghost-text placeholder derived from the linked app's profile
+  hideActions?: boolean      // when true, omit the built-in form-actions row (SlidePanel footer takes over)
 }
 
 const CHECK_TYPES: CheckType[] = ['ping', 'url', 'ssl', 'dns']
@@ -38,6 +39,7 @@ export function CheckForm({
   onIntegrationChange,
   apps,
   targetSuggestion,
+  hideActions = false,
 }: CheckFormProps) {
   const hasTraefik = traefikIntegrations.length > 0
   const selectedIntegration = traefikIntegrations.find(i => i.id === form.integration_id)
@@ -76,7 +78,7 @@ export function CheckForm({
               onChange={e => onChange('app_id', e.target.value)}
             >
               <option value="">None</option>
-              {apps.map(a => (
+              {[...apps].sort((a, b) => a.name.localeCompare(b.name)).map(a => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
@@ -123,7 +125,7 @@ export function CheckForm({
                   }}
                 >
                   <option value="">Select integration…</option>
-                  {traefikIntegrations.map(i => (
+                  {[...traefikIntegrations].sort((a, b) => a.name.localeCompare(b.name)).map(i => (
                     <option key={i.id} value={i.id}>{i.name}</option>
                   ))}
                 </select>
@@ -144,7 +146,7 @@ export function CheckForm({
                   onChange={e => onChange('traefik_domain', e.target.value)}
                 >
                   <option value="">Select domain…</option>
-                  {traefikCerts.map(c => (
+                  {[...traefikCerts].sort((a, b) => a.domain.localeCompare(b.domain)).map(c => (
                     <option key={c.id} value={c.domain}>{c.domain}</option>
                   ))}
                 </select>
@@ -286,15 +288,17 @@ export function CheckForm({
         )}
       </div>
       {error && <div className="form-error">{error}</div>}
-      <div className="form-actions">
-        <button className="form-btn primary" onClick={onSubmit} disabled={submitting}>
-          {submitting ? 'Saving…' : submitLabel}
-        </button>
-        <button className="form-btn secondary" onClick={onCancel}>
-          Cancel
-        </button>
-        {extraAction}
-      </div>
+      {!hideActions && (
+        <div className="form-actions">
+          <button className="form-btn primary" onClick={onSubmit} disabled={submitting}>
+            {submitting ? 'Saving…' : submitLabel}
+          </button>
+          <button className="form-btn secondary" onClick={onCancel}>
+            Cancel
+          </button>
+          {extraAction}
+        </div>
+      )}
     </div>
   )
 }

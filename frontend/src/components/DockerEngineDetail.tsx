@@ -316,7 +316,7 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
                           onChange={e => setLinkForm(prev => prev && { ...prev, profileId: e.target.value })}
                         >
                           <option value="">— select profile —</option>
-                          {templates.map(t => (
+                          {[...templates].sort((a, b) => a.name.localeCompare(b.name)).map(t => (
                             <option key={t.id} value={t.id}>{t.name}</option>
                           ))}
                         </select>
@@ -368,6 +368,7 @@ export function DockerEngineDetail({ engineId, onCountsLoaded }: Props) {
                         <option value="">— select app —</option>
                         {apps
                           .filter(a => !linkedAppIds.has(a.id))
+                          .sort((a, b) => a.name.localeCompare(b.name))
                           .map(a => (
                             <option key={a.id} value={a.id}>{a.name}</option>
                           ))}

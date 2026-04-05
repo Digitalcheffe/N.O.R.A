@@ -5,7 +5,7 @@ import { Topbar } from '../components/Topbar'
 import { apps as appsApi, appTemplates as templatesApi, dashboard as dashboardApi } from '../api/client'
 import type { App, AppTemplate } from '../api/types'
 import { AppSettingsModal } from './AppDetail'
-import '../styles/Modal.css'
+import { SlidePanel } from '../components/SlidePanel'
 import './Apps.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,16 +45,17 @@ const CAPABILITY_LABEL: Record<string, string> = {
   limited:      'Limited',
 }
 
-// ── AddApp Modal ──────────────────────────────────────────────────────────────
+// ── AddApp Panel ──────────────────────────────────────────────────────────────
 
 type AddStep = 'setup' | 'config' | 'done'
 
 interface AddAppModalProps {
+  open: boolean
   onClose: () => void
   onCreated: (app: App) => void
 }
 
-function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
+function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
   const navigate = useNavigate()
   const [step, setStep] = useState<AddStep>('setup')
 
@@ -74,20 +75,12 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
   const [createdApp, setCreatedApp] = useState<App | null>(null)
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => { nameRef.current?.focus() }, [])
-
   useEffect(() => {
     templatesApi.list()
       .then(res => setTemplates(res.data))
       .catch(console.error)
       .finally(() => setTemplatesLoading(false))
   }, [])
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null
 
@@ -142,139 +135,144 @@ function AddAppModal({ onClose, onCreated }: AddAppModalProps) {
     setCreatedApp(null); setCopied(false); setSubmitError('')
   }
 
+  const panelTitle =
+    step === 'done' ? '✓ App Created' :
+    step === 'config' ? `Configure${selectedTemplate ? ` ${selectedTemplate.name}` : ' App'}` :
+    'New App'
+
+  const panelSubtitle =
+    step === 'done' ? "Copy the webhook URL and paste it into your app's notification settings" :
+    step === 'config' ? (selectedTemplate?.description ?? 'Set optional details for this app connection') :
+    'Name your connection and pick an app template'
+
+  const panelFooter =
+    step === 'setup' ? (
+      <button
+        className="sp-btn sp-btn--primary"
+        onClick={() => setStep('config')}
+        disabled={!appName.trim()}
+      >
+        Next →
+      </button>
+    ) : step === 'config' ? (
+      <>
+        <button className="sp-btn sp-btn--secondary" onClick={() => setStep('setup')}>
+          ← Back
+        </button>
+        <button
+          className="sp-btn sp-btn--primary"
+          onClick={() => void handleCreate()}
+          disabled={submitting}
+        >
+          {submitting ? 'Creating…' : 'Create App'}
+        </button>
+      </>
+    ) : createdApp ? (
+      <>
+        <button className="sp-btn sp-btn--secondary" onClick={handleAddAnother}>
+          + Add Another
+        </button>
+        <button
+          className="sp-btn sp-btn--primary"
+          onClick={() => navigate(`/apps/${createdApp.id}`)}
+        >
+          View App →
+        </button>
+      </>
+    ) : null
+
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
+    <SlidePanel
+      open={open}
+      onClose={onClose}
+      title={panelTitle}
+      subtitle={panelSubtitle}
+      footer={panelFooter ?? undefined}
+    >
+      {step === 'setup' && (
+        <>
+          <label className="modal-label">App Name</label>
+          <input
+            ref={nameRef}
+            className="modal-input"
+            placeholder="e.g. Sonarr, Home Assistant…"
+            value={appName}
+            onChange={e => setAppName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && appName.trim() && setStep('config')}
+          />
 
-        {step === 'setup' && (
-          <>
-            <div className="modal-header">
-              <div className="modal-title">New App</div>
-              <div className="modal-subtitle">Name your connection and pick an app template</div>
-              <button className="modal-close" onClick={onClose}>✕</button>
-            </div>
-            <div className="modal-body">
-              <label className="modal-label">App Name</label>
-              <input
-                ref={nameRef}
-                className="modal-input"
-                placeholder="e.g. Sonarr, Home Assistant…"
-                value={appName}
-                onChange={e => setAppName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && appName.trim() && setStep('config')}
-              />
+          <label className="modal-label" style={{ marginTop: 16 }}>
+            App Template <span className="modal-hint">(optional — enables field mapping)</span>
+          </label>
+          <select
+            className="modal-input"
+            value={selectedTemplateId}
+            onChange={e => setSelectedTemplateId(e.target.value)}
+            disabled={templatesLoading}
+          >
+            <option value="">Generic Webhook — raw JSON, no mapping</option>
+            {templatesLoading ? (
+              <option disabled>Loading templates…</option>
+            ) : (
+              Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
+                <optgroup key={cat} label={cat}>
+                  {[...items].sort((a, b) => a.name.localeCompare(b.name)).map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} — {CAPABILITY_LABEL[t.capability] ?? t.capability}
+                    </option>
+                  ))}
+                </optgroup>
+              ))
+            )}
+          </select>
+        </>
+      )}
 
+      {step === 'config' && (
+        <>
+          <label className="modal-label">
+            App URL <span className="modal-hint">(optional — enables the Launch button)</span>
+          </label>
+          <input className="modal-input" placeholder="https://sonarr.yourdomain.com"
+            value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+
+          {needsMonitor && (
+            <>
               <label className="modal-label" style={{ marginTop: 16 }}>
-                App Template <span className="modal-hint">(optional — enables field mapping)</span>
+                Monitor URL <span className="modal-hint">(NORA will ping this to check uptime)</span>
               </label>
-              <select
-                className="modal-input"
-                value={selectedTemplateId}
-                onChange={e => setSelectedTemplateId(e.target.value)}
-                disabled={templatesLoading}
-              >
-                <option value="">Generic Webhook — raw JSON, no mapping</option>
-                {templatesLoading ? (
-                  <option disabled>Loading templates…</option>
-                ) : (
-                  Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
-                    <optgroup key={cat} label={cat}>
-                      {items.map(t => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} — {CAPABILITY_LABEL[t.capability] ?? t.capability}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))
-                )}
-              </select>
-            </div>
-            <div className="modal-footer">
-              <button className="modal-btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="modal-btn-primary" onClick={() => setStep('config')} disabled={!appName.trim()}>
-                Next →
-              </button>
-            </div>
-          </>
-        )}
+              <input className="modal-input" placeholder="https://sonarr.yourdomain.com/ping"
+                value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
+            </>
+          )}
 
-        {step === 'config' && (
-          <>
-            <div className="modal-header">
-              <div className="modal-title">Configure{selectedTemplate ? ` ${selectedTemplate.name}` : ' App'}</div>
-              <div className="modal-subtitle">
-                {selectedTemplate ? selectedTemplate.description : 'Set optional details for this app connection'}
-              </div>
-              <button className="modal-close" onClick={onClose}>✕</button>
-            </div>
-            <div className="modal-body">
-              <label className="modal-label">
-                App URL <span className="modal-hint">(optional — enables the Launch button)</span>
-              </label>
-              <input className="modal-input" placeholder="https://sonarr.yourdomain.com"
-                value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+          <label className="modal-label" style={{ marginTop: 16 }}>
+            Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>
+          </label>
+          <input className="modal-input modal-input-sm" type="number" min="0"
+            value={rateLimit} onChange={e => setRateLimit(e.target.value)} />
 
-              {needsMonitor && (
-                <>
-                  <label className="modal-label" style={{ marginTop: 16 }}>
-                    Monitor URL <span className="modal-hint">(NORA will ping this to check uptime)</span>
-                  </label>
-                  <input className="modal-input" placeholder="https://sonarr.yourdomain.com/ping"
-                    value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
-                </>
-              )}
+          {submitError && <div className="modal-error">{submitError}</div>}
+        </>
+      )}
 
-              <label className="modal-label" style={{ marginTop: 16 }}>
-                Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>
-              </label>
-              <input className="modal-input modal-input-sm" type="number" min="0"
-                value={rateLimit} onChange={e => setRateLimit(e.target.value)} />
-
-              {submitError && <div className="modal-error">{submitError}</div>}
-            </div>
-            <div className="modal-footer">
-              <button className="modal-btn-ghost" onClick={() => setStep('setup')}>← Back</button>
-              <button className="modal-btn-primary" onClick={handleCreate} disabled={submitting}>
-                {submitting ? 'Creating…' : 'Create App'}
-              </button>
-            </div>
-          </>
-        )}
-
-        {step === 'done' && createdApp && (
-          <>
-            <div className="modal-header">
-              <div className="modal-title modal-title-success">✓ App Created</div>
-              <div className="modal-subtitle">
-                Copy the webhook URL and paste it into your app's notification settings
-              </div>
-              <button className="modal-close" onClick={onClose}>✕</button>
-            </div>
-            <div className="modal-body">
-              <label className="modal-label">Webhook URL</label>
-              <div className="webhook-url-row">
-                <input className="modal-input modal-input-mono" readOnly
-                  value={webhookUrl(createdApp.token)} onFocus={e => e.target.select()} />
-                <button className={`webhook-copy-btn${copied ? ' copied' : ''}`} onClick={handleCopy}>
-                  {copied ? '✓ Copied' : 'Copy'}
-                </button>
-              </div>
-              <div className="webhook-hint">
-                POST a JSON body to this URL to ingest events.
-                {selectedTemplate && <> The <strong>{selectedTemplate.name}</strong> template will parse them automatically.</>}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="modal-btn-ghost" onClick={handleAddAnother}>+ Add Another</button>
-              <button className="modal-btn-primary" onClick={() => navigate(`/apps/${createdApp.id}`)}>
-                View App →
-              </button>
-            </div>
-          </>
-        )}
-
-      </div>
-    </div>
+      {step === 'done' && createdApp && (
+        <>
+          <label className="modal-label">Webhook URL</label>
+          <div className="webhook-url-row">
+            <input className="modal-input modal-input-mono" readOnly
+              value={webhookUrl(createdApp.token)} onFocus={e => e.target.select()} />
+            <button className={`webhook-copy-btn${copied ? ' copied' : ''}`} onClick={handleCopy}>
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          <div className="webhook-hint">
+            POST a JSON body to this URL to ingest events.
+            {selectedTemplate && <> The <strong>{selectedTemplate.name}</strong> template will parse them automatically.</>}
+          </div>
+        </>
+      )}
+    </SlidePanel>
   )
 }
 
@@ -288,7 +286,10 @@ export function Apps() {
   const [showAdd, setShowAdd] = useState(false)
 
   const { tick } = useAutoRefresh()
+  const [addKey, setAddKey] = useState(0)
   const [editingApp, setEditingApp] = useState<App | null>(null)
+  const [editingKey, setEditingKey] = useState(0)
+  const [showEditPanel, setShowEditPanel] = useState(false)
 
   useEffect(() => {
     appsApi.list()
@@ -310,7 +311,7 @@ export function Apps() {
       <div className="content">
         <div className="section-header">
           <span className="section-title">Configured Apps</span>
-          <button className="section-action" onClick={() => setShowAdd(true)}>+ Add app</button>
+          <button className="section-action" onClick={() => { setAddKey(k => k + 1); setShowAdd(true) }}>+ Add app</button>
         </div>
 
         <div className="apps-page-grid widget-grid">
@@ -321,7 +322,7 @@ export function Apps() {
           ) : appList.length === 0 ? (
             <div className="apps-empty">
               No apps configured yet.{' '}
-              <button className="apps-empty-link" onClick={() => setShowAdd(true)}>
+              <button className="apps-empty-link" onClick={() => { setAddKey(k => k + 1); setShowAdd(true) }}>
                 Add your first app →
               </button>
             </div>
@@ -355,6 +356,8 @@ export function Apps() {
                   onClick={e => {
                     e.stopPropagation()
                     setEditingApp(app)
+                    setEditingKey(k => k + 1)
+                    setShowEditPanel(true)
                   }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
@@ -369,24 +372,26 @@ export function Apps() {
         </div>
       </div>
 
-      {showAdd && (
-        <AddAppModal
-          onClose={() => setShowAdd(false)}
-          onCreated={app => {
-            setAppList(prev => [...prev, app])
-            setShowAdd(false)
-          }}
-        />
-      )}
+      <AddAppModal
+        key={addKey}
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        onCreated={app => {
+          setAppList(prev => [...prev, app])
+          // Panel stays open to show the done step with webhook URL
+        }}
+      />
 
       {editingApp && (
         <AppSettingsModal
+          key={editingKey}
+          open={showEditPanel}
           app={editingApp}
-          onClose={() => setEditingApp(null)}
+          onClose={() => setShowEditPanel(false)}
           onUpdated={updated => setAppList(prev => prev.map(a => a.id === updated.id ? updated : a))}
           onDeleted={() => {
             setAppList(prev => prev.filter(a => a.id !== editingApp.id))
-            setEditingApp(null)
+            setShowEditPanel(false)
           }}
         />
       )}

@@ -84,8 +84,9 @@ export function Infrastructure() {
   const [activeTab,       setActiveTab]       = useState<ActiveTab>('components')
   const [tick,            setTick]            = useState(0)
 
-  // Modal state
+  // Panel state
   const [modalOpen,             setModalOpen]             = useState(false)
+  const [openKey,               setOpenKey]               = useState(0)
   const [editingComponent,      setEditingComponent]      = useState<InfrastructureComponent | null>(null)
   const [editingHasCreds,       setEditingHasCreds]       = useState(false)
   const [initialParentId,       setInitialParentId]       = useState<string | undefined>(undefined)
@@ -146,6 +147,7 @@ export function Infrastructure() {
     setEditingComponent(null)
     setEditingHasCreds(false)
     setInitialParentId(parentId)
+    setOpenKey(k => k + 1)
     setModalOpen(true)
   }
 
@@ -153,6 +155,7 @@ export function Infrastructure() {
     setEditingComponent(c)
     setEditingHasCreds(c.has_credentials ?? false)
     setInitialParentId(undefined)
+    setOpenKey(k => k + 1)
     setModalOpen(true)
   }
 
@@ -504,31 +507,31 @@ export function Infrastructure() {
 
       </div>
 
-      {/* ── Modal ── */}
-      {modalOpen && (
-        <InfraEditModal
-          component={editingComponent ?? undefined}
-          components={components}
-          hasCreds={editingHasCreds}
-          initialParentId={initialParentId}
-          onSave={async (payload) => {
-            if (editingComponent) {
-              const updated = await infraApi.update(editingComponent.id, payload)
-              setComponents(prev => prev.map(c => c.id === editingComponent.id ? updated : c))
-            } else {
-              const created = await infraApi.create(payload)
-              setComponents(prev => [...prev, created])
-              void pollAll([created])
-            }
-          }}
-          onClose={closeModal}
-          onDelete={editingComponent ? async () => {
-            await infraApi.delete(editingComponent.id)
-            setComponents(prev => prev.filter(c => c.id !== editingComponent.id))
-            setResourcesMap(prev => { const n = { ...prev }; delete n[editingComponent.id]; return n })
-          } : undefined}
-        />
-      )}
+      {/* ── Slide panel ── */}
+      <InfraEditModal
+        key={openKey}
+        open={modalOpen}
+        component={editingComponent ?? undefined}
+        components={components}
+        hasCreds={editingHasCreds}
+        initialParentId={initialParentId}
+        onSave={async (payload) => {
+          if (editingComponent) {
+            const updated = await infraApi.update(editingComponent.id, payload)
+            setComponents(prev => prev.map(c => c.id === editingComponent.id ? updated : c))
+          } else {
+            const created = await infraApi.create(payload)
+            setComponents(prev => [...prev, created])
+            void pollAll([created])
+          }
+        }}
+        onClose={closeModal}
+        onDelete={editingComponent ? async () => {
+          await infraApi.delete(editingComponent.id)
+          setComponents(prev => prev.filter(c => c.id !== editingComponent.id))
+          setResourcesMap(prev => { const n = { ...prev }; delete n[editingComponent.id]; return n })
+        } : undefined}
+      />
     </>
   )
 }
