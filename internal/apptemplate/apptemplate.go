@@ -115,6 +115,12 @@ type APIPollingEntry struct {
 	Target       string `yaml:"target"`
 	ValueType    string `yaml:"value_type"`
 	EventMessage string `yaml:"event_message"`
+	// AuthType controls how the app's api_key is attached to the request.
+	// Values: apikey_header | apikey_query | bearer | none (default: none).
+	AuthType string `yaml:"auth_type"`
+	// AuthHeader is the header name (for apikey_header) or query parameter name
+	// (for apikey_query) used to carry the API key.
+	AuthHeader string `yaml:"auth_header"`
 }
 
 // AppTemplate describes how to process webhooks and render dashboard data for a specific app.

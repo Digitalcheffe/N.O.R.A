@@ -151,7 +151,7 @@ func makePollerStore(infraComponents []models.InfrastructureComponent, container
 		nil, nil, nil, nil, nil, nil,
 		&mockInfraComponentRepo{components: infraComponents},
 		nil, nil, nil, nil, nil, nil, nil, nil,
-		dc, nil, nil, nil, nil, nil,
+		dc, nil, nil, nil, nil, nil, nil,
 	)
 	return store, dc
 }
