@@ -97,7 +97,7 @@ func (r *mockEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, _, _ st
 // --- helpers -------------------------------------------------------------
 
 func newTestWatcher(appRepo repo.AppRepo, eventRepo repo.EventRepo, dc dockerAPI) *Watcher {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return &Watcher{store: store, client: dc}
 }
 

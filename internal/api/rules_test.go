@@ -38,6 +38,7 @@ func newRulesRouter(t *testing.T) http.Handler {
 		repo.NewWebPushSubscriptionRepo(db),
 		repo.NewSnapshotRepo(db),
 		repo.NewRuleRepo(db),
+		nil,
 	)
 	cfg := &config.Config{Secret: "test"}
 	engine := rules.NewEngine(store, nil, cfg)

@@ -45,6 +45,7 @@ func newSNMPTestStore(t *testing.T) *repo.Store {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 }
 

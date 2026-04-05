@@ -22,6 +22,7 @@ type Store struct {
 	WebPushSubscriptions WebPushSubscriptionRepo
 	Snapshots            SnapshotRepo
 	Rules                RuleRepo
+	DigestRegistry       DigestRegistryRepo
 }
 
 // NewStore creates a Store backed by the given repositories.
@@ -46,6 +47,7 @@ func NewStore(
 	webPushSubscriptions WebPushSubscriptionRepo,
 	snapshots SnapshotRepo,
 	rules RuleRepo,
+	digestRegistry DigestRegistryRepo,
 ) *Store {
 	return &Store{
 		Apps:                 apps,
@@ -68,5 +70,6 @@ func NewStore(
 		WebPushSubscriptions: webPushSubscriptions,
 		Snapshots:            snapshots,
 		Rules:                rules,
+		DigestRegistry:       digestRegistry,
 	}
 }
