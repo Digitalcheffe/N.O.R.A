@@ -108,19 +108,19 @@ func pollEntry(
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("api polling: app %s: GET %s: %v", app.Name, rawURL, err)
+		log.Printf("api polling: app %s: GET %s: %v", app.Name, entry.Path, err)
 		return nil // log and skip; do not fire an event
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		log.Printf("api polling: app %s: GET %s: non-200 status %d", app.Name, rawURL, resp.StatusCode)
+		log.Printf("api polling: app %s: GET %s: non-200 status %d", app.Name, entry.Path, resp.StatusCode)
 		return nil // log and skip; do not fire an event
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("api polling: app %s: read body %s: %v", app.Name, rawURL, err)
+		log.Printf("api polling: app %s: read body %s: %v", app.Name, entry.Path, err)
 		return nil
 	}
 
