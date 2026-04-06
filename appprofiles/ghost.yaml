@@ -66,11 +66,6 @@ webhook:
     member.added: info
     member.deleted: warn
 
-monitor:
-  check_type: url
-  check_url: "{base_url}"
-  healthy_status: 200
-  check_interval: 5m
 
 digest:
   categories:

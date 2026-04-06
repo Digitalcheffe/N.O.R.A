@@ -334,16 +334,16 @@ func TestRunAPIPolling_APIKeyHeaderAuth(t *testing.T) {
 	defer srv.Close()
 
 	store, _ := newAPITestStore(t)
-	seedPollApp(t, store, "AuthApp", "authprofile",
+	// Use "sonarr" as the profile ID — apipoller has sonarr.yaml with apikey_header / X-Api-Key.
+	seedPollApp(t, store, "AuthApp", "sonarr",
 		`{"base_url":"`+srv.URL+`","api_key":"secret-key"}`)
 
 	loader := &stubLoader{
-		profileID: "authprofile",
+		profileID: "sonarr",
 		tmpl: &apptemplate.AppTemplate{
 			APIPolling: []apptemplate.APIPollingEntry{
 				{Path: "/items", Name: "count", Label: "Count",
-					Target: "length", ValueType: "count",
-					AuthType: "apikey_header", AuthHeader: "X-Api-Key"},
+					Target: "length", ValueType: "count"},
 			},
 		},
 	}

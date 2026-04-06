@@ -1,4 +1,4 @@
-package docker
+package metrics
 
 import (
 	"context"
@@ -13,49 +13,16 @@ import (
 	dockerclient "github.com/docker/docker/client"
 	"github.com/google/uuid"
 
+	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 )
-
-// dockerContainerNS is the fixed UUID v5 namespace used to derive stable
-// source IDs for Docker containers from a (engineID, containerName) pair.
-// Using a name-based key means metrics survive container ID changes caused
-// by stop/remove/recreate cycles.
-var dockerContainerNS = uuid.MustParse("c2d3e4f5-a6b7-8901-bcde-f12345678901")
-
-// StableContainerSourceID returns a deterministic UUID for a container that
-// belongs to a specific Docker engine, keyed on the container name rather than
-// the ephemeral Docker container ID.  The same (engineID, containerName) pair
-// always produces the same UUID.
-func StableContainerSourceID(engineID, containerName string) string {
-	return uuid.NewSHA1(dockerContainerNS, []byte(engineID+"/"+containerName)).String()
-}
 
 // resourcePollerAPI is the minimal Docker API subset needed for resource polling,
 // enabling mock injection in tests.
 type resourcePollerAPI interface {
 	ContainerList(ctx context.Context, options container.ListOptions) ([]container.Summary, error)
 	ContainerStats(ctx context.Context, containerID string, stream bool) (container.StatsResponseReader, error)
-}
-
-// thresholdLevel represents a metric breach level.
-type thresholdLevel int
-
-const (
-	levelNormal thresholdLevel = iota
-	levelWarn
-	levelError
-)
-
-func (l thresholdLevel) String() string {
-	switch l {
-	case levelWarn:
-		return "warn"
-	case levelError:
-		return "error"
-	default:
-		return ""
-	}
 }
 
 // containerThresholdState tracks the last known threshold level for a container's metrics
@@ -211,7 +178,7 @@ func (p *ResourcePoller) PollContainer(ctx context.Context, containerID string, 
 	// Prefer the stable, name-keyed UUID so metrics survive container recreations.
 	// Fall back to appID when the container is linked to an app (app ID is already stable).
 	containerName := strings.TrimPrefix(stats.Name, "/")
-	sourceID := StableContainerSourceID(p.engineID, containerName)
+	sourceID := infra.StableContainerSourceID(p.engineID, containerName)
 	if appID != "" {
 		sourceID = appID
 	}

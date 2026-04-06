@@ -84,8 +84,8 @@ func (s *PortainerMetricsScanner) CollectMetrics(ctx context.Context, entityID, 
 			// Keyed by componentID/endpointID/containerName for uniqueness across endpoints.
 			readingID := fmt.Sprintf("%s/%d/%s", entityID, ep.ID, name)
 
-			writeReading(ctx, s.store, readingID, "portainer_container", "cpu_percent", cpuPct, now)
-			writeReading(ctx, s.store, readingID, "portainer_container", "mem_percent", memPct, now)
+			writeReading(ctx, s.store, readingID, "docker_container", "cpu_percent", cpuPct, now)
+			writeReading(ctx, s.store, readingID, "docker_container", "mem_percent", memPct, now)
 			readings += 2
 
 			displayName := fmt.Sprintf("%s/%s", c.Name, name)

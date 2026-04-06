@@ -15,7 +15,6 @@ import (
 	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/auth"
 	"github.com/digitalcheffe/nora/internal/config"
-	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/frontend"
 	"github.com/digitalcheffe/nora/internal/icons"
 	"github.com/digitalcheffe/nora/internal/ingest"
@@ -163,11 +162,6 @@ func main() {
 		log.Printf("digest registry reconcile: %v", err)
 	}
 
-	// Propagate any check_url changes from updated built-in profiles to existing
-	// checks. Runs in the background so startup is not blocked; the monitor
-	// scheduler will pick up the corrected targets on its next sync cycle.
-	go api.SyncAllProfileChecks(context.Background(), appRepo, checkRepo, registry)
-
 	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
 	iconFetcher, err := icons.New(cfg.IconsPath)
 	if err != nil {
@@ -297,17 +291,17 @@ func main() {
 	// Ensure a local docker engine infrastructure component exists so discovered
 	// containers can be associated with it. This is idempotent — it reuses the
 	// existing record if one with type="docker_engine" is already present.
-	localEngineID, err := docker.EnsureLocalInfraComponent(context.Background(), store)
+	localEngineID, err := infra.EnsureLocalInfraComponent(context.Background(), store)
 	if err != nil {
 		log.Printf("docker discovery: could not ensure local engine record: %v", err)
 	}
 
-	if watcher, err := docker.NewWatcher(store); err != nil {
+	if watcher, err := infra.NewWatcher(store); err != nil {
 		log.Printf("docker watcher: socket not available, skipping (%v)", err)
 	} else {
 		// Wire up health poller — immediate check on start events; periodic polling
 		// is driven by the scan scheduler's metrics pass (every 60 s).
-		if healthPoller, err := docker.NewHealthPoller(store); err != nil {
+		if healthPoller, err := noraMetrics.NewHealthPoller(store); err != nil {
 			log.Printf("docker health poller: socket not available, skipping (%v)", err)
 		} else {
 			watcher.SetContainerStartHook(healthPoller.CheckContainer)
@@ -316,7 +310,7 @@ func main() {
 
 		// Wire up the discovery worker to upsert containers and run profile matching.
 		if localEngineID != "" {
-			if discoverer, err := docker.NewDiscoverer(store, registry, localEngineID); err != nil {
+			if discoverer, err := infra.NewDiscoverer(store, registry, localEngineID); err != nil {
 				log.Printf("docker discoverer: %v", err)
 			} else {
 				watcher.SetDiscoveryHook(discoverer.HandleEvent)
@@ -330,8 +324,8 @@ func main() {
 	// Image update poller — checks container registries for newer image versions.
 	// Runs as a GlobalSnapshotJob on the 30-minute snapshot interval.
 	// Skipped if the Docker socket is not available.
-	var imagePoller *docker.ImageUpdatePoller
-	if p, err := docker.NewImageUpdatePoller(store); err != nil {
+	var imagePoller *noraSnapshot.ImageUpdatePoller
+	if p, err := noraSnapshot.NewImageUpdatePoller(store); err != nil {
 		log.Printf("image update poller: socket not available, skipping (%v)", err)
 	} else {
 		imagePoller = p
@@ -346,7 +340,7 @@ func main() {
 	// (every 60 s via DockerMetricsScanner) rather than a standalone ticker.
 	// The poller is registered with the scheduler so PollAll is called on the
 	// MetricsInterval instead of the legacy 60-second loop.
-	if resourcePoller, err := docker.NewResourcePoller(store, localEngineID); err != nil {
+	if resourcePoller, err := noraMetrics.NewResourcePoller(store, localEngineID); err != nil {
 		log.Printf("resource poller: socket not available, skipping (%v)", err)
 	} else {
 		scanScheduler.RegisterMetrics("docker_engine",
@@ -432,7 +426,7 @@ func main() {
 	// API v1 — protected by auth middleware
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(auth.RequireAuth(cfg.Secret))
-		api.NewAppsHandler(appRepo, iconFetcher, checkRepo, registry).Routes(r)
+		api.NewAppsHandler(appRepo, iconFetcher, checkRepo, registry, appMetricSnapshotRepo).Routes(r)
 		if iconFetcher != nil {
 			api.NewIconsHandler(iconFetcher, registry).Routes(r)
 		}

@@ -135,10 +135,10 @@ export function SlidePanel({
 
         {footer && (
           <div className="sp-footer">
+            {footer}
             <button className="sp-btn sp-btn--secondary" onClick={onClose}>
               Cancel
             </button>
-            {footer}
           </div>
         )}
       </div>

@@ -32,7 +32,7 @@ func NewMetricsHandler(events repo.EventRepo, apps repo.AppRepo, metrics repo.Me
 // Routes registers metrics endpoints on r.
 func (h *MetricsHandler) Routes(r chi.Router) {
 	r.Get("/metrics", h.GetInstance)
-	r.Get("/apps/{id}/metrics", h.GetByApp)
+	// GET /apps/{id}/metrics is now handled by AppsHandler (returns api_polling snapshots).
 }
 
 // --- response types ---

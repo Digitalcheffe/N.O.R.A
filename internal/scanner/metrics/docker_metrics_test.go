@@ -1,4 +1,4 @@
-package docker
+package metrics
 
 import (
 	"context"
@@ -7,9 +7,11 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 
+	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 )
@@ -52,6 +54,66 @@ func (r *mockResourceReadingRepo) LatestMetrics(_ context.Context, _ string, _ [
 
 func (r *mockResourceReadingRepo) BackfillAppID(_ context.Context, _, _ string) (int64, error) {
 	return 0, nil
+}
+
+// --- mock AppRepo ---------------------------------------------------------
+
+type mockMetricsAppRepo struct {
+	apps []models.App
+}
+
+func (r *mockMetricsAppRepo) List(_ context.Context) ([]models.App, error)                         { return r.apps, nil }
+func (r *mockMetricsAppRepo) ListByHost(_ context.Context, _ string) ([]models.App, error)         { return nil, nil }
+func (r *mockMetricsAppRepo) Create(_ context.Context, _ *models.App) error                        { return nil }
+func (r *mockMetricsAppRepo) Get(_ context.Context, _ string) (*models.App, error)                 { return nil, repo.ErrNotFound }
+func (r *mockMetricsAppRepo) GetByToken(_ context.Context, _ string) (*models.App, error)          { return nil, repo.ErrNotFound }
+func (r *mockMetricsAppRepo) Update(_ context.Context, _ *models.App) error                        { return nil }
+func (r *mockMetricsAppRepo) Delete(_ context.Context, _ string) error                             { return nil }
+func (r *mockMetricsAppRepo) UpdateToken(_ context.Context, _, _ string) error                     { return nil }
+func (r *mockMetricsAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error               { return nil }
+func (r *mockMetricsAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error      { return nil }
+
+// --- mock EventRepo -------------------------------------------------------
+
+type mockMetricsEventRepo struct {
+	repo.EventRepo
+	created []*models.Event
+}
+
+func (r *mockMetricsEventRepo) Create(_ context.Context, ev *models.Event) error {
+	r.created = append(r.created, ev)
+	return nil
+}
+
+func (r *mockMetricsEventRepo) List(_ context.Context, _ repo.ListFilter) ([]models.Event, int, error) {
+	return nil, 0, nil
+}
+func (r *mockMetricsEventRepo) Get(_ context.Context, _ string) (*models.Event, error) {
+	return nil, repo.ErrNotFound
+}
+func (r *mockMetricsEventRepo) CountForCategory(_ context.Context, _ repo.CategoryFilter) (int, error) {
+	return 0, nil
+}
+func (r *mockMetricsEventRepo) SparklineBuckets(_ context.Context, _ repo.CategoryFilter, _ time.Time, _ time.Duration) ([7]int, error) {
+	return [7]int{}, nil
+}
+func (r *mockMetricsEventRepo) LatestPerApp(_ context.Context, _ []string) (map[string]*models.Event, error) {
+	return nil, nil
+}
+func (r *mockMetricsEventRepo) DeleteBySeverityBefore(_ context.Context, _ string, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (r *mockMetricsEventRepo) GroupByTypeAndSeverity(_ context.Context, _ string, _, _ time.Time) ([]repo.EventTypeCount, error) {
+	return nil, nil
+}
+func (r *mockMetricsEventRepo) MetricsForApp(_ context.Context, _ string, _, _ time.Time) (repo.EventMetrics, error) {
+	return repo.EventMetrics{}, nil
+}
+func (r *mockMetricsEventRepo) CountPerApp(_ context.Context, _ time.Time) ([]repo.AppEventCount, error) {
+	return nil, nil
+}
+func (r *mockMetricsEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, _, _ string) ([]repo.TimeseriesBucket, error) {
+	return nil, nil
 }
 
 // --- helpers --------------------------------------------------------------
@@ -178,14 +240,14 @@ func TestThresholdFor(t *testing.T) {
 
 func TestPollContainer_WritesThreeReadings(t *testing.T) {
 	resRepo := &mockResourceReadingRepo{}
-	evRepo := &mockEventRepo{}
+	evRepo := &mockMetricsEventRepo{}
 	cli := &mockResourceClient{
 		statsMap: map[string]container.StatsResponse{
 			"ctr1": makeStats(250_000_000, 0, 4_000_000_000, 0, []uint64{0, 0, 0, 0}, 512*1024*1024, 1024*1024*1024),
 		},
 	}
 
-	p := newTestResourcePoller(&mockAppRepo{}, evRepo, resRepo, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, evRepo, resRepo, cli)
 
 	if err := p.PollContainer(context.Background(), "ctr1", "app-1"); err != nil {
 		t.Fatalf("PollContainer: %v", err)
@@ -222,13 +284,13 @@ func TestPollContainer_SourceIDIsStableUUIDWhenNoApp(t *testing.T) {
 		},
 	}
 
-	p := newTestResourcePoller(&mockAppRepo{}, &mockEventRepo{}, resRepo, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, &mockMetricsEventRepo{}, resRepo, cli)
 	if err := p.PollContainer(context.Background(), "ctr1", ""); err != nil {
 		t.Fatalf("PollContainer: %v", err)
 	}
 
 	// engineID="" and containerName="test-container" (leading "/" stripped from "/test-container").
-	wantID := StableContainerSourceID("", "test-container")
+	wantID := infra.StableContainerSourceID("", "test-container")
 	for _, r := range resRepo.readings {
 		if r.SourceID != wantID {
 			t.Errorf("expected stable SourceID %q, got %q", wantID, r.SourceID)
@@ -239,7 +301,7 @@ func TestPollContainer_SourceIDIsStableUUIDWhenNoApp(t *testing.T) {
 // --- threshold transition tests ------------------------------------------
 
 func TestThreshold_NormalToWarnCreatesOneEvent(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockMetricsEventRepo{}
 	resRepo := &mockResourceReadingRepo{}
 	cli := &mockResourceClient{
 		statsMap: map[string]container.StatsResponse{
@@ -248,7 +310,7 @@ func TestThreshold_NormalToWarnCreatesOneEvent(t *testing.T) {
 		},
 	}
 
-	p := newTestResourcePoller(&mockAppRepo{}, evRepo, resRepo, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, evRepo, resRepo, cli)
 	if err := p.PollContainer(context.Background(), "ctr1", ""); err != nil {
 		t.Fatalf("PollContainer: %v", err)
 	}
@@ -266,7 +328,7 @@ func TestThreshold_NormalToWarnCreatesOneEvent(t *testing.T) {
 }
 
 func TestThreshold_NoEventOnSecondPollSameLevel(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockMetricsEventRepo{}
 	resRepo := &mockResourceReadingRepo{}
 	cli := &mockResourceClient{
 		statsMap: map[string]container.StatsResponse{
@@ -274,7 +336,7 @@ func TestThreshold_NoEventOnSecondPollSameLevel(t *testing.T) {
 		},
 	}
 
-	p := newTestResourcePoller(&mockAppRepo{}, evRepo, resRepo, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, evRepo, resRepo, cli)
 	_ = p.PollContainer(context.Background(), "ctr1", "")
 	_ = p.PollContainer(context.Background(), "ctr1", "")
 
@@ -284,7 +346,7 @@ func TestThreshold_NoEventOnSecondPollSameLevel(t *testing.T) {
 }
 
 func TestThreshold_WarnToErrorCreatesEvent(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockMetricsEventRepo{}
 	resRepo := &mockResourceReadingRepo{}
 	cli := &mockResourceClient{
 		statsMap: map[string]container.StatsResponse{
@@ -292,7 +354,7 @@ func TestThreshold_WarnToErrorCreatesEvent(t *testing.T) {
 		},
 	}
 
-	p := newTestResourcePoller(&mockAppRepo{}, evRepo, resRepo, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, evRepo, resRepo, cli)
 	_ = p.PollContainer(context.Background(), "ctr1", "") // warn
 
 	cli.statsMap["ctr1"] = makeStats(980_000_000, 0, 1_000_000_000, 0, []uint64{0}, 0, 1024)
@@ -307,7 +369,7 @@ func TestThreshold_WarnToErrorCreatesEvent(t *testing.T) {
 }
 
 func TestThreshold_RecoveryCreatesInfoEvent(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockMetricsEventRepo{}
 	resRepo := &mockResourceReadingRepo{}
 	cli := &mockResourceClient{
 		statsMap: map[string]container.StatsResponse{
@@ -315,7 +377,7 @@ func TestThreshold_RecoveryCreatesInfoEvent(t *testing.T) {
 		},
 	}
 
-	p := newTestResourcePoller(&mockAppRepo{}, evRepo, resRepo, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, evRepo, resRepo, cli)
 	_ = p.PollContainer(context.Background(), "ctr1", "") // warn
 
 	cli.statsMap["ctr1"] = makeStats(500_000_000, 0, 1_000_000_000, 0, []uint64{0}, 0, 1024)
@@ -335,7 +397,7 @@ func TestThreshold_RecoveryCreatesInfoEvent(t *testing.T) {
 
 func TestPollContainer_MissingContainerReturnsError(t *testing.T) {
 	cli := &mockResourceClient{statsErr: errors.New("No such container: missing")}
-	p := newTestResourcePoller(&mockAppRepo{}, &mockEventRepo{}, &mockResourceReadingRepo{}, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, &mockMetricsEventRepo{}, &mockResourceReadingRepo{}, cli)
 
 	err := p.PollContainer(context.Background(), "missing", "")
 	if err == nil {
@@ -346,7 +408,7 @@ func TestPollContainer_MissingContainerReturnsError(t *testing.T) {
 // --- pollAll tests --------------------------------------------------------
 
 func TestPollAll_CleansUpStaleState(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockMetricsEventRepo{}
 	resRepo := &mockResourceReadingRepo{}
 	cli := &mockResourceClient{
 		containers: []container.Summary{
@@ -358,7 +420,7 @@ func TestPollAll_CleansUpStaleState(t *testing.T) {
 			"ctr2": makeStats(850_000_000, 0, 1_000_000_000, 0, []uint64{0}, 0, 1024),
 		},
 	}
-	p := newTestResourcePoller(&mockAppRepo{}, evRepo, resRepo, cli)
+	p := newTestResourcePoller(&mockMetricsAppRepo{}, evRepo, resRepo, cli)
 	p.pollAll(context.Background())
 
 	if _, ok := p.state.Load("ctr1"); !ok {

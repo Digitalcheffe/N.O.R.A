@@ -1,16 +1,16 @@
-package docker
+package snapshot
 
 import (
 	"context"
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/docker/docker/api/types/container"
 	dockerimage "github.com/docker/docker/api/types/image"
 	dockerclient "github.com/docker/docker/client"
 
+	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/repo"
 )
 
@@ -22,20 +22,17 @@ type imageUpdateAPI interface {
 }
 
 // latestDigester is the registry lookup surface used by ImageUpdatePoller.
-// *RegistryClient satisfies this interface; tests inject a mock.
+// *docker.RegistryClient satisfies this interface; tests inject a mock.
 type latestDigester interface {
 	GetLatestDigest(ctx context.Context, image string) (string, error)
 }
 
-// ImageUpdatePoller polls container registries daily to detect whether a newer
+// ImageUpdatePoller polls container registries to detect whether a newer
 // image is available for each running discovered container.  It is purely
 // informational — it never pulls or updates images.
 //
 // Startup gate: if no infrastructure_components with type="docker_engine" exist,
 // each Run call returns early without contacting any registry.
-//
-// Poll schedule: once on startup (after a 60-second delay to avoid hammering
-// registries at boot), then daily at 02:00 UTC.
 type ImageUpdatePoller struct {
 	store    *repo.Store
 	registry latestDigester
@@ -55,7 +52,7 @@ func NewImageUpdatePoller(store *repo.Store) (*ImageUpdatePoller, error) {
 	}
 	return &ImageUpdatePoller{
 		store:    store,
-		registry: NewRegistryClient(),
+		registry: infra.NewRegistryClient(),
 		client:   cli,
 	}, nil
 }
@@ -64,52 +61,6 @@ func NewImageUpdatePoller(store *repo.Store) (*ImageUpdatePoller, error) {
 // client and registry (for tests).
 func newImageUpdatePollerWithClient(store *repo.Store, client imageUpdateAPI, registry latestDigester) *ImageUpdatePoller {
 	return &ImageUpdatePoller{store: store, registry: registry, client: client}
-}
-
-// Start runs the image update poller until ctx is cancelled.  It waits 60 s
-// before the first run to avoid registry traffic at boot, then waits until the
-// next 02:00 UTC before running again, and repeats every 24 hours.
-func (p *ImageUpdatePoller) Start(ctx context.Context) {
-	log.Printf("image update poller: starting (60s startup delay)")
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(60 * time.Second):
-	}
-
-	if err := p.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Printf("image update poller: startup run error: %v", err)
-	}
-
-	// Wait until the next 02:00 UTC.
-	delay := imagePollerDurationUntilNext2AM()
-	log.Printf("image update poller: next scheduled run in %s (02:00 UTC)", delay.Round(time.Minute))
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(delay):
-	}
-
-	run := func() {
-		if err := p.Run(ctx); err != nil && ctx.Err() == nil {
-			log.Printf("image update poller: run error: %v", err)
-		}
-	}
-	run()
-
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			run()
-		}
-	}
 }
 
 // Run performs one full image update check cycle across all running discovered
@@ -210,17 +161,13 @@ func (p *ImageUpdatePoller) Run(ctx context.Context) error {
 }
 
 // extractRepoDigest returns the manifest digest (sha256:...) from a
-// RepoDigests slice for the given image name.  Docker stores repo digests as
-// "image@sha256:digest" strings.  We return the first entry whose image part
-// matches the repo portion of imageName, or the first entry overall as a
-// fallback.
+// RepoDigests slice for the given image name.
 func extractRepoDigest(repoDigests []string, imageName string) string {
 	// Strip tag from imageName to get the repo reference.
-	repo := imageName
-	if i := strings.LastIndex(repo, ":"); i >= 0 {
-		// Only strip if what follows has no slash (i.e. it's a tag, not a port).
-		if !strings.Contains(repo[i+1:], "/") {
-			repo = repo[:i]
+	repoRef := imageName
+	if i := strings.LastIndex(repoRef, ":"); i >= 0 {
+		if !strings.Contains(repoRef[i+1:], "/") {
+			repoRef = repoRef[:i]
 		}
 	}
 
@@ -232,9 +179,8 @@ func extractRepoDigest(repoDigests []string, imageName string) string {
 		imgPart := d[:at]
 		digestPart := d[at+1:]
 
-		// Normalize docker.io prefix for comparison.
 		imgPartNorm := strings.TrimPrefix(imgPart, "docker.io/")
-		repoNorm := strings.TrimPrefix(repo, "docker.io/")
+		repoNorm := strings.TrimPrefix(repoRef, "docker.io/")
 
 		if imgPartNorm == repoNorm || strings.HasSuffix(imgPartNorm, "/"+repoNorm) {
 			return digestPart
@@ -250,44 +196,3 @@ func extractRepoDigest(repoDigests []string, imageName string) string {
 	return ""
 }
 
-// StartEvery runs the image update poller on the given interval.  It waits 60 s
-// before the first run (same startup gate as Start), then fires every interval.
-// Use this when the caller wants the check to align with another scan cadence
-// (e.g. the hourly discovery pass) rather than the default daily 02:00 UTC schedule.
-func (p *ImageUpdatePoller) StartEvery(ctx context.Context, interval time.Duration) {
-	log.Printf("image update poller: starting on %s interval (60s startup delay)", interval)
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(60 * time.Second):
-	}
-
-	if err := p.Run(ctx); err != nil && ctx.Err() == nil {
-		log.Printf("image update poller: startup run error: %v", err)
-	}
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := p.Run(ctx); err != nil && ctx.Err() == nil {
-				log.Printf("image update poller: run error: %v", err)
-			}
-		}
-	}
-}
-
-// imagePollerDurationUntilNext2AM returns the duration from now until the next
-// 02:00 UTC.  Mirrors jobs.durationUntilNext2AM without importing the jobs package.
-func imagePollerDurationUntilNext2AM() time.Duration {
-	now := time.Now().UTC()
-	next := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, time.UTC)
-	if !next.After(now) {
-		next = next.Add(24 * time.Hour)
-	}
-	return next.Sub(now)
-}

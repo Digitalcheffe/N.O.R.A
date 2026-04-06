@@ -34,11 +34,6 @@ webhook:
     media.scrobble: info
     library.new: info
 
-monitor:
-  check_type: url
-  check_url: "{base_url}:32400/identity"
-  healthy_status: 200
-  check_interval: 5m
 
 digest:
   categories:

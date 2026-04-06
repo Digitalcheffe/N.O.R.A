@@ -3,9 +3,11 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/infra"
+	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/internal/scanner"
 )
@@ -49,6 +51,9 @@ func (s *PortainerDiscoveryScanner) Discover(ctx context.Context, entityID strin
 	}
 
 	totalContainers := 0
+	upserted := 0
+	now := time.Now().UTC()
+
 	for _, ep := range endpoints {
 		containers, err := client.ListContainers(ctx, ep.ID)
 		if err != nil {
@@ -57,6 +62,27 @@ func (s *PortainerDiscoveryScanner) Discover(ctx context.Context, entityID strin
 			continue
 		}
 		totalContainers += len(containers)
+
+		for _, pc := range containers {
+			name := pc.FirstName()
+			if name == "" {
+				continue
+			}
+			rec := &models.DiscoveredContainer{
+				InfraComponentID: entityID,
+				ContainerID:      pc.ID,
+				ContainerName:    name,
+				Image:            pc.Image,
+				Status:           pc.State,
+				LastSeenAt:       now,
+				CreatedAt:        now,
+			}
+			if err := s.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, rec); err != nil {
+				log.Printf("portainer discovery: upsert container %q: %v", name, err)
+				continue
+			}
+			upserted++
+		}
 	}
 
 	_ = s.store.InfraComponents.UpdateStatus(ctx, entityID, "online", time.Now().UTC().Format(time.RFC3339Nano))
@@ -66,6 +92,6 @@ func (s *PortainerDiscoveryScanner) Discover(ctx context.Context, entityID strin
 	return &scanner.DiscoveryResult{
 		EntityID:   entityID,
 		EntityType: entityType,
-		Found:      totalContainers,
+		Found:      upserted,
 	}, nil
 }

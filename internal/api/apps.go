@@ -1,12 +1,10 @@
 package api
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"time"
 
@@ -20,15 +18,16 @@ import (
 
 // AppsHandler holds dependencies for the apps resource handlers.
 type AppsHandler struct {
-	apps         repo.AppRepo
-	checks       repo.CheckRepo       // may be nil
-	iconsFetcher *icons.Fetcher       // may be nil
-	profiler     apptemplate.Loader   // may be nil; used to resolve icon slug overrides
+	apps               repo.AppRepo
+	checks             repo.CheckRepo              // may be nil
+	iconsFetcher       *icons.Fetcher              // may be nil
+	profiler           apptemplate.Loader          // may be nil; used to resolve icon slug overrides
+	appMetricSnapshots repo.AppMetricSnapshotRepo  // may be nil
 }
 
 // NewAppsHandler creates an AppsHandler with the given repository.
-func NewAppsHandler(apps repo.AppRepo, fetcher *icons.Fetcher, checks repo.CheckRepo, profiler apptemplate.Loader) *AppsHandler {
-	return &AppsHandler{apps: apps, iconsFetcher: fetcher, checks: checks, profiler: profiler}
+func NewAppsHandler(apps repo.AppRepo, fetcher *icons.Fetcher, checks repo.CheckRepo, profiler apptemplate.Loader, appMetricSnapshots repo.AppMetricSnapshotRepo) *AppsHandler {
+	return &AppsHandler{apps: apps, iconsFetcher: fetcher, checks: checks, profiler: profiler, appMetricSnapshots: appMetricSnapshots}
 }
 
 // Routes registers all app endpoints on r.
@@ -39,6 +38,7 @@ func (h *AppsHandler) Routes(r chi.Router) {
 	r.Put("/apps/{id}", h.Update)
 	r.Delete("/apps/{id}", h.Delete)
 	r.Post("/apps/{id}/token/regenerate", h.RegenerateToken)
+	r.Get("/apps/{id}/metrics", h.GetMetrics)
 }
 
 // iconSlugForProfile returns the CDN icon slug override for a profileID by
@@ -70,6 +70,11 @@ type listAppsResponse struct {
 
 type regenerateTokenResponse struct {
 	Token string `json:"token"`
+}
+
+type listMetricsResponse struct {
+	Data  []models.AppMetricSnapshot `json:"data"`
+	Total int                        `json:"total"`
 }
 
 // --- handlers ---
@@ -135,7 +140,6 @@ func (h *AppsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if h.iconsFetcher != nil {
 		h.iconsFetcher.EnsureIcon(app.ProfileID, h.iconSlugForProfile(app.ProfileID))
 	}
-	h.syncMonitorCheck(r.Context(), app, monitorURLFromConfig(app.Config))
 	writeJSON(w, http.StatusCreated, app)
 }
 
@@ -195,8 +199,6 @@ func (h *AppsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if h.iconsFetcher != nil {
 		h.iconsFetcher.EnsureIcon(existing.ProfileID, h.iconSlugForProfile(existing.ProfileID))
 	}
-	h.syncMonitorCheck(r.Context(), existing, monitorURLFromConfig(existing.Config))
-	h.syncProfileMonitorCheck(r.Context(), existing)
 	writeJSON(w, http.StatusOK, existing)
 }
 
@@ -240,141 +242,26 @@ func (h *AppsHandler) RegenerateToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, regenerateTokenResponse{Token: token})
 }
 
-// syncMonitorCheck ensures a URL monitor check exists for the given app when
-// monitor_url is set in its config. It creates the check on first use and
-// updates the target if the URL changes. Errors are logged but not fatal.
-func (h *AppsHandler) syncMonitorCheck(ctx context.Context, app *models.App, monitorURL string) {
-	if h.checks == nil || monitorURL == "" {
+// GetMetrics returns all metric snapshots for an app: GET /api/v1/apps/{id}/metrics
+func (h *AppsHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.apps.Get(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "app not found")
+		return
+	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	all, err := h.checks.List(ctx)
+	if h.appMetricSnapshots == nil {
+		writeJSON(w, http.StatusOK, listMetricsResponse{Data: []models.AppMetricSnapshot{}, Total: 0})
+		return
+	}
+	snapshots, err := h.appMetricSnapshots.ListByApp(r.Context(), id)
 	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Look for an existing auto-managed URL check for this app.
-	for i := range all {
-		c := &all[i]
-		if c.AppID == app.ID && c.Type == "url" {
-			if c.Target != monitorURL {
-				c.Target = monitorURL
-				c.Name = app.Name + " — uptime"
-				_ = h.checks.Update(ctx, c)
-			}
-			return
-		}
-	}
-	// None found — create one.
-	check := &models.MonitorCheck{
-		ID:           uuid.New().String(),
-		AppID:        app.ID,
-		Name:         app.Name + " — uptime",
-		Type:         "url",
-		Target:       monitorURL,
-		IntervalSecs: 60,
-		SSLWarnDays:  30,
-		SSLCritDays:  7,
-		Enabled:      true,
-		CreatedAt:    time.Now().UTC(),
-	}
-	_ = h.checks.Create(ctx, check)
-}
-
-// syncProfileMonitorCheck re-resolves the check target for any profile-derived
-// URL check when the app's config (e.g. base_url) has changed. Called on every
-// app update so the stored target stays in sync with the configured base_url.
-func (h *AppsHandler) syncProfileMonitorCheck(ctx context.Context, app *models.App) {
-	if h.checks == nil || h.profiler == nil || app.ProfileID == "" {
-		return
-	}
-	tmpl, err := h.profiler.Get(app.ProfileID)
-	if err != nil || tmpl == nil || tmpl.Monitor.CheckURL == "" {
-		return
-	}
-	newTarget, err := app.Config.ResolveTemplateVars(tmpl.Monitor.CheckURL)
-	if err != nil {
-		log.Printf("apps: cannot resolve profile check URL for app %q: %v", app.Name, err)
-		return
-	}
-	all, err := h.checks.List(ctx)
-	if err != nil {
-		return
-	}
-	for i := range all {
-		c := &all[i]
-		if c.AppID == app.ID && c.Type == tmpl.Monitor.CheckType {
-			if c.Target != newTarget {
-				c.Target = newTarget
-				if updateErr := h.checks.Update(ctx, c); updateErr != nil {
-					log.Printf("apps: update profile check target for app %q: %v", app.Name, updateErr)
-				}
-			}
-			return
-		}
-	}
-}
-
-// SyncAllProfileChecks re-resolves check targets for every app that is linked
-// to a profile. Call this once at startup so that check_url changes shipped in
-// a new version of a built-in profile are propagated to existing checks without
-// requiring the user to manually re-save each app.
-func SyncAllProfileChecks(ctx context.Context, apps repo.AppRepo, checks repo.CheckRepo, profiler apptemplate.Loader) {
-	appList, err := apps.List(ctx)
-	if err != nil {
-		log.Printf("profile sync: failed to list apps: %v", err)
-		return
-	}
-	checkList, err := checks.List(ctx)
-	if err != nil {
-		log.Printf("profile sync: failed to list checks: %v", err)
-		return
-	}
-
-	// Index checks by app ID for O(1) lookup.
-	checksByApp := make(map[string][]*models.MonitorCheck, len(checkList))
-	for i := range checkList {
-		c := &checkList[i]
-		checksByApp[c.AppID] = append(checksByApp[c.AppID], c)
-	}
-
-	updated := 0
-	for _, app := range appList {
-		if app.ProfileID == "" {
-			continue
-		}
-		tmpl, err := profiler.Get(app.ProfileID)
-		if err != nil || tmpl == nil || tmpl.Monitor.CheckURL == "" {
-			continue
-		}
-		newTarget, err := app.Config.ResolveTemplateVars(tmpl.Monitor.CheckURL)
-		if err != nil {
-			// base_url not configured yet — nothing to sync.
-			continue
-		}
-		for _, c := range checksByApp[app.ID] {
-			if c.Type == tmpl.Monitor.CheckType && c.Target != newTarget {
-				c.Target = newTarget
-				if updateErr := checks.Update(ctx, c); updateErr != nil {
-					log.Printf("profile sync: update check %s for app %q: %v", c.ID, app.Name, updateErr)
-				} else {
-					updated++
-				}
-				break
-			}
-		}
-	}
-	if updated > 0 {
-		log.Printf("profile sync: updated %d check target(s) to match current profile templates", updated)
-	}
-}
-
-// monitorURLFromConfig extracts the monitor_url string from app config JSON.
-func monitorURLFromConfig(cfg models.ConfigJSON) string {
-	var m map[string]interface{}
-	if err := json.Unmarshal([]byte(cfg), &m); err != nil {
-		return ""
-	}
-	s, _ := m["monitor_url"].(string)
-	return s
+	writeJSON(w, http.StatusOK, listMetricsResponse{Data: snapshots, Total: len(snapshots)})
 }
 
 // --- helpers ---

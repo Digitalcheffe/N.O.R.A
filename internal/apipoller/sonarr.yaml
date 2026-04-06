@@ -1,0 +1,2 @@
+auth_type: apikey_header
+auth_header: X-Api-Key

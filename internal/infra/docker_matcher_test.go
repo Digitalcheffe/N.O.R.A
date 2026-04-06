@@ -1,4 +1,4 @@
-package docker
+package infra
 
 import (
 	"io/fs"

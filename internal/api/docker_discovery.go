@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/apptemplate"
-	"github.com/digitalcheffe/nora/internal/docker"
+	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/go-chi/chi/v5"
@@ -87,7 +87,7 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 	//   3. raw containerID — backward compat for readings recorded before the stable-ID change
 	lookupIDs := make([]string, 0, len(containers)*3)
 	for _, c := range containers {
-		lookupIDs = append(lookupIDs, docker.StableContainerSourceID(componentID, c.ContainerName))
+		lookupIDs = append(lookupIDs, infra.StableContainerSourceID(componentID, c.ContainerName))
 		if c.AppID != nil && *c.AppID != "" {
 			lookupIDs = append(lookupIDs, *c.AppID)
 		}
@@ -116,7 +116,7 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 		}
 
 		// Walk lookup priority until we find a source ID that has metrics.
-		candidates := []string{docker.StableContainerSourceID(componentID, c.ContainerName)}
+		candidates := []string{infra.StableContainerSourceID(componentID, c.ContainerName)}
 		if c.AppID != nil && *c.AppID != "" {
 			candidates = append(candidates, *c.AppID)
 		}
@@ -338,7 +338,7 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			return
 		}
 		container.AppID = &req.AppID
-		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, req.AppID, &id, nil)
+		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, req.AppID, &id, nil)
 		writeJSON(w, http.StatusOK, container)
 
 	case "create":
@@ -384,7 +384,7 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, app.ID, &id, nil)
+		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, app.ID, &id, nil)
 		writeJSON(w, http.StatusCreated, app)
 
 	default:
@@ -471,7 +471,7 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = req.AppID
 		route.AppID = &linkedAppID
-		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
+		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusOK, route)
 
 
@@ -520,7 +520,7 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = app.ID
 		route.AppID = &linkedAppID
-		_ = docker.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
+		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusCreated, app)
 
 	default:

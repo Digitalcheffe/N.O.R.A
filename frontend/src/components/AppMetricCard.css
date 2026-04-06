@@ -1,0 +1,53 @@
+/* ── AppMetricCard ────────────────────────────────────────────────────────────
+   Individual metric card used in AppMetricsGrid.
+   Matches detail-stat-card sizing, border, background, and shadow.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.amc-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 140px;
+  transition: border-color 0.15s;
+}
+
+.amc-card:hover { border-color: var(--border2); }
+
+.amc-value {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+  text-align: center;
+}
+
+.amc-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-align: center;
+  line-height: 1.3;
+}
+
+.amc-timestamp {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  text-align: center;
+  margin-top: 4px;
+}
+
+.amc-timestamp--stale { color: var(--yellow, #eab308); }
+
+/* ── Skeleton ──────────────────────────────────────────────────────────────── */
+
+.amc-card--skeleton {
+  height: 86px;
+  pointer-events: none;
+}

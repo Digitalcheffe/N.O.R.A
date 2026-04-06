@@ -9,8 +9,3 @@ webhook:
   setup_instructions: |
     No webhook or API. NORA monitors the dashboard base URL for availability.
 
-monitor:
-  check_type: url
-  check_url: "{base_url}"
-  healthy_status: 200
-  check_interval: 5m

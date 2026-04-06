@@ -1,4 +1,4 @@
-package docker
+package metrics
 
 import (
 	"context"
@@ -128,15 +128,15 @@ func (p *HealthPoller) emitHealthEvent(
 
 	fields := fmt.Sprintf(
 		`{"source_type":"docker_health","container_name":%s}`,
-		jsonStr(containerName),
+		healthJsonStr(containerName),
 	)
 
 	if health != nil && len(health.Log) > 0 {
 		last := health.Log[len(health.Log)-1]
 		fields = fmt.Sprintf(
 			`{"source_type":"docker_health","container_name":%s,"health_output":%s}`,
-			jsonStr(containerName),
-			jsonStr(last.Output),
+			healthJsonStr(containerName),
+			healthJsonStr(last.Output),
 		)
 	}
 
@@ -181,4 +181,11 @@ func containerNameFromInspect(info container.InspectResponse) string {
 		return ""
 	}
 	return strings.TrimPrefix(info.Name, "/")
+}
+
+// healthJsonStr returns s as a JSON-encoded string (with quotes and escaping).
+func healthJsonStr(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
 }

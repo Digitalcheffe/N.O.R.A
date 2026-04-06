@@ -46,23 +46,48 @@ webhook:
     ApplicationUpdate: info
     Test: info
 
-monitor:
-  check_type: url
-  check_url: "{base_url}"
-  healthy_status: 200
-  check_interval: 5m
+
+api_polling:
+  - name: total_series
+    label: Series Tracked
+    path: /api/v3/series
+    target: length
+    value_type: count
+
+  - name: queue_depth
+    label: Queue Depth
+    path: /api/v3/queue
+    target: $.totalRecords
+    value_type: count
+
+  - name: health_issues
+    label: Health Issues
+    path: /api/v3/health
+    target: length
+    value_type: count
 
 digest:
   categories:
-    - label: Downloads
+    - source: webhook
+      label: Downloads
       match_field: event_type
       match_value: Download
-      match_severity: ""
-    - label: Upgrades
+    - source: webhook
+      label: Upgrades
       match_field: event_type
       match_value: Upgrade
-      match_severity: ""
-    - label: Health Issues
+    - source: webhook
+      label: Health Issues
       match_field: event_type
       match_value: Health
-      match_severity: ""
+  widgets:
+    - source: api
+      metric: total_series
+      label: Series Tracked
+    - source: api
+      metric: queue_depth
+      label: In Queue
+    - source: webhook
+      label: Downloads Today
+      match_field: event_type
+      match_value: Download

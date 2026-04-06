@@ -5,25 +5,24 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/internal/scanner"
 )
 
 // DockerMetricsScanner collects CPU% and memory metrics from all running
-// containers on a Docker engine. It delegates to docker.ResourcePoller which
+// containers on a Docker engine. It delegates to ResourcePoller which
 // already implements stable source IDs, threshold events, and per-container
 // readings. One scanner instance is created per docker_engine component.
 type DockerMetricsScanner struct {
-	store   *repo.Store
-	poller  *docker.ResourcePoller
+	store    *repo.Store
+	poller   *ResourcePoller
 	engineID string
 }
 
 // NewDockerMetricsScanner returns a DockerMetricsScanner that uses the given
 // ResourcePoller. The engineID must match the infrastructure_components.id of
 // the docker_engine component so source IDs are derived consistently.
-func NewDockerMetricsScanner(store *repo.Store, engineID string, poller *docker.ResourcePoller) *DockerMetricsScanner {
+func NewDockerMetricsScanner(store *repo.Store, engineID string, poller *ResourcePoller) *DockerMetricsScanner {
 	return &DockerMetricsScanner{
 		store:    store,
 		poller:   poller,

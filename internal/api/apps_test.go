@@ -2,10 +2,12 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/digitalcheffe/nora/internal/api"
 	"github.com/digitalcheffe/nora/internal/config"
@@ -35,7 +37,8 @@ func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
-	h := api.NewAppsHandler(appRepo, nil, nil, nil)
+	snapshotRepo := repo.NewAppMetricSnapshotRepo(db)
+	h := api.NewAppsHandler(appRepo, nil, nil, nil, snapshotRepo)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
@@ -256,5 +259,106 @@ func TestRegenerateToken_NotFound(t *testing.T) {
 	router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("expected 404 got %d", rr.Code)
+	}
+}
+
+// --- GetMetrics ---
+
+func TestGetMetrics_NotFound(t *testing.T) {
+	router := newTestRouter(t)
+	req := httptest.NewRequest(http.MethodGet, "/apps/does-not-exist/metrics", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404 got %d", rr.Code)
+	}
+}
+
+func TestGetMetrics_EmptyForNewApp(t *testing.T) {
+	router := newTestRouter(t)
+	app := createApp(t, router, "Sonarr")
+
+	req := httptest.NewRequest(http.MethodGet, "/apps/"+app.ID+"/metrics", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Data  []interface{} `json:"data"`
+		Total int           `json:"total"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Total != 0 {
+		t.Errorf("expected total=0 got %d", resp.Total)
+	}
+	if len(resp.Data) != 0 {
+		t.Errorf("expected empty data array got %d items", len(resp.Data))
+	}
+}
+
+func TestGetMetrics_ReturnsSnapshots(t *testing.T) {
+	db := newTestDB(t)
+	appRepo := repo.NewAppRepo(db)
+	snapshotRepo := repo.NewAppMetricSnapshotRepo(db)
+	h := api.NewAppsHandler(appRepo, nil, nil, nil, snapshotRepo)
+	r := chi.NewRouter()
+	h.Routes(r)
+
+	// Create an app.
+	body, _ := json.Marshal(map[string]any{"name": "Sonarr", "rate_limit": 100})
+	reqCreate := httptest.NewRequest(http.MethodPost, "/apps", bytes.NewReader(body))
+	reqCreate.Header.Set("Content-Type", "application/json")
+	rrCreate := httptest.NewRecorder()
+	r.ServeHTTP(rrCreate, reqCreate)
+	if rrCreate.Code != http.StatusCreated {
+		t.Fatalf("create app: expected 201 got %d", rrCreate.Code)
+	}
+	var app models.App
+	json.NewDecoder(rrCreate.Body).Decode(&app)
+
+	// Seed a snapshot directly via the repo.
+	err := snapshotRepo.Upsert(context.Background(), models.AppMetricSnapshot{
+		ID:         "snap-1",
+		AppID:      app.ID,
+		ProfileID:  "sonarr",
+		MetricName: "total_series",
+		Label:      "Series Tracked",
+		Value:      "847",
+		ValueType:  "count",
+		PolledAt:   time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("upsert snapshot: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/apps/"+app.ID+"/metrics", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Data  []models.AppMetricSnapshot `json:"data"`
+		Total int                        `json:"total"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Total != 1 {
+		t.Errorf("expected total=1 got %d", resp.Total)
+	}
+	if len(resp.Data) != 1 {
+		t.Fatalf("expected 1 snapshot got %d", len(resp.Data))
+	}
+	if resp.Data[0].MetricName != "total_series" {
+		t.Errorf("expected metric_name=total_series got %q", resp.Data[0].MetricName)
+	}
+	if resp.Data[0].Value != "847" {
+		t.Errorf("expected value=847 got %q", resp.Data[0].Value)
 	}
 }

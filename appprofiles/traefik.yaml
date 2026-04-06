@@ -6,8 +6,3 @@ meta:
   capability: monitor_only
   homepage: https://traefik.io
 
-monitor:
-  check_type: url
-  check_url: "{base_url}/ping"
-  healthy_status: 200
-  check_interval: 1m

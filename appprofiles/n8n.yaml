@@ -29,11 +29,6 @@ webhook:
     "workflow.error": error
     "node.error": warn
 
-monitor:
-  check_type: url
-  check_url: "{base_url}/healthz"
-  healthy_status: 200
-  check_interval: 5m
 
 digest:
   categories:
