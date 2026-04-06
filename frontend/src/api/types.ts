@@ -617,6 +617,8 @@ export interface SynologyDetail {
 
 export interface DiscoveredContainer {
   id: string
+  infra_component_id: string
+  source_type: string
   container_name: string
   image: string
   status: string
@@ -844,6 +846,10 @@ export interface PortainerEndpointSummary {
   volumes_disk_bytes: number
   networks_total: number
 }
+
+// DockerEngineSummary mirrors PortainerEndpointSummary so both detail pages
+// can use the same StatCard layout.
+export type DockerEngineSummary = PortainerEndpointSummary
 
 export interface PortainerContainerResource {
   id: string

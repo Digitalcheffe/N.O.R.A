@@ -146,14 +146,16 @@ func (d *Discoverer) HandleEvent(ctx context.Context, containerID, name, image, 
 }
 
 // upsert writes or updates a discovered_containers record and runs profile matching.
-// If a stale record exists for the same engine+name with a different container_id,
-// the app_id is transferred to the new record and the stale record is deleted.
+// The unique key is (infra_component_id, container_name): rebuilding a container
+// produces a new Docker hash but the same name, so the existing row is updated in
+// place and the app_id link is preserved automatically by the DB.
 // meta is optional enrichment from container.Summary; pass nil when not available.
 func (d *Discoverer) upsert(ctx context.Context, containerID, name, image, status string, meta *containerEnrichment) error {
 	now := time.Now().UTC()
 
 	dc := &models.DiscoveredContainer{
 		InfraComponentID: d.engineID,
+		SourceType:       "docker_engine",
 		ContainerID:      containerID,
 		ContainerName:    name,
 		Image:            image,
@@ -176,22 +178,16 @@ func (d *Discoverer) upsert(ctx context.Context, containerID, name, image, statu
 		dc.SuggestionConfidence = &match.Confidence
 	}
 
-	// Consolidate: if a stale record with the same name but a different container_id
-	// exists, transfer its app_id link to the new record then delete the stale one.
-	if existing, err := d.store.DiscoveredContainers.FindByName(ctx, d.engineID, name); err == nil {
-		if existing.ContainerID != containerID {
-			if existing.AppID != nil {
-				dc.AppID = existing.AppID
-			}
-			if delErr := d.store.DiscoveredContainers.DeleteDiscoveredContainer(ctx, existing.ID); delErr != nil {
-				log.Printf("docker discovery: consolidate stale record for %s: %v", name, delErr)
-			} else {
-				log.Printf("docker discovery: consolidated stale record for container %s (old id %s → new id %s)", name, existing.ContainerID, containerID)
-			}
-		}
+	if err := d.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, dc); err != nil {
+		return err
 	}
 
-	return d.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, dc)
+	// Register the parent relationship in component_links so the topology and
+	// Relationships UI can traverse docker_engine → container edges.
+	if err := d.store.ComponentLinks.SetParent(ctx, "docker_engine", d.engineID, "container", dc.ID); err != nil {
+		log.Printf("docker discovery: set parent link for container %s: %v", name, err)
+	}
+	return nil
 }
 
 // containerNameFrom returns the primary container name from the Docker names

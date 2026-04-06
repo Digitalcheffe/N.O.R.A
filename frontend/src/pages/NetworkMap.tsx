@@ -2,23 +2,48 @@ import { useState, useEffect, useCallback } from 'react'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { InfraEditModal } from './InfraEditModal'
-import { infrastructure as infraApi, links as linksApi } from '../api/client'
-import type { InfrastructureComponent, ComponentLink } from '../api/types'
+import {
+  infrastructure as infraApi,
+  links as linksApi,
+  discovery,
+  apps as appsApi,
+  checks as checksApi,
+} from '../api/client'
+import type {
+  InfrastructureComponent,
+  ComponentLink,
+  DiscoveredContainer,
+  App,
+  MonitorCheck,
+} from '../api/types'
 
 export function NetworkMap() {
-  const [components,     setComponents]     = useState<InfrastructureComponent[]>([])
-  const [links,          setLinks]          = useState<ComponentLink[]>([])
-  const [loading,        setLoading]        = useState(true)
-  const [modalOpen,      setModalOpen]      = useState(false)
-  const [openKey,        setOpenKey]        = useState(0)
-  const [editingComponent, setEditingComponent] = useState<InfrastructureComponent | null>(null)
-  const [editingHasCreds,  setEditingHasCreds]  = useState(false)
+  const [components,  setComponents]  = useState<InfrastructureComponent[]>([])
+  const [links,       setLinks]       = useState<ComponentLink[]>([])
+  const [containers,  setContainers]  = useState<DiscoveredContainer[]>([])
+  const [apps,        setApps]        = useState<App[]>([])
+  const [monitors,    setMonitors]    = useState<MonitorCheck[]>([])
+  const [loading,     setLoading]     = useState(true)
+
+  const [modalOpen,         setModalOpen]         = useState(false)
+  const [openKey,           setOpenKey]           = useState(0)
+  const [editingComponent,  setEditingComponent]  = useState<InfrastructureComponent | null>(null)
+  const [editingHasCreds,   setEditingHasCreds]   = useState(false)
 
   useEffect(() => {
-    Promise.all([infraApi.list(), linksApi.list()])
-      .then(([infraRes, linkRes]) => {
+    Promise.all([
+      infraApi.list(),
+      linksApi.list(),
+      discovery.allContainers(),
+      appsApi.list(),
+      checksApi.list(),
+    ])
+      .then(([infraRes, linkRes, ctrRes, appRes, monRes]) => {
         setComponents(infraRes.data)
         setLinks(linkRes.data)
+        setContainers(ctrRes.data)
+        setApps(appRes.data)
+        setMonitors(monRes.data)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -49,6 +74,9 @@ export function NetworkMap() {
           <InfraNetworkMap
             components={components}
             links={links}
+            containers={containers}
+            apps={apps}
+            monitors={monitors}
             onEditComponent={openEdit}
           />
         )}

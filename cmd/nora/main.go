@@ -440,6 +440,7 @@ func main() {
 		api.NewProfilesHandler(registry, customDir).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDockerDiscoveryHandler(store, registry).Routes(r)
+			api.NewDockerSummaryHandler(store).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)

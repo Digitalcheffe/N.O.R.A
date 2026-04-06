@@ -55,7 +55,7 @@ type DiscoveredRouteRepo interface {
 // ── DiscoveredContainerRepo implementation ────────────────────────────────────
 
 // containerSelectCols is the shared column list for discovered_containers SELECT queries.
-const containerSelectCols = `id, infra_component_id, container_id, container_name, image, status,
+const containerSelectCols = `id, infra_component_id, source_type, container_id, container_name, image, status,
 	app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
 	image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at,
 	ports, labels, volumes, networks, restart_policy, docker_created_at`
@@ -71,14 +71,19 @@ func (r *sqliteDiscoveredContainerRepo) UpsertDiscoveredContainer(ctx context.Co
 	if c.ID == "" {
 		c.ID = uuid.New().String()
 	}
-	_, err := r.db.ExecContext(ctx, `
+	// Conflict key is (infra_component_id, container_name): the name is stable
+	// across container rebuilds; container_id (the Docker hash) changes and is
+	// refreshed on every upsert.  RETURNING id gives the caller the stable NORA
+	// UUID whether this was an INSERT or an UPDATE.
+	err := r.db.QueryRowContext(ctx, `
 		INSERT INTO discovered_containers
-		  (id, infra_component_id, container_id, container_name, image, status,
+		  (id, infra_component_id, source_type, container_id, container_name, image, status,
 		   app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
 		   ports, labels, volumes, networks, restart_policy, docker_created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(infra_component_id, container_id) DO UPDATE SET
-		  container_name        = excluded.container_name,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(infra_component_id, container_name) DO UPDATE SET
+		  source_type           = excluded.source_type,
+		  container_id          = excluded.container_id,
 		  image                 = excluded.image,
 		  status                = excluded.status,
 		  profile_suggestion    = excluded.profile_suggestion,
@@ -88,12 +93,14 @@ func (r *sqliteDiscoveredContainerRepo) UpsertDiscoveredContainer(ctx context.Co
 		  labels                = COALESCE(excluded.labels, labels),
 		  volumes               = COALESCE(excluded.volumes, volumes),
 		  networks              = COALESCE(excluded.networks, networks),
-		  docker_created_at     = COALESCE(excluded.docker_created_at, docker_created_at)`,
-		c.ID, c.InfraComponentID, c.ContainerID, c.ContainerName, c.Image, c.Status,
+		  docker_created_at     = COALESCE(excluded.docker_created_at, docker_created_at)
+		RETURNING id`,
+		c.ID, c.InfraComponentID, c.SourceType, c.ContainerID, c.ContainerName, c.Image, c.Status,
 		c.AppID, c.ProfileSuggestion, c.SuggestionConfidence, c.LastSeenAt, c.CreatedAt,
-		c.Ports, c.Labels, c.Volumes, c.Networks, c.RestartPolicy, c.DockerCreatedAt)
+		c.Ports, c.Labels, c.Volumes, c.Networks, c.RestartPolicy, c.DockerCreatedAt,
+	).Scan(&c.ID)
 	if err != nil {
-		return fmt.Errorf("upsert discovered container %s: %w", c.ContainerID, err)
+		return fmt.Errorf("upsert discovered container %s: %w", c.ContainerName, err)
 	}
 	return nil
 }

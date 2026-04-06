@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { portainer as portainerApi } from '../api/client'
-import { DockerEngineDetail } from './DockerEngineDetail'
 import { formatBytes } from '../utils/format'
 import type {
   InfrastructureComponent,
@@ -10,6 +10,7 @@ import type {
 } from '../api/types'
 import './PortainerDetail.css'
 import '../pages/InfraComponentDetail.css'
+import './DockerEngineDetail.css'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -94,6 +95,26 @@ function EndpointView({
 
   return (
     <div className="pt-endpoint-view">
+      {summary && summary.images_dangling > 0 && !danglingDismissed && (
+        <DismissibleNotice
+          message={`${summary.images_dangling} dangling image${summary.images_dangling !== 1 ? 's' : ''} found — ${formatBytes(summary.images_disk_bytes)} of disk space can be reclaimed`}
+          onDismiss={() => setDanglingDismissed(true)}
+        />
+      )}
+      {summary && summary.volumes_unused > 0 && !unusedDismissed && (
+        <DismissibleNotice
+          message={`${summary.volumes_unused} unused volume${summary.volumes_unused !== 1 ? 's' : ''} found`}
+          onDismiss={() => setUnusedDismissed(true)}
+        />
+      )}
+
+      <div className="de-containers-notice">
+        Container details and image update information are available on the{' '}
+        <Link to="/infrastructure?view=containers" className="de-containers-link">
+          Infrastructure › Containers tab →
+        </Link>
+      </div>
+
       {summary && (
         <div className="pt-stat-grid">
           <StatCard
@@ -126,19 +147,6 @@ function EndpointView({
             ]}
           />
         </div>
-      )}
-
-      {summary && summary.images_dangling > 0 && !danglingDismissed && (
-        <DismissibleNotice
-          message={`${summary.images_dangling} dangling image${summary.images_dangling !== 1 ? 's' : ''} found — ${formatBytes(summary.images_disk_bytes)} of disk space can be reclaimed`}
-          onDismiss={() => setDanglingDismissed(true)}
-        />
-      )}
-      {summary && summary.volumes_unused > 0 && !unusedDismissed && (
-        <DismissibleNotice
-          message={`${summary.volumes_unused} unused volume${summary.volumes_unused !== 1 ? 's' : ''} found`}
-          onDismiss={() => setUnusedDismissed(true)}
-        />
       )}
     </div>
   )
@@ -210,20 +218,7 @@ export function PortainerContent({ component, onCountsLoaded }: PortainerContent
     </div>
   )
 
-  return (
-    <>
-      {endpointSection}
-
-      {/* Container cards with Add App — uses discovered_containers populated by the enrichment worker */}
-      <div className="icd-section">
-        <div className="icd-section-title">Containers</div>
-        <DockerEngineDetail
-          engineId={component.id}
-          onCountsLoaded={onCountsLoaded ?? (() => {})}
-        />
-      </div>
-    </>
-  )
+  return endpointSection
 }
 
 // ── Keep a default export alias so App.tsx import still resolves during migration

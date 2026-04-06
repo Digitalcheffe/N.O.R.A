@@ -35,6 +35,7 @@ import type {
   JobRunResult,
   PortainerEndpoint,
   PortainerEndpointSummary,
+  DockerEngineSummary,
   PortainerContainerResource,
   LinkAppInput,
   ListResponse,
@@ -464,6 +465,9 @@ export const infrastructure = {
   resources: (id: string, period = 'hour') =>
     request<ResourceSummary>('GET', `/infrastructure/${id}/resources?period=${period}`),
 
+  dockerSummary: (id: string) =>
+    request<DockerEngineSummary>('GET', `/infrastructure/${id}/docker-summary`),
+
   resourceHistory: (id: string, period: 'hour' | 'day' = 'hour', limit = 24) =>
     request<ResourceHistory>('GET', `/infrastructure/${id}/resources/history?period=${period}&limit=${limit}`),
 
@@ -542,11 +546,17 @@ export const discovery = {
   containers: (engineId: string) =>
     request<ListResponse<DiscoveredContainer>>('GET', `/infrastructure/${engineId}/containers`),
 
+  allContainers: () =>
+    request<ListResponse<DiscoveredContainer>>('GET', `/containers`),
+
   deleteContainer: (containerId: string) =>
     request<void>('DELETE', `/discovered-containers/${containerId}`),
 
   linkContainerApp: (containerId: string, body: LinkAppInput) =>
     request<unknown>('POST', `/discovered-containers/${containerId}/link-app`, body),
+
+  unlinkContainerApp: (containerId: string) =>
+    request<void>('DELETE', `/discovered-containers/${containerId}/link-app`),
 }
 
 // ── Traefik expanded (Infra-10/11) ────────────────────────────────────────────

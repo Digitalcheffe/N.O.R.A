@@ -32,7 +32,35 @@
   text-align: center;
 }
 
-/* ── Container card grid ── */
+/* ── Containers page notice ── */
+
+.de-containers-notice {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-top: 4px;
+}
+
+.de-containers-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.de-containers-link:hover {
+  text-decoration: underline;
+}
+
+.de-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Container card grid (kept for reference, no longer rendered) ── */
 
 .de-card-grid {
   display: grid;
@@ -418,13 +446,6 @@
   border-color: var(--border2);
 }
 
-/* ── Wrapper (card grid + updates section stacked) ── */
-
-.de-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
 
 /* ── Update available badge (amber, on cards) ── */
 

@@ -523,3 +523,246 @@
 .infra-scan-feedback.error {
   color: var(--red);
 }
+
+/* ── CONTAINERS TABLE ────────────────────────────────────────────────────────── */
+
+.rel-table.ctr-table thead tr {
+  background: var(--bg4);
+}
+
+.rel-table.ctr-table thead th {
+  color: #ffffff;
+  font-family: var(--sans, sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border2);
+}
+
+.rel-table.ctr-table thead th:first-child {
+  border-left: 3px solid var(--accent);
+  padding-left: 13px;
+}
+
+.ctr-table tbody tr:hover td {
+  background: var(--bg3);
+  cursor: default;
+}
+
+.ctr-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ctr-image {
+  font-size: 11px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctr-status-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: capitalize;
+}
+
+.ctr-last-seen {
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.ctr-source-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ctr-source-docker_engine {
+  background: #1e3a5f22;
+  color: #60a5fa;
+  border-color: #1e40af44;
+}
+
+.ctr-source-portainer {
+  background: #1a3a2a22;
+  color: #4ade80;
+  border-color: #16653044;
+}
+
+.ctr-app-cell {
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ctr-app-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.ctr-app-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.ctr-settings-cell {
+  width: 32px;
+  padding: 0 8px;
+  text-align: center;
+}
+
+.ctr-settings-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text3);
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ctr-settings-btn:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+
+/* ── Container settings panel ── */
+
+.ctr-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ctr-panel-section-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+  margin-bottom: 4px;
+}
+
+.ctr-panel-linked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ctr-panel-link-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ctr-panel-select {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+}
+
+.ctr-panel-link-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.ctr-panel-link-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ctr-panel-unlink-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text3);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.ctr-panel-unlink-btn:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.ctr-panel-unlink-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ctr-panel-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  margin-top: 4px;
+}
+
+.ctr-panel-info-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.ctr-panel-info-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.ctr-panel-info-value {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

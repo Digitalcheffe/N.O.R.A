@@ -33,6 +33,10 @@ type ResourceRollupRepo interface {
 	PurgeHourlyRollups(ctx context.Context, cutoff time.Time) (int64, error)
 	// LatestForSource returns the most recent rollup row per metric for the given source and period type.
 	LatestForSource(ctx context.Context, sourceID, sourceType, periodType string) ([]models.ResourceRollup, error)
+	// LatestForSourcePrefix is like LatestForSource but also matches rows whose
+	// source_id starts with sourceID+"/" — used for components (e.g. proxmox_node)
+	// that write per-node readings with a compound source_id.
+	LatestForSourcePrefix(ctx context.Context, sourceID, sourceType, periodType string) ([]models.ResourceRollup, error)
 	// HistoryForSource returns up to limit rollup rows for the given source and period type,
 	// ordered by period_start ascending (oldest first).
 	HistoryForSource(ctx context.Context, sourceID, sourceType, periodType string, limit int) ([]models.ResourceRollup, error)
@@ -135,6 +139,28 @@ func (r *sqliteResourceRollupRepo) LatestForSource(ctx context.Context, sourceID
 		sourceID, sourceType, periodType)
 	if err != nil {
 		return nil, fmt.Errorf("latest for source: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *sqliteResourceRollupRepo) LatestForSourcePrefix(ctx context.Context, sourceID, sourceType, periodType string) ([]models.ResourceRollup, error) {
+	var rows []models.ResourceRollup
+	prefix := sourceID + "/%"
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT source_id, source_type, metric, period_type, period_start,
+		       AVG(avg) AS avg, MIN(min) AS min, MAX(max) AS max
+		FROM resource_rollups r1
+		WHERE (source_id = ? OR source_id LIKE ?) AND source_type = ? AND period_type = ?
+		  AND period_start = (
+		      SELECT MAX(period_start) FROM resource_rollups r2
+		      WHERE (r2.source_id = ? OR r2.source_id LIKE ?)
+		        AND r2.metric = r1.metric
+		        AND r2.period_type = r1.period_type
+		  )
+		GROUP BY metric`,
+		sourceID, prefix, sourceType, periodType, sourceID, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("latest for source prefix: %w", err)
 	}
 	return rows, nil
 }

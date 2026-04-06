@@ -75,7 +75,7 @@ export function DetailPageLayout({
   return (
     <>
       <Topbar title={name} />
-      <div className="content">
+      <div className="content dpl-page">
 
         {/* ── Header row ── */}
         <div className="dpl-header">

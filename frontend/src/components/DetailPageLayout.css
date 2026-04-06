@@ -6,6 +6,12 @@
    EventFeed
    ────────────────────────────────────────────────────────────────────────── */
 
+/* ── Page wrapper — override the global .content gap so dpl-* elements own spacing ── */
+
+.dpl-page {
+  gap: 0 !important;
+}
+
 /* ── Header ──────────────────────────────────────────────────────────────── */
 
 .dpl-header {
@@ -140,13 +146,13 @@
 .dpl-divider {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 20px 0;
+  margin: 8px 0;
 }
 
 /* ── Content area ────────────────────────────────────────────────────────── */
 
 .dpl-content {
-  /* Children render directly — no additional wrapper styles needed */
+  margin-bottom: 4px;
 }
 
 /* ── Discover Now button ─────────────────────────────────────────────────── */
