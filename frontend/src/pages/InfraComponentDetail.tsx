@@ -394,7 +394,7 @@ export function InfraComponentDetail() {
   const [linkingAppId,     setLinkingAppId]     = useState('')
   const [linkBusy,         setLinkBusy]         = useState(false)
   const [dockerCounts,     setDockerCounts]     = useState({ total: 0, running: 0 })
-  const [portainerCounts,  setPortainerCounts]  = useState({ total: 0, running: 0 })
+  const [portainerCounts] = useState({ total: 0, running: 0 })
   const [editOpen,         setEditOpen]         = useState(false)
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState<string | null>(null)
@@ -528,7 +528,6 @@ export function InfraComponentDetail() {
         />
         <PortainerContent
           component={component}
-          onCountsLoaded={(total, running) => setPortainerCounts({ total, running })}
         />
       </DetailPageLayout>
     )

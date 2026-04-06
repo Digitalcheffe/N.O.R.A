@@ -432,6 +432,8 @@ export type ComponentType =
   | 'generic_host'
   | 'docker_engine'
   | 'traefik'
+  | 'traefik_router'
+  | 'traefik_service'
   | 'portainer'
 
 export type CollectionMethod =

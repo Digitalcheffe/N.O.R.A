@@ -159,10 +159,9 @@ function EndpointView({
 
 interface PortainerContentProps {
   component: InfrastructureComponent
-  onCountsLoaded?: (total: number, running: number, unlinked: number) => void
 }
 
-export function PortainerContent({ component, onCountsLoaded }: PortainerContentProps) {
+export function PortainerContent({ component }: PortainerContentProps) {
   const [endpoints, setEndpoints] = useState<PortainerEndpoint[]>([])
   const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(true)

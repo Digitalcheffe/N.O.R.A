@@ -15,9 +15,11 @@ export const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   linux_host:    'snmp',
   windows_host:  'snmp',
   generic_host:  'none',
-  docker_engine: 'docker_socket',
-  traefik:       'traefik_api',
-  portainer:     'portainer_api',
+  docker_engine:   'docker_socket',
+  traefik:         'traefik_api',
+  traefik_router:  'none',
+  traefik_service: 'none',
+  portainer:       'portainer_api',
 }
 
 export const TYPE_LABEL: Record<ComponentType, string> = {
@@ -29,9 +31,11 @@ export const TYPE_LABEL: Record<ComponentType, string> = {
   linux_host:    'Linux Host',
   windows_host:  'Windows Host',
   generic_host:  'Generic Host',
-  docker_engine: 'Docker Engine',
-  traefik:       'Traefik',
-  portainer:     'Portainer',
+  docker_engine:   'Docker Engine',
+  traefik:         'Traefik',
+  traefik_router:  'Traefik Router',
+  traefik_service: 'Traefik Service',
+  portainer:       'Portainer',
 }
 
 export const SNMP_TYPES = new Set<ComponentType>(['vm_linux', 'vm_windows', 'linux_host', 'windows_host'])

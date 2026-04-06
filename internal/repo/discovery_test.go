@@ -107,11 +107,12 @@ func TestDiscoveredContainerRepo_UpsertUpdatesExisting(t *testing.T) {
 	}
 	firstID := c.ID
 
-	// Upsert same infra_component_id + container_id with updated fields.
+	// Upsert same infra_component_id + container_name (conflict key) with updated fields.
+	// The container_id (Docker hash) changes on rebuild — the name stays stable.
 	c2 := &models.DiscoveredContainer{
 		InfraComponentID: engineID,
-		ContainerID:    "abc123",
-		ContainerName:  "sonarr-renamed",
+		ContainerID:    "def456", // new Docker hash after container rebuild
+		ContainerName:  "sonarr", // same name — this is the conflict key
 		Image:          "linuxserver/sonarr:4.0",
 		Status:         "stopped",
 		LastSeenAt:     now.Add(time.Minute),
@@ -125,11 +126,14 @@ func TestDiscoveredContainerRepo_UpsertUpdatesExisting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got.ContainerName != "sonarr-renamed" {
-		t.Errorf("name: want sonarr-renamed, got %s", got.ContainerName)
+	if got.ContainerID != "def456" {
+		t.Errorf("container_id: want def456, got %s", got.ContainerID)
 	}
 	if got.Status != "stopped" {
 		t.Errorf("status: want stopped, got %s", got.Status)
+	}
+	if got.Image != "linuxserver/sonarr:4.0" {
+		t.Errorf("image: want linuxserver/sonarr:4.0, got %s", got.Image)
 	}
 }
 
