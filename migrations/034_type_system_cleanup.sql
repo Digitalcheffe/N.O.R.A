@@ -11,8 +11,8 @@
 --
 -- Also updates source_type CHECK constraints in:
 --   events            (virtual_host → vm_other, physical_host kept for scanner compat)
---   resource_readings (vm → vm_other)
---   resource_rollups  (vm → vm_other)
+--   resource_readings (vm → vm_other; traefik retained — was valid in 030, historical rows exist)
+--   resource_rollups  (vm → vm_other; traefik retained — same reason)
 
 PRAGMA foreign_keys = OFF;
 
@@ -147,7 +147,8 @@ CREATE TABLE resource_readings_new (
                               'vm_other',
                               'proxmox_node',
                               'synology',
-                              'snmp_host'
+                              'snmp_host',
+                              'traefik'
                           )),
     metric      TEXT      NOT NULL,
     value       REAL      NOT NULL,
@@ -183,7 +184,8 @@ CREATE TABLE resource_rollups_new (
                                'vm_other',
                                'proxmox_node',
                                'synology',
-                               'snmp_host'
+                               'snmp_host',
+                               'traefik'
                            )),
     metric       TEXT      NOT NULL,
     period_type  TEXT      NOT NULL CHECK (period_type IN ('hour', 'day')),
