@@ -33,6 +33,25 @@
   border-bottom-color: var(--accent);
 }
 
+/* ── Instance tab two-up layout ──────────────────────────────────────────── */
+
+.instance-top-row {
+  display: flex;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.instance-top-row > .settings-section {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .instance-top-row {
+    flex-direction: column;
+  }
+}
+
 /* ── Tab content ──────────────────────────────────────────────────────────── */
 
 .tab-content {

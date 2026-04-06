@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
+import pkgJson from '../../package.json'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { InfraIntegrations } from './Integrations'
@@ -77,10 +78,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'apps', label: 'Apps' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'notify_rules', label: 'Notify Rules' },
-  { id: 'metrics', label: 'Instance Metrics' },
-  { id: 'users', label: 'Users' },
-  { id: 'jobs', label: 'Jobs' },
   { id: 'digest_registry', label: 'Digest Registry' },
+  { id: 'jobs', label: 'Jobs' },
+  { id: 'users', label: 'Users' },
+  { id: 'metrics', label: 'Instance' },
 ]
 
 // ── Delete confirmation modal ─────────────────────────────────────────────────
@@ -790,25 +791,65 @@ function MetricsTab() {
 
   return (
     <div className="tab-content">
-      <section className="settings-section">
-        <div className="section-header">
-          <span className="section-title">Instance</span>
-        </div>
-        {loading ? (
-          <div className="settings-placeholder">Loading…</div>
-        ) : error ? (
-          <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{error}</div>
-        ) : data ? (
-          <div className="settings-kv-grid">
-            <span className="settings-kv-key">DB size</span>
-            <span className="settings-kv-val">{formatBytes(data.db_size_bytes)}</span>
-            <span className="settings-kv-key">Events last 24h</span>
-            <span className="settings-kv-val">{data.events_last_24h.toLocaleString()}</span>
-            <span className="settings-kv-key">Uptime</span>
-            <span className="settings-kv-val">{formatUptime(data.uptime_seconds)}</span>
+      <div className="instance-top-row">
+        <section className="settings-section">
+          <div className="section-header">
+            <span className="section-title">Instance</span>
           </div>
-        ) : null}
-      </section>
+          {loading ? (
+            <div className="settings-placeholder">Loading…</div>
+          ) : error ? (
+            <div className="settings-placeholder" style={{ color: 'var(--red)' }}>{error}</div>
+          ) : data ? (
+            <div className="settings-kv-grid">
+              <span className="settings-kv-key">Version</span>
+              <span className="settings-kv-val">v{data.version}</span>
+              <span className="settings-kv-key">Go</span>
+              <span className="settings-kv-val">{data.go_version}</span>
+              <span className="settings-kv-key">SQLite</span>
+              <span className="settings-kv-val">{data.sqlite_version}</span>
+              <span className="settings-kv-key">DB size</span>
+              <span className="settings-kv-val">{formatBytes(data.db_size_bytes)}</span>
+              <span className="settings-kv-key">Events last 24h</span>
+              <span className="settings-kv-val">{data.events_last_24h.toLocaleString()}</span>
+              <span className="settings-kv-key">Uptime</span>
+              <span className="settings-kv-val">{formatUptime(data.uptime_seconds)}</span>
+              <span className="settings-kv-key">GitHub</span>
+              <span className="settings-kv-val">
+                <a href="https://github.com/Digitalcheffe/N.O.R.A" target="_blank" rel="noopener noreferrer">Digitalcheffe/N.O.R.A</a>
+              </span>
+              <span className="settings-kv-key">Wiki</span>
+              <span className="settings-kv-val">
+                <a href="https://github.com/Digitalcheffe/N.O.R.A/wiki" target="_blank" rel="noopener noreferrer">N.O.R.A Wiki</a>
+              </span>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="settings-section">
+          <div className="section-header">
+            <span className="section-title">Tech Stack</span>
+          </div>
+          <div className="settings-kv-grid">
+            {/* Frontend deps — read live from package.json at build time */}
+            <span className="settings-kv-key">React</span>
+            <span className="settings-kv-val">Frontend UI ({pkgJson.dependencies['react']})</span>
+            <span className="settings-kv-key">React Router</span>
+            <span className="settings-kv-val">Client-side routing ({pkgJson.dependencies['react-router-dom']})</span>
+            <span className="settings-kv-key">Vite</span>
+            <span className="settings-kv-val">Build tool ({pkgJson.devDependencies['vite']})</span>
+            <span className="settings-kv-key">TypeScript</span>
+            <span className="settings-kv-val">Type safety ({pkgJson.devDependencies['typescript']})</span>
+            {/* Backend deps — read live from binary via debug.ReadBuildInfo() */}
+            {data?.deps.map(dep => (
+              <Fragment key={dep.name}>
+                <span className="settings-kv-key">{dep.label}</span>
+                <span className="settings-kv-val">{dep.version}</span>
+              </Fragment>
+            ))}
+          </div>
+        </section>
+      </div>
 
       <section className="settings-section">
         <div className="section-header">
