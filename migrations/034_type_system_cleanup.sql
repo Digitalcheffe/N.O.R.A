@@ -16,6 +16,12 @@
 
 PRAGMA foreign_keys = OFF;
 
+-- Drop any leftover _new tables from a previously interrupted migration run.
+DROP TABLE IF EXISTS infrastructure_components_new;
+DROP TABLE IF EXISTS events_new;
+DROP TABLE IF EXISTS resource_readings_new;
+DROP TABLE IF EXISTS resource_rollups_new;
+
 -- ── 1. infrastructure_components ─────────────────────────────────────────────
 
 CREATE TABLE infrastructure_components_new (
