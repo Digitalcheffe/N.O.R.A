@@ -51,17 +51,9 @@ type appTemplateMeta struct {
 	Homepage    string `json:"homepage,omitempty"`
 }
 
-// appTemplateDetail extends appTemplateMeta with monitor config for the Get endpoint.
+// appTemplateDetail extends appTemplateMeta for the Get endpoint.
 type appTemplateDetail struct {
 	appTemplateMeta
-	Monitor *appTemplateMonitor `json:"monitor,omitempty"`
-}
-
-// appTemplateMonitor carries the subset of monitor config the UI needs to
-// suggest a check URL. auth_header is intentionally excluded.
-type appTemplateMonitor struct {
-	CheckType string `json:"check_type"`
-	CheckURL  string `json:"check_url"`
 }
 
 // List handles GET /app-templates — returns meta for all registered app templates.
@@ -107,12 +99,6 @@ func (h *AppTemplatesHandler) Get(w http.ResponseWriter, r *http.Request) {
 			Capability:  t.Meta.Capability,
 			Homepage:    t.Meta.Homepage,
 		},
-	}
-	if t.Monitor.CheckURL != "" {
-		detail.Monitor = &appTemplateMonitor{
-			CheckType: t.Monitor.CheckType,
-			CheckURL:  t.Monitor.CheckURL,
-		}
 	}
 	writeJSON(w, http.StatusOK, detail)
 }

@@ -686,7 +686,6 @@ webhook:
 monitor:
   check_type: url
   check_url: "{base_url}/api/"
-  auth_header: "Authorization: Bearer {token}"
   healthy_status: 200
   check_interval: 5m
 digest:

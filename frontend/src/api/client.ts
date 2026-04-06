@@ -4,7 +4,7 @@
 
 import type {
   App,
-  AppMetric,
+  AppMetricSnapshot,
   AppTemplate,
   AuthUser,
   ChangePasswordInput,
@@ -220,7 +220,7 @@ export const apps = {
   },
 
   metrics: (id: string) =>
-    request<ListResponse<AppMetric>>('GET', `/apps/${id}/metrics`),
+    request<ListResponse<AppMetricSnapshot>>('GET', `/apps/${id}/metrics`),
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────

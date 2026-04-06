@@ -11,8 +11,3 @@ webhook:
     No webhook support. NORA monitors the JSON-RPC endpoint for availability.
     Configure base_url, username, and password to enable health checks.
 
-monitor:
-  check_type: url
-  check_url: "{base_url}"
-  healthy_status: 200
-  check_interval: 5m

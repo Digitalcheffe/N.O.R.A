@@ -1,10 +1,9 @@
-package docker
+package infra
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/apptemplate"
@@ -35,17 +34,7 @@ func EnrichAppOnLink(
 		return fmt.Errorf("enrichment: load app %s: %w", appID, err)
 	}
 
-	// Step 1 — monitor check from app profile.
-	if app.ProfileID != "" {
-		tmpl, err := profiles.Get(app.ProfileID)
-		if err != nil {
-			log.Printf("enrichment: load profile %q for app %q: %v", app.ProfileID, app.Name, err)
-		} else if tmpl != nil && tmpl.Monitor.CheckType != "" && tmpl.Monitor.CheckURL != "" {
-			enrichMonitorCheck(ctx, store, app, tmpl)
-		}
-	}
-
-	// Step 2 — SSL check from discovered route domain.
+	// Step 1 — SSL check from discovered route domain.
 	if routeID != nil {
 		enrichSSLCheck(ctx, store, *routeID)
 	}
@@ -56,46 +45,6 @@ func EnrichAppOnLink(
 	}
 
 	return nil
-}
-
-// enrichMonitorCheck creates a monitor check from the profile's monitor config
-// if one with the same type and target does not already exist.
-func enrichMonitorCheck(ctx context.Context, store *repo.Store, app *models.App, tmpl *apptemplate.AppTemplate) {
-	target, err := substituteBaseURL(tmpl.Monitor.CheckURL, app.Config)
-	if err != nil {
-		log.Printf("enrichment: resolve check URL for app %q: %v — skipping monitor check creation", app.Name, err)
-		return
-	}
-	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
-		log.Printf("enrichment: resolved check URL %q for app %q has no http/https scheme — skipping", target, app.Name)
-		return
-	}
-	exists, err := store.Checks.ExistsForTypeAndTarget(ctx, tmpl.Monitor.CheckType, target)
-	if err != nil {
-		log.Printf("enrichment: check existence query for app %q: %v", app.Name, err)
-		return
-	}
-	if exists {
-		return
-	}
-	check := &models.MonitorCheck{
-		ID:           uuid.New().String(),
-		AppID:        app.ID,
-		Name:         tmpl.Meta.Name + " — " + tmpl.Monitor.CheckType,
-		Type:         tmpl.Monitor.CheckType,
-		Target:       target,
-		IntervalSecs: parseIntervalSecs(tmpl.Monitor.CheckInterval, 300),
-		Enabled:      true,
-		CreatedAt:    time.Now().UTC(),
-	}
-	if tmpl.Monitor.HealthyStatus != 0 {
-		check.ExpectedStatus = tmpl.Monitor.HealthyStatus
-	}
-	if err := store.Checks.Create(ctx, check); err != nil {
-		log.Printf("enrichment: create monitor check for app %q: %v", app.Name, err)
-		return
-	}
-	log.Printf("enrichment: created monitor check for app %q", app.Name)
 }
 
 // enrichSSLCheck creates an SSL monitor check for the route's domain if one

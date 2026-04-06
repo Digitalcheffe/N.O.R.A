@@ -1,4 +1,4 @@
-package docker
+package metrics
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 
+	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 )
 
@@ -26,6 +27,33 @@ func (m *mockHealthAPI) ContainerInspect(_ context.Context, id string) (containe
 		return info, nil
 	}
 	return container.InspectResponse{}, nil
+}
+
+// ── mock repos ───────────────────────────────────────────────────────────────
+
+type mockHealthAppRepo struct {
+	apps []models.App
+}
+
+func (r *mockHealthAppRepo) List(_ context.Context) ([]models.App, error)                        { return r.apps, nil }
+func (r *mockHealthAppRepo) ListByHost(_ context.Context, _ string) ([]models.App, error)        { return nil, nil }
+func (r *mockHealthAppRepo) Create(_ context.Context, _ *models.App) error                       { return nil }
+func (r *mockHealthAppRepo) Get(_ context.Context, _ string) (*models.App, error)                { return nil, repo.ErrNotFound }
+func (r *mockHealthAppRepo) GetByToken(_ context.Context, _ string) (*models.App, error)         { return nil, repo.ErrNotFound }
+func (r *mockHealthAppRepo) Update(_ context.Context, _ *models.App) error                       { return nil }
+func (r *mockHealthAppRepo) Delete(_ context.Context, _ string) error                            { return nil }
+func (r *mockHealthAppRepo) UpdateToken(_ context.Context, _, _ string) error                    { return nil }
+func (r *mockHealthAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error              { return nil }
+func (r *mockHealthAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error    { return nil }
+
+type mockHealthEventRepo struct {
+	repo.EventRepo
+	created []*models.Event
+}
+
+func (r *mockHealthEventRepo) Create(_ context.Context, ev *models.Event) error {
+	r.created = append(r.created, ev)
+	return nil
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -55,7 +83,7 @@ func inspectNoHealth(name string) container.InspectResponse {
 
 func newTestHealthPoller(client healthAPI, eventRepo repo.EventRepo) *HealthPoller {
 	store := &repo.Store{
-		Apps:   &mockAppRepo{},
+		Apps:   &mockHealthAppRepo{},
 		Events: eventRepo,
 	}
 	return &HealthPoller{store: store, client: client}
@@ -63,10 +91,8 @@ func newTestHealthPoller(client healthAPI, eventRepo repo.EventRepo) *HealthPoll
 
 // ── tests ────────────────────────────────────────────────────────────────────
 
-// TestHealthPoller_UnhealthyTransition verifies an error event fires when
-// a container transitions from healthy to unhealthy.
 func TestHealthPoller_UnhealthyTransition(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockHealthEventRepo{}
 	client := &mockHealthAPI{
 		containers: []container.Summary{{ID: "c1", Names: []string{"/myapp"}}},
 		inspects: map[string]container.InspectResponse{
@@ -74,8 +100,6 @@ func TestHealthPoller_UnhealthyTransition(t *testing.T) {
 		},
 	}
 	p := newTestHealthPoller(client, evRepo)
-
-	// Seed prior state as healthy.
 	p.states.Store("c1", "healthy")
 
 	p.poll(context.Background())
@@ -93,9 +117,8 @@ func TestHealthPoller_UnhealthyTransition(t *testing.T) {
 	}
 }
 
-// TestHealthPoller_RecoveryTransition verifies an info event fires on unhealthy→healthy.
 func TestHealthPoller_RecoveryTransition(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockHealthEventRepo{}
 	client := &mockHealthAPI{
 		containers: []container.Summary{{ID: "c1", Names: []string{"/myapp"}}},
 		inspects: map[string]container.InspectResponse{
@@ -103,8 +126,6 @@ func TestHealthPoller_RecoveryTransition(t *testing.T) {
 		},
 	}
 	p := newTestHealthPoller(client, evRepo)
-
-	// Seed prior state as unhealthy.
 	p.states.Store("c1", "unhealthy")
 
 	p.poll(context.Background())
@@ -112,15 +133,13 @@ func TestHealthPoller_RecoveryTransition(t *testing.T) {
 	if len(evRepo.created) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(evRepo.created))
 	}
-	ev := evRepo.created[0]
-	if ev.Level != "info" {
-		t.Errorf("expected severity=info for recovery, got %s", ev.Level)
+	if evRepo.created[0].Level != "info" {
+		t.Errorf("expected severity=info for recovery, got %s", evRepo.created[0].Level)
 	}
 }
 
-// TestHealthPoller_NoHealthCheck verifies no event fires for containers without HEALTHCHECK.
 func TestHealthPoller_NoHealthCheck(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockHealthEventRepo{}
 	client := &mockHealthAPI{
 		containers: []container.Summary{{ID: "c1", Names: []string{"/myapp"}}},
 		inspects: map[string]container.InspectResponse{
@@ -128,7 +147,6 @@ func TestHealthPoller_NoHealthCheck(t *testing.T) {
 		},
 	}
 	p := newTestHealthPoller(client, evRepo)
-
 	p.poll(context.Background())
 
 	if len(evRepo.created) != 0 {
@@ -136,9 +154,8 @@ func TestHealthPoller_NoHealthCheck(t *testing.T) {
 	}
 }
 
-// TestHealthPoller_NoTransition verifies no event fires when state is unchanged.
 func TestHealthPoller_NoTransition(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockHealthEventRepo{}
 	client := &mockHealthAPI{
 		containers: []container.Summary{{ID: "c1", Names: []string{"/myapp"}}},
 		inspects: map[string]container.InspectResponse{
@@ -146,8 +163,6 @@ func TestHealthPoller_NoTransition(t *testing.T) {
 		},
 	}
 	p := newTestHealthPoller(client, evRepo)
-
-	// Same state already stored.
 	p.states.Store("c1", "healthy")
 
 	p.poll(context.Background())
@@ -157,10 +172,8 @@ func TestHealthPoller_NoTransition(t *testing.T) {
 	}
 }
 
-// TestHealthPoller_FirstPoll_NoEvent verifies no event fires on the first poll
-// (no baseline) even if the container is unhealthy.
 func TestHealthPoller_FirstPoll_NoEvent(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockHealthEventRepo{}
 	client := &mockHealthAPI{
 		containers: []container.Summary{{ID: "c1", Names: []string{"/myapp"}}},
 		inspects: map[string]container.InspectResponse{
@@ -168,8 +181,6 @@ func TestHealthPoller_FirstPoll_NoEvent(t *testing.T) {
 		},
 	}
 	p := newTestHealthPoller(client, evRepo)
-
-	// No prior state — first poll.
 	p.poll(context.Background())
 
 	if len(evRepo.created) != 0 {
@@ -177,9 +188,8 @@ func TestHealthPoller_FirstPoll_NoEvent(t *testing.T) {
 	}
 }
 
-// TestHealthPoller_Run verifies a single poll pass completes without error.
 func TestHealthPoller_Run(t *testing.T) {
-	evRepo := &mockEventRepo{}
+	evRepo := &mockHealthEventRepo{}
 	client := &mockHealthAPI{}
 	p := newTestHealthPoller(client, evRepo)
 
@@ -191,7 +201,6 @@ func TestHealthPoller_Run(t *testing.T) {
 
 	select {
 	case <-done:
-		// completed cleanly
 	case <-time.After(2 * time.Second):
 		t.Fatal("health poller did not complete within 2 seconds")
 	}

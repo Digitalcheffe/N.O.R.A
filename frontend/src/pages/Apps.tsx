@@ -67,7 +67,8 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
 
   const [baseUrl, setBaseUrl] = useState('')
-  const [monitorUrl, setMonitorUrl] = useState('')
+  const [apiUrl, setApiUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
   const [rateLimit, setRateLimit] = useState('0')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -90,17 +91,14 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
     return acc
   }, {})
 
-  const needsMonitor =
-    selectedTemplate?.capability === 'full' ||
-    selectedTemplate?.capability === 'monitor_only'
-
   async function handleCreate() {
     setSubmitError('')
     setSubmitting(true)
     try {
       const config: Record<string, unknown> = {}
-      if (baseUrl.trim())    config.base_url    = baseUrl.trim()
-      if (monitorUrl.trim()) config.monitor_url = monitorUrl.trim()
+      if (baseUrl.trim()) config.base_url = baseUrl.trim()
+      if (apiUrl.trim())  config.api_url  = apiUrl.trim()
+      if (apiKey.trim())  config.api_key  = apiKey.trim()
       const app = await appsApi.create({
         name: appName.trim(),
         profile_id: selectedTemplate?.id,
@@ -131,7 +129,7 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
 
   function handleAddAnother() {
     setStep('setup'); setAppName(''); setSelectedTemplateId('')
-    setBaseUrl(''); setMonitorUrl(''); setRateLimit('0')
+    setBaseUrl(''); setApiUrl(''); setApiKey(''); setRateLimit('0')
     setCreatedApp(null); setCopied(false); setSubmitError('')
   }
 
@@ -236,15 +234,18 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
           <input className="modal-input" placeholder="https://sonarr.yourdomain.com"
             value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
 
-          {needsMonitor && (
-            <>
-              <label className="modal-label" style={{ marginTop: 16 }}>
-                Monitor URL <span className="modal-hint">(NORA will ping this to check uptime)</span>
-              </label>
-              <input className="modal-input" placeholder="https://sonarr.yourdomain.com/ping"
-                value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
-            </>
-          )}
+          <label className="modal-label" style={{ marginTop: 16 }}>
+            API URL <span className="modal-hint">(optional — overrides App URL for API polling)</span>
+          </label>
+          <input className="modal-input" placeholder="http://sonarr:8989"
+            value={apiUrl} onChange={e => setApiUrl(e.target.value)} />
+
+          <label className="modal-label" style={{ marginTop: 16 }}>
+            API Key <span className="modal-hint">(optional — used for API polling widgets)</span>
+          </label>
+          <input className="modal-input modal-input-mono" placeholder="your-api-key"
+            type="password" autoComplete="new-password"
+            value={apiKey} onChange={e => setApiKey(e.target.value)} />
 
           <label className="modal-label" style={{ marginTop: 16 }}>
             Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>

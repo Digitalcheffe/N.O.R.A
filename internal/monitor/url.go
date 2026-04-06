@@ -58,17 +58,11 @@ type urlResult struct {
 	Error      *string `json:"error"`
 }
 
-// authConfig is the subset of last_result we parse to find an auth header.
-type authConfig struct {
-	AuthHeader string `json:"auth_header"`
-}
-
 // Run performs one URL health check cycle for check.
 //
-// It makes an HTTP GET to check.Target, optionally adding an auth header from
-// last_result, and compares the response status code to check.ExpectedStatus
-// (defaulting to 200). On a status transition, an event is created — but only
-// when the check is linked to an app (events require a valid app_id).
+// It makes an unauthenticated HTTP GET to check.Target and compares the response
+// status code to check.ExpectedStatus (defaulting to 200). On a status transition,
+// an event is created — but only when the check is linked to an app.
 func (u *URLChecker) Run(ctx context.Context, check *models.MonitorCheck) error {
 	expected := check.ExpectedStatus
 	if expected == 0 {
@@ -84,14 +78,6 @@ func (u *URLChecker) Run(ctx context.Context, check *models.MonitorCheck) error 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, check.Target, nil)
 	if err != nil {
 		return u.recordError(ctx, check, fmt.Sprintf("build request: %v", err))
-	}
-
-	// If last_result contains an auth_header, add it to the request.
-	if check.LastResult != "" {
-		var cfg authConfig
-		if jsonErr := json.Unmarshal([]byte(check.LastResult), &cfg); jsonErr == nil && cfg.AuthHeader != "" {
-			req.Header.Set("Authorization", cfg.AuthHeader)
-		}
 	}
 
 	start := time.Now()

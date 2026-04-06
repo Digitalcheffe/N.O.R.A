@@ -1916,19 +1916,6 @@ function JobsTab() {
 
 // ── Digest Registry tab ───────────────────────────────────────────────────────
 
-// ── useIsMobile ───────────────────────────────────────────────────────────────
-
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint)
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [breakpoint])
-  return isMobile
-}
-
 // ── DigestRegistryEntryBody ───────────────────────────────────────────────────
 
 function DigestRegistryEntryBody({
@@ -1975,14 +1962,27 @@ function DigestRegistryEntryBody({
       <div className="dr-panel-profile">
         <AppTemplateIcon id={entry.profile_id} name={entry.profile_id} />
         <span className="dr-panel-profile-name">{entry.profile_id}</span>
-        <span className="app-pill-type">{entry.entry_type}</span>
-        <span className="app-pill-type">{entry.source}</span>
       </div>
 
-      {/* Stable name (read-only) */}
-      <div className="dr-panel-field">
+      {/* Label / Name / Type / Source — inline */}
+      <div className="dr-panel-field dr-panel-field--inline">
+        <label className="dr-panel-label">Label</label>
+        <span className="dr-panel-value">{entry.label}</span>
+      </div>
+
+      <div className="dr-panel-field dr-panel-field--inline">
         <label className="dr-panel-label">Name</label>
-        <code className="dr-panel-code">{entry.name}</code>
+        <span className="dr-panel-value">{entry.name}</span>
+      </div>
+
+      <div className="dr-panel-field dr-panel-field--inline">
+        <label className="dr-panel-label">Type</label>
+        <span className="dr-panel-value">{entry.entry_type}</span>
+      </div>
+
+      <div className="dr-panel-field dr-panel-field--inline">
+        <label className="dr-panel-label">Source</label>
+        <span className="dr-panel-value">{entry.source}</span>
       </div>
 
       {/* Active toggle */}
@@ -2043,17 +2043,13 @@ function DigestRegistryTab() {
   const [entries, setEntries] = useState<DigestRegistryEntry[]>([])
   const [loadError, setLoadError] = useState('')
   const [selected, setSelected] = useState<DigestRegistryEntry | null>(null)
-  const isMobile = useIsMobile()
+  const [filterProfile, setFilterProfile] = useState('')
 
   useEffect(() => {
     digestRegistry.list()
-      .then(r => {
-        const data = r.data ?? []
-        setEntries(data)
-        if (!isMobile && data.length > 0) setSelected(data[0])
-      })
+      .then(r => setEntries(r.data ?? []))
       .catch(() => setLoadError('Failed to load digest registry'))
-  }, [isMobile])
+  }, [])
 
   const handleUpdate = (updated: DigestRegistryEntry) => {
     setEntries(prev => prev.map(e => e.id === updated.id ? updated : e))
@@ -2065,63 +2061,12 @@ function DigestRegistryTab() {
     setSelected(null)
   }
 
+  const profileOptions = Array.from(new Set(entries.map(e => e.profile_id))).sort()
+  const filtered = filterProfile ? entries.filter(e => e.profile_id === filterProfile) : entries
+
   if (loadError) {
     return <div className="tab-content"><p style={{ color: 'var(--red)' }}>{loadError}</p></div>
   }
-
-  const table = (
-    <div className="dr-table-scroll">
-      <table className="settings-metrics-table">
-        <thead>
-          <tr>
-            <th>Profile</th>
-            <th>Label</th>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map(entry => (
-            <tr
-              key={entry.id}
-              className={[
-                entry.active ? '' : 'dr-row--inactive',
-                selected?.id === entry.id ? 'dr-row--selected' : '',
-              ].join(' ').trim()}
-              style={{ cursor: 'pointer' }}
-              onClick={() => setSelected(selected?.id === entry.id ? null : entry)}
-            >
-              <td>
-                <div className="dr-profile-cell">
-                  <AppTemplateIcon id={entry.profile_id} name={entry.profile_id} />
-                  <span>{entry.profile_id}</span>
-                </div>
-              </td>
-              <td>{entry.label}</td>
-              <td><span className="app-pill-type">{entry.name}</span></td>
-              <td><span className="app-pill-type">{entry.entry_type}</span></td>
-              <td>
-                <span className={`dr-status-dot ${entry.active ? 'dr-status-dot--on' : 'dr-status-dot--off'}`}>
-                  {entry.active ? '● Active' : '● Inactive'}
-                </span>
-              </td>
-              <td style={{ textAlign: 'right' }}>
-                <button
-                  className="check-settings-btn"
-                  title="Settings"
-                  onClick={e => { e.stopPropagation(); setSelected(selected?.id === entry.id ? null : entry) }}
-                >
-                  ⚙
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
 
   return (
     <div className="tab-content">
@@ -2133,56 +2078,96 @@ function DigestRegistryTab() {
           A persistent record of every digest entry declared across all app profiles. Entries are
           automatically reconciled at startup — new categories are inserted, renamed labels are
           updated, and categories removed from a profile are deactivated rather than deleted.
-          Click the settings icon on any row to edit its label, toggle its active state, or view
-          its full profile definition.
+          Click the settings icon on any row to toggle its active state or view its full profile definition.
         </p>
 
         {entries.length === 0 ? (
           <p className="settings-empty">
             No digest entries registered. Add apps with profiles to populate the registry.
           </p>
-        ) : isMobile ? (
-          <>
-            {table}
-            {selected && (
-              <SlidePanel
-                open
-                onClose={() => setSelected(null)}
-                title={selected.label}
-                subtitle={`${selected.profile_id} / ${selected.name}`}
-                width={520}
-              >
-                <DigestRegistryEntryBody
-                  entry={selected}
-                  onClose={() => setSelected(null)}
-                  onUpdate={handleUpdate}
-                  onDelete={handleDelete}
-                />
-              </SlidePanel>
-            )}
-          </>
         ) : (
-          <div className={`dr-split${selected ? ' dr-split--open' : ''}`}>
-            <div className="dr-split-list">{table}</div>
-            {selected && (
-              <div className="dr-split-detail">
-                <div className="dr-split-detail-header">
-                  <span className="dr-split-detail-title">{selected.label}</span>
-                  <button className="modal-close" onClick={() => setSelected(null)}>✕</button>
-                </div>
-                <div className="dr-split-detail-scroll">
-                  <DigestRegistryEntryBody
-                    entry={selected}
-                    onClose={() => setSelected(null)}
-                    onUpdate={handleUpdate}
-                    onDelete={handleDelete}
-                  />
-                </div>
-              </div>
-            )}
+          <>
+            <div className="dr-filter-row">
+              <select
+                className="modal-input dr-filter-select"
+                value={filterProfile}
+                onChange={e => setFilterProfile(e.target.value)}
+              >
+                <option value="">All app profiles</option>
+                {profileOptions.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+          <div className="dr-table-scroll">
+            <table className="settings-metrics-table">
+              <thead>
+                <tr>
+                  <th>App Profile</th>
+                  <th>Label</th>
+                  <th className="dr-col--desktop">Type</th>
+                  <th className="dr-col--desktop">Source</th>
+                  <th className="dr-col--desktop">Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(entry => (
+                  <tr
+                    key={entry.id}
+                    className={entry.active ? '' : 'dr-row--inactive'}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setSelected(entry)}
+                  >
+                    <td>
+                      <div className="dr-profile-cell">
+                        <AppTemplateIcon id={entry.profile_id} name={entry.profile_id} />
+                        <span>{entry.profile_id}</span>
+                      </div>
+                    </td>
+                    <td>{entry.label}</td>
+                    <td className="dr-col--desktop"><span className="app-pill-type">{entry.entry_type}</span></td>
+                    <td className="dr-col--desktop"><span className="app-pill-type">{entry.source}</span></td>
+                    <td className="dr-col--desktop">
+                      <span className={`dr-status-dot ${entry.active ? 'dr-status-dot--on' : 'dr-status-dot--off'}`}>
+                        {entry.active ? '● Active' : '● Inactive'}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="check-settings-btn"
+                        title="Settings"
+                        onClick={e => { e.stopPropagation(); setSelected(entry) }}
+                      >
+                        ⚙
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
+          </>
         )}
       </section>
+
+      <SlidePanel
+        open={selected !== null}
+        onClose={() => setSelected(null)}
+        title={selected?.label ?? ''}
+        subtitle={selected ? `${selected.profile_id} / ${selected.name}` : ''}
+        width={520}
+        footer={<></>}
+      >
+        {selected && (
+          <DigestRegistryEntryBody
+            entry={selected}
+            onClose={() => setSelected(null)}
+            onUpdate={handleUpdate}
+            onDelete={handleDelete}
+          />
+        )}
+      </SlidePanel>
     </div>
   )
 }

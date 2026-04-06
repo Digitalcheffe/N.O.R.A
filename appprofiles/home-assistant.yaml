@@ -35,11 +35,6 @@ webhook:
     automation_triggered: info
     script_started: info
 
-monitor:
-  check_type: url
-  check_url: "{base_url}"
-  healthy_status: 200
-  check_interval: 5m
 
 digest:
   categories:

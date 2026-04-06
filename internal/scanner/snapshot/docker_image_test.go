@@ -1,4 +1,4 @@
-package docker
+package snapshot
 
 import (
 	"context"
@@ -62,34 +62,36 @@ func (m *mockLatestDigester) GetLatestDigest(_ context.Context, image string) (s
 
 // ── mock repos ─────────────────────────────────────────────────────────────────
 
-type mockInfraComponentRepo struct {
+type mockImageInfraComponentRepo struct {
 	components []models.InfrastructureComponent
 }
 
-func (r *mockInfraComponentRepo) List(_ context.Context) ([]models.InfrastructureComponent, error) {
+func (r *mockImageInfraComponentRepo) List(_ context.Context) ([]models.InfrastructureComponent, error) {
 	return r.components, nil
 }
-func (r *mockInfraComponentRepo) ListByParent(_ context.Context, _ string) ([]models.InfrastructureComponent, error) {
+func (r *mockImageInfraComponentRepo) ListByParent(_ context.Context, _ string) ([]models.InfrastructureComponent, error) {
 	return nil, nil
 }
-func (r *mockInfraComponentRepo) Get(_ context.Context, _ string) (*models.InfrastructureComponent, error) {
+func (r *mockImageInfraComponentRepo) Get(_ context.Context, _ string) (*models.InfrastructureComponent, error) {
 	return nil, repo.ErrNotFound
 }
-func (r *mockInfraComponentRepo) Create(_ context.Context, _ *models.InfrastructureComponent) error {
+func (r *mockImageInfraComponentRepo) Create(_ context.Context, _ *models.InfrastructureComponent) error {
 	return nil
 }
-func (r *mockInfraComponentRepo) Update(_ context.Context, _ *models.InfrastructureComponent) error {
+func (r *mockImageInfraComponentRepo) Update(_ context.Context, _ *models.InfrastructureComponent) error {
 	return nil
 }
-func (r *mockInfraComponentRepo) Delete(_ context.Context, _ string) error { return nil }
-func (r *mockInfraComponentRepo) UpdateStatus(_ context.Context, _, _, _ string) error {
+func (r *mockImageInfraComponentRepo) Delete(_ context.Context, _ string) error { return nil }
+func (r *mockImageInfraComponentRepo) UpdateStatus(_ context.Context, _, _, _ string) error {
 	return nil
 }
-func (r *mockInfraComponentRepo) UpdateSNMPMeta(_ context.Context, _, _ string) error { return nil }
-func (r *mockInfraComponentRepo) UpdateSynologyMeta(_ context.Context, _, _ string) error {
+func (r *mockImageInfraComponentRepo) UpdateSNMPMeta(_ context.Context, _, _ string) error {
 	return nil
 }
-func (r *mockInfraComponentRepo) UpdateIP(_ context.Context, _, _ string) error { return nil }
+func (r *mockImageInfraComponentRepo) UpdateSynologyMeta(_ context.Context, _, _ string) error {
+	return nil
+}
+func (r *mockImageInfraComponentRepo) UpdateIP(_ context.Context, _, _ string) error { return nil }
 
 type imageCheckCall struct {
 	id              string
@@ -149,7 +151,7 @@ func makePollerStore(infraComponents []models.InfrastructureComponent, container
 	dc := &mockDiscoveredContainerRepo{containers: containers}
 	store := repo.NewStore(
 		nil, nil, nil, nil, nil, nil,
-		&mockInfraComponentRepo{components: infraComponents},
+		&mockImageInfraComponentRepo{components: infraComponents},
 		nil, nil, nil, nil, nil, nil, nil, nil,
 		dc, nil, nil, nil, nil, nil, nil,
 	)
@@ -286,7 +288,6 @@ func TestImageUpdatePoller_RegistryError_NoUpdateSet(t *testing.T) {
 	if err := p.Run(context.Background()); err != nil {
 		t.Fatalf("Run error: %v", err)
 	}
-	// UpdateContainerImageCheck must NOT be called on registry error.
 	if len(dc.imageChecks) != 0 {
 		t.Errorf("expected 0 image check calls on registry error, got %d", len(dc.imageChecks))
 	}

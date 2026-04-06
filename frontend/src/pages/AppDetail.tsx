@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi, integrations as integrationsApi } from '../api/client'
-import type { App, AppSummary, AppTemplate, MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
+import type { App, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
+import { AppMetricsGrid } from '../components/AppMetricsGrid'
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
 import { CheckForm } from '../components/CheckForm'
 import { SlidePanel } from '../components/SlidePanel'
@@ -59,7 +60,7 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
   const [name, setName] = useState(app.name)
   const [profileId, setProfileId] = useState(app.profile_id ?? '')
   const [baseUrl, setBaseUrl] = useState((app.config?.base_url as string) ?? '')
-  const [monitorUrl, setMonitorUrl] = useState((app.config?.monitor_url as string) ?? '')
+  const [apiUrl, setApiUrl] = useState((app.config?.api_url as string) ?? '')
   const [apiKey, setApiKey] = useState((app.config?.api_key as string) ?? '')
   const [rateLimit, setRateLimit] = useState(String(app.rate_limit ?? 0))
 
@@ -102,8 +103,8 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
       const config: Record<string, unknown> = { ...app.config }
       if (baseUrl.trim()) config.base_url = baseUrl.trim()
       else delete config.base_url
-      if (monitorUrl.trim()) config.monitor_url = monitorUrl.trim()
-      else delete config.monitor_url
+      if (apiUrl.trim()) config.api_url = apiUrl.trim()
+      else delete config.api_url
       if (apiKey.trim()) config.api_key = apiKey.trim()
       else delete config.api_key
 
@@ -209,13 +210,13 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
         value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
 
       <label className="modal-label" style={{ marginTop: 16 }}>
-        Monitor URL <span className="modal-hint">(optional — NORA pings this for uptime)</span>
+        API URL <span className="modal-hint">(optional — overrides App URL for API polling)</span>
       </label>
-      <input className="modal-input" placeholder="https://app.yourdomain.com/ping"
-        value={monitorUrl} onChange={e => setMonitorUrl(e.target.value)} />
+      <input className="modal-input" placeholder="http://app:8989"
+        value={apiUrl} onChange={e => setApiUrl(e.target.value)} />
 
       <label className="modal-label" style={{ marginTop: 16 }}>
-        API Key <span className="modal-hint">(optional — used for active monitor auth)</span>
+        API Key <span className="modal-hint">(optional — used for API polling widgets)</span>
       </label>
       <input className="modal-input modal-input-mono" placeholder="your-api-key"
         type="password" autoComplete="new-password"
@@ -339,6 +340,8 @@ export function AppDetail() {
   const [addCheckSubmitting, setAddCheckSubmitting] = useState(false)
   const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
   const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
+  const [appMetrics, setAppMetrics] = useState<AppMetricSnapshot[]>([])
+  const [metricsLoading, setMetricsLoading] = useState(true)
 
   const appId = id ?? ''
 
@@ -368,6 +371,15 @@ export function AppDetail() {
     checksApi.list()
       .then(res => setAppChecks(res.data.filter(c => c.app_id === appId)))
       .catch(() => {})
+  }, [appId, tick])
+
+  useEffect(() => {
+    if (!appId) return
+    setMetricsLoading(true)
+    appsApi.metrics(appId)
+      .then(res => setAppMetrics(res.data))
+      .catch(() => setAppMetrics([]))
+      .finally(() => setMetricsLoading(false))
   }, [appId, tick])
 
   useEffect(() => {
@@ -498,6 +510,9 @@ export function AppDetail() {
         sourceType="app"
         sourceId={appId}
       >
+        {/* ── Live metric cards ── */}
+        <AppMetricsGrid metrics={appMetrics} loading={metricsLoading} />
+
         {/* ── Stats row (when available) ── */}
         {appSummary && (appSummary.stats ?? []).length > 0 && (
           <div className="detail-stats-row">

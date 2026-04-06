@@ -228,11 +228,17 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build sparklines and sub-strings, only for categories with count > 0
+	// Build sparklines and sub-strings for all categories, including zero-count ones
 	summaryBar := make([]summaryBarItem, 0, len(catOrder))
 	for _, label := range catOrder {
 		entry := catMap[label]
 		if entry.total == 0 {
+			summaryBar = append(summaryBar, summaryBarItem{
+				Label:     label,
+				Count:     0,
+				Sub:       "",
+				Sparkline: [7]int{},
+			})
 			continue
 		}
 
@@ -333,12 +339,10 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 						writeError(w, http.StatusInternalServerError, "failed to count app category events")
 						return
 					}
-					if n > 0 {
-						stats = append(stats, appStat{
-							Label: cat.Label,
-							Value: strconv.Itoa(n),
-						})
-					}
+					stats = append(stats, appStat{
+						Label: cat.Label,
+						Value: strconv.Itoa(n),
+					})
 				}
 			}
 		}

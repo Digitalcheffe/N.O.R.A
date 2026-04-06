@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/digitalcheffe/nora/internal/apipoller"
 	"github.com/digitalcheffe/nora/internal/apptemplate"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
@@ -59,7 +60,7 @@ func pollApp(
 	if err := json.Unmarshal(app.Config, &cfg); err != nil {
 		cfg = map[string]interface{}{}
 	}
-	baseURL, _ := cfg["base_url"].(string)
+	baseURL := apipoller.ResolveAPIBaseURL(cfg)
 	apiKey, _ := cfg["api_key"].(string)
 
 	for _, entry := range entries {
@@ -87,19 +88,19 @@ func pollEntry(
 	}
 
 	// Attach auth credentials to the request without embedding secrets in any URL string.
-	switch entry.AuthType {
-	case "apikey_header":
-		if entry.AuthHeader != "" && apiKey != "" {
-			req.Header.Set(entry.AuthHeader, apiKey)
-		}
-	case "apikey_query":
-		if entry.AuthHeader != "" && apiKey != "" {
-			q := req.URL.Query()
-			q.Set(entry.AuthHeader, apiKey)
-			req.URL.RawQuery = q.Encode()
-		}
-	case "bearer":
-		if apiKey != "" {
+	if auth := apipoller.Get(app.ProfileID); auth != nil && apiKey != "" {
+		switch auth.AuthType {
+		case "apikey_header":
+			if auth.AuthHeader != "" {
+				req.Header.Set(auth.AuthHeader, apiKey)
+			}
+		case "apikey_query":
+			if auth.AuthHeader != "" {
+				q := req.URL.Query()
+				q.Set(auth.AuthHeader, apiKey)
+				req.URL.RawQuery = q.Encode()
+			}
+		case "bearer":
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
 	}

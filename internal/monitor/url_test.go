@@ -186,31 +186,6 @@ func TestURLChecker_Timeout(t *testing.T) {
 	}
 }
 
-// TestURLChecker_AuthHeader verifies the auth_header from last_result is sent.
-func TestURLChecker_AuthHeader(t *testing.T) {
-	var receivedAuth string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedAuth = r.Header.Get("Authorization")
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-
-	checks := &mockCheckRepo{}
-	events := &mockEventRepo{}
-	checker := newURLChecker(checks, events)
-
-	lastResult, _ := json.Marshal(map[string]string{"auth_header": "Bearer secret-token"})
-	check := makeURLCheck(srv.URL, "up", "", 200)
-	check.LastResult = string(lastResult)
-
-	if err := checker.Run(context.Background(), check); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if receivedAuth != "Bearer secret-token" {
-		t.Errorf("expected Authorization header to be sent, got %q", receivedAuth)
-	}
-}
 
 // TestURLChecker_DefaultExpected200 verifies that ExpectedStatus=0 defaults to 200.
 func TestURLChecker_DefaultExpected200(t *testing.T) {

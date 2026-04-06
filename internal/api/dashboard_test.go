@@ -507,9 +507,10 @@ func TestDashboardDigest_InvalidPeriod(t *testing.T) {
 
 // --- category omission test ---
 
-// TestDashboardSummary_OmitsZeroCategories verifies that categories with count=0
-// are not included in summary_bar.
-func TestDashboardSummary_OmitsZeroCategories(t *testing.T) {
+// TestDashboardSummary_IncludesZeroCategories verifies that all profile categories
+// appear in summary_bar regardless of whether they have events, and that counts
+// are reported accurately.
+func TestDashboardSummary_IncludesZeroCategories(t *testing.T) {
 	categories := []apptemplate.DigestCategory{
 		{Label: "Downloads", MatchField: "event_type", MatchValue: "Download"},
 		{Label: "Backups", MatchField: "event_type", MatchValue: "Backup"},
@@ -534,14 +535,23 @@ func TestDashboardSummary_OmitsZeroCategories(t *testing.T) {
 	var resp struct {
 		SummaryBar []struct {
 			Label string `json:"label"`
+			Count int    `json:"count"`
 		} `json:"summary_bar"`
 	}
 	json.Unmarshal(rec.Body.Bytes(), &resp)
 
-	if len(resp.SummaryBar) != 1 {
-		t.Errorf("expected only 1 summary_bar item (Downloads), got %d: %+v", len(resp.SummaryBar), resp.SummaryBar)
+	// Both categories must be present — zero-count categories are no longer omitted.
+	if len(resp.SummaryBar) != 2 {
+		t.Fatalf("expected 2 summary_bar items, got %d: %+v", len(resp.SummaryBar), resp.SummaryBar)
 	}
-	if len(resp.SummaryBar) > 0 && resp.SummaryBar[0].Label != "Downloads" {
-		t.Errorf("expected label=Downloads, got %q", resp.SummaryBar[0].Label)
+	byLabel := map[string]int{}
+	for _, item := range resp.SummaryBar {
+		byLabel[item.Label] = item.Count
+	}
+	if byLabel["Downloads"] != 1 {
+		t.Errorf("Downloads count = %d, want 1", byLabel["Downloads"])
+	}
+	if byLabel["Backups"] != 0 {
+		t.Errorf("Backups count = %d, want 0", byLabel["Backups"])
 	}
 }

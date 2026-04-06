@@ -69,15 +69,6 @@ type Webhook struct {
 	SeverityMapping       map[string]string  `yaml:"severity_mapping"`
 }
 
-// Monitor holds active check configuration for the template.
-type Monitor struct {
-	CheckType     string `yaml:"check_type"`
-	CheckURL      string `yaml:"check_url"`
-	AuthHeader    string `yaml:"auth_header"`
-	HealthyStatus int    `yaml:"healthy_status"`
-	CheckInterval string `yaml:"check_interval"`
-}
-
 // DigestCategory defines a named event category used in the dashboard summary bar.
 // A category matches events where the given field equals the given value,
 // and/or where severity equals MatchSeverity. Empty strings are ignored.
@@ -107,7 +98,7 @@ type Digest struct {
 }
 
 // APIPollingEntry declares a single API endpoint to poll for a named metric.
-// Auth credentials are not stored here; the poller reads them from the app config at runtime.
+// Authentication is defined per app type in internal/apipoller/ — not here.
 type APIPollingEntry struct {
 	Path         string `yaml:"path"`
 	Name         string `yaml:"name"`
@@ -115,19 +106,12 @@ type APIPollingEntry struct {
 	Target       string `yaml:"target"`
 	ValueType    string `yaml:"value_type"`
 	EventMessage string `yaml:"event_message"`
-	// AuthType controls how the app's api_key is attached to the request.
-	// Values: apikey_header | apikey_query | bearer | none (default: none).
-	AuthType string `yaml:"auth_type"`
-	// AuthHeader is the header name (for apikey_header) or query parameter name
-	// (for apikey_query) used to carry the API key.
-	AuthHeader string `yaml:"auth_header"`
 }
 
 // AppTemplate describes how to process webhooks and render dashboard data for a specific app.
 type AppTemplate struct {
 	Meta       AppTemplateMeta   `yaml:"meta"`
 	Webhook    Webhook           `yaml:"webhook"`
-	Monitor    Monitor           `yaml:"monitor"`
 	Digest     Digest            `yaml:"digest"`
 	APIPolling []APIPollingEntry `yaml:"api_polling"`
 

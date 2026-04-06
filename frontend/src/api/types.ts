@@ -100,6 +100,17 @@ export interface CreateAppInput {
   rate_limit?: number
 }
 
+export interface AppMetricSnapshot {
+  id: string
+  app_id: string
+  profile_id: string
+  metric_name: string
+  label: string
+  value: string
+  value_type: string
+  polled_at: string
+}
+
 // ── Events ──────────────────────────────────────────────────────────────────
 
 export type Severity = 'debug' | 'info' | 'warn' | 'error' | 'critical'

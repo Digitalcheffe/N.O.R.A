@@ -1,4 +1,4 @@
-package docker
+package infra
 
 import (
 	"context"
@@ -50,8 +50,8 @@ func (r *mockAppRepo) GetByToken(_ context.Context, _ string) (*models.App, erro
 func (r *mockAppRepo) Update(_ context.Context, _ *models.App) error                         { return nil }
 func (r *mockAppRepo) Delete(_ context.Context, _ string) error                              { return nil }
 func (r *mockAppRepo) UpdateToken(_ context.Context, _, _ string) error                      { return nil }
-func (r *mockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error               { return nil }
-func (r *mockAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error      { return nil }
+func (r *mockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error                { return nil }
+func (r *mockAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error       { return nil }
 
 type mockEventRepo struct {
 	repo.EventRepo

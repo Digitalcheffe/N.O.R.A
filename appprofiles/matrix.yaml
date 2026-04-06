@@ -5,8 +5,3 @@ meta:
   description: Synapse Matrix homeserver
   capability: monitor_only
 
-monitor:
-  check_type: url
-  check_url: "{base_url}/_matrix/client/versions"
-  healthy_status: 200
-  check_interval: 5m

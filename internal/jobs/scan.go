@@ -6,10 +6,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/digitalcheffe/nora/internal/docker"
 	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
+	"github.com/digitalcheffe/nora/internal/scanner/discovery"
+	scanmetrics "github.com/digitalcheffe/nora/internal/scanner/metrics"
+	"github.com/digitalcheffe/nora/internal/scanner/snapshot"
 )
 
 // ScanOneComponent immediately runs the appropriate poller for a single
@@ -67,13 +69,27 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 
 	case "traefik_api":
 		source = "traefik"
-		creds := resolveTraefikCreds(*c)
-		log.Printf("scan: %s (%s): traefik poll → %s", c.Name, c.ID, creds.APIURL)
-		pollErr = pollTraefikComponent(ctx, store, *c, creds)
+		apiURL, _ := infra.ResolveTraefikCreds(c.IP, c.Credentials)
+		log.Printf("scan: %s (%s): traefik poll → %s", c.Name, c.ID, apiURL)
+		_, err1 := discovery.NewTraefikDiscoveryScanner(store).Discover(ctx, c.ID, c.Type)
+		_, err2 := scanmetrics.NewTraefikMetricsScanner(store).CollectMetrics(ctx, c.ID, c.Type)
+		_, err3 := snapshot.NewTraefikSnapshotScanner(store).TakeSnapshot(ctx, c.ID, c.Type)
+		if err1 != nil {
+			pollErr = err1
+		} else if err2 != nil {
+			pollErr = err2
+		} else {
+			pollErr = err3
+		}
+
+	case "portainer_api":
+		source = "portainer"
+		worker := infra.NewPortainerEnrichmentWorker(store)
+		pollErr = worker.Run(ctx)
 
 	case "docker_socket":
 		source = "docker"
-		poller, err := docker.NewResourcePoller(store, c.ID)
+		poller, err := scanmetrics.NewResourcePoller(store, c.ID)
 		if err != nil {
 			log.Printf("scan: %s (%s): docker client: %v", c.Name, c.ID, err)
 			return "offline", fmt.Errorf("docker client unavailable: %w", err)

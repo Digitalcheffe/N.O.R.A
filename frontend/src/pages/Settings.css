@@ -606,6 +606,18 @@
   padding: 8px 0;
 }
 
+.dr-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dr-filter-select {
+  max-width: 240px;
+  margin: 0;
+}
+
 .dr-table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -624,6 +636,16 @@
 
 .dr-table-scroll .settings-metrics-table td {
   white-space: nowrap;
+}
+
+.dr-table-scroll .settings-metrics-table th {
+  padding: 12px 8px;
+}
+
+@media (max-width: 767px) {
+  .dr-col--desktop {
+    display: none;
+  }
 }
 
 .dr-label-editable {
@@ -741,6 +763,24 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.dr-panel-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.dr-panel-field--inline .dr-panel-label {
+  min-width: 60px;
+  text-transform: none;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.dr-panel-value {
+  font-size: 13px;
+  color: var(--text1);
 }
 
 .dr-panel-label {
