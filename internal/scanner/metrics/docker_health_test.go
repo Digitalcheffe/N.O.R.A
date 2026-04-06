@@ -43,8 +43,6 @@ func (r *mockHealthAppRepo) GetByToken(_ context.Context, _ string) (*models.App
 func (r *mockHealthAppRepo) Update(_ context.Context, _ *models.App) error                       { return nil }
 func (r *mockHealthAppRepo) Delete(_ context.Context, _ string) error                            { return nil }
 func (r *mockHealthAppRepo) UpdateToken(_ context.Context, _, _ string) error                    { return nil }
-func (r *mockHealthAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error              { return nil }
-func (r *mockHealthAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error    { return nil }
 
 type mockHealthEventRepo struct {
 	repo.EventRepo

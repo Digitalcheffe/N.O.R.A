@@ -1,74 +1,43 @@
 import { InfraTypeIcon } from '../components/CheckTypeIcon'
+import { TYPE_LABEL, COLLECTION_METHOD } from './InfraEditModal'
+import type { ComponentType } from '../api/types'
 import './Integrations.css'
 
-// ── Static driver definitions ─────────────────────────────────────────────────
+// ── Per-type metadata for component type cards ────────────────────────────────
+// Add an entry here when you need custom description/caps for a new type.
+// Any type in TYPE_LABEL without an entry gets sensible defaults from COLLECTION_METHOD.
 
-const DRIVERS = [
-  {
-    name: 'docker',
-    label: 'Docker',
-    description: 'Container discovery and resource metrics via Docker socket.',
-    capabilities: ['container discovery', 'resource metrics', 'app linking', 'socket polling'],
-  },
-  {
-    name: 'traefik',
-    label: 'Traefik',
-    description: 'SSL cert discovery and routing visibility via Traefik API.',
-    capabilities: ['SSL discovery', 'network map node', 'API polling'],
-  },
-  {
-    name: 'proxmox',
-    label: 'Proxmox',
-    description: 'Node and VM status plus resource metrics via Proxmox REST API.',
-    capabilities: ['resource metrics', 'VM/CT status', 'API polling'],
-  },
-  {
-    name: 'synology',
-    label: 'Synology',
-    description: 'NAS resource metrics and volume health via Synology DSM API.',
-    capabilities: ['resource metrics', 'volume health', 'API polling'],
-  },
-  {
-    name: 'snmp',
-    label: 'SNMP',
-    description: 'Generic host polling via SNMP v2c/v3 for devices without a dedicated API.',
-    capabilities: ['resource metrics', 'ping baseline', 'generic host support'],
-  },
-  {
-    name: 'bare_metal',
-    label: 'Bare Metal',
-    description: 'Physical servers monitored via SNMP or ping.',
-    capabilities: ['ping', 'SNMP polling', 'resource metrics'],
-  },
-  {
-    name: 'linux_host',
-    label: 'Linux Host',
-    description: 'Linux servers and VMs monitored via SNMP.',
-    capabilities: ['ping', 'SNMP polling', 'resource metrics'],
-  },
-  {
-    name: 'windows_host',
-    label: 'Windows Host',
-    description: 'Windows servers and workstations monitored via SNMP.',
-    capabilities: ['ping', 'SNMP polling', 'resource metrics'],
-  },
-  {
-    name: 'generic_host',
-    label: 'Generic Host',
-    description: 'Any network-reachable device — routers, switches, appliances.',
-    capabilities: ['ping', 'availability monitoring'],
-  },
-  {
-    name: 'portainer',
-    label: 'Portainer',
-    description: 'Container visibility and image update detection via Portainer REST API.',
-    capabilities: ['container discovery', 'image update detection', 'multi-endpoint', 'API polling'],
-  },
-]
+const TYPE_META: Partial<Record<ComponentType, { description: string; capabilities: string[] }>> = {
+  proxmox_node:  { description: 'Proxmox hypervisor node — polls VMs and resources via Proxmox API.', capabilities: ['resource metrics', 'VM status', 'API polling'] },
+  synology:      { description: 'Synology NAS — volume health and resource metrics via DSM API.',      capabilities: ['resource metrics', 'volume health', 'API polling'] },
+  docker_engine: { description: 'Docker Engine — container discovery and metrics via Docker socket.',  capabilities: ['container discovery', 'resource metrics', 'socket polling'] },
+  traefik:       { description: 'Traefik reverse proxy — route and SSL cert discovery via API.',       capabilities: ['route discovery', 'SSL monitoring', 'API polling'] },
+  portainer:     { description: 'Portainer — multi-endpoint container management via REST API.',       capabilities: ['container discovery', 'image update detection', 'API polling'] },
+  vm_linux:      { description: 'Linux VM — resource metrics via SNMP.',                              capabilities: ['ping', 'SNMP polling', 'resource metrics'] },
+  vm_windows:    { description: 'Windows VM — resource metrics via SNMP.',                            capabilities: ['ping', 'SNMP polling', 'resource metrics'] },
+  vm_other:      { description: 'VM of unknown OS — availability monitoring only.',                   capabilities: ['ping', 'availability monitoring'] },
+  linux_host:    { description: 'Linux server or bare-metal host — resource metrics via SNMP.',       capabilities: ['ping', 'SNMP polling', 'resource metrics'] },
+  windows_host:  { description: 'Windows server or workstation — resource metrics via SNMP.',         capabilities: ['ping', 'SNMP polling', 'resource metrics'] },
+  generic_host:  { description: 'Any network-reachable device — routers, switches, appliances.',      capabilities: ['ping', 'availability monitoring'] },
+}
 
-// ── Driver card ───────────────────────────────────────────────────────────────
+function defaultMeta(type: ComponentType): { description: string; capabilities: string[] } {
+  const method = COLLECTION_METHOD[type]
+  const caps = method === 'snmp'          ? ['ping', 'SNMP polling', 'resource metrics']
+             : method === 'docker_socket' ? ['container discovery', 'resource metrics']
+             : method === 'proxmox_api'   ? ['resource metrics', 'API polling']
+             : method === 'traefik_api'   ? ['route discovery', 'API polling']
+             : method === 'portainer_api' ? ['container discovery', 'API polling']
+             : method === 'synology_api'  ? ['resource metrics', 'API polling']
+             : ['ping', 'availability monitoring']
+  return { description: `${TYPE_LABEL[type]} component.`, capabilities: caps }
+}
 
-function DriverCard({ name, label, capabilities }: typeof DRIVERS[number]) {
+// ── Cards ─────────────────────────────────────────────────────────────────────
+
+interface DriverCardProps { name: string; label: string; capabilities: string[] }
+
+function DriverCard({ name, label, capabilities }: DriverCardProps) {
   return (
     <div className="int-driver-card">
       <div className="int-driver-name">
@@ -87,13 +56,22 @@ function DriverCard({ name, label, capabilities }: typeof DRIVERS[number]) {
 // ── Main exported component ───────────────────────────────────────────────────
 
 export function InfraIntegrations() {
+  // Component type cards are driven from TYPE_LABEL — adding a new ComponentType
+  // automatically adds a card here without touching this file.
+  const componentTypeCards = (Object.keys(TYPE_LABEL) as ComponentType[]).map(type => {
+    const meta = TYPE_META[type] ?? defaultMeta(type)
+    return { name: type, label: TYPE_LABEL[type], ...meta }
+  }).sort((a, b) => a.label.localeCompare(b.label))
+
   return (
     <div className="int-section">
       <div className="int-section-header">
         <span className="int-section-title">Infrastructure Integrations</span>
       </div>
       <div className="int-driver-grid">
-        {DRIVERS.map(d => <DriverCard key={d.name} {...d} />)}
+        {componentTypeCards.map(d => (
+          <DriverCard key={d.name} name={d.name} label={d.label} capabilities={d.capabilities} />
+        ))}
       </div>
     </div>
   )

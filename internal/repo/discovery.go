@@ -34,6 +34,9 @@ type DiscoveredContainerRepo interface {
 	// UpdateContainerImageCheck writes the latest image and registry digests and
 	// sets image_update_available.  Called by the ImageUpdatePoller after each poll.
 	UpdateContainerImageCheck(ctx context.Context, id string, imageDigest string, registryDigest string, updateAvailable bool) error
+	// UpdateContainerRestartPolicy persists the container restart policy.
+	// Called by the ImageUpdatePoller which already performs a ContainerInspect.
+	UpdateContainerRestartPolicy(ctx context.Context, id string, policy string) error
 }
 
 // DiscoveredRouteRepo manages the discovered_routes table.
@@ -51,6 +54,12 @@ type DiscoveredRouteRepo interface {
 
 // ── DiscoveredContainerRepo implementation ────────────────────────────────────
 
+// containerSelectCols is the shared column list for discovered_containers SELECT queries.
+const containerSelectCols = `id, infra_component_id, container_id, container_name, image, status,
+	app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
+	image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at,
+	ports, labels, volumes, networks, restart_policy, docker_created_at`
+
 type sqliteDiscoveredContainerRepo struct{ db *sqlx.DB }
 
 // NewDiscoveredContainerRepo returns a DiscoveredContainerRepo backed by SQLite.
@@ -65,17 +74,24 @@ func (r *sqliteDiscoveredContainerRepo) UpsertDiscoveredContainer(ctx context.Co
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO discovered_containers
 		  (id, infra_component_id, container_id, container_name, image, status,
-		   app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
+		   ports, labels, volumes, networks, restart_policy, docker_created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(infra_component_id, container_id) DO UPDATE SET
 		  container_name        = excluded.container_name,
 		  image                 = excluded.image,
 		  status                = excluded.status,
 		  profile_suggestion    = excluded.profile_suggestion,
 		  suggestion_confidence = excluded.suggestion_confidence,
-		  last_seen_at          = excluded.last_seen_at`,
+		  last_seen_at          = excluded.last_seen_at,
+		  ports                 = COALESCE(excluded.ports, ports),
+		  labels                = COALESCE(excluded.labels, labels),
+		  volumes               = COALESCE(excluded.volumes, volumes),
+		  networks              = COALESCE(excluded.networks, networks),
+		  docker_created_at     = COALESCE(excluded.docker_created_at, docker_created_at)`,
 		c.ID, c.InfraComponentID, c.ContainerID, c.ContainerName, c.Image, c.Status,
-		c.AppID, c.ProfileSuggestion, c.SuggestionConfidence, c.LastSeenAt, c.CreatedAt)
+		c.AppID, c.ProfileSuggestion, c.SuggestionConfidence, c.LastSeenAt, c.CreatedAt,
+		c.Ports, c.Labels, c.Volumes, c.Networks, c.RestartPolicy, c.DockerCreatedAt)
 	if err != nil {
 		return fmt.Errorf("upsert discovered container %s: %w", c.ContainerID, err)
 	}
@@ -85,9 +101,7 @@ func (r *sqliteDiscoveredContainerRepo) UpsertDiscoveredContainer(ctx context.Co
 func (r *sqliteDiscoveredContainerRepo) ListDiscoveredContainers(ctx context.Context, infraComponentID string) ([]*models.DiscoveredContainer, error) {
 	var rows []*models.DiscoveredContainer
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
-		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
+		SELECT `+containerSelectCols+`
 		FROM discovered_containers
 		WHERE infra_component_id = ?
 		ORDER BY container_name ASC`, infraComponentID)
@@ -103,9 +117,7 @@ func (r *sqliteDiscoveredContainerRepo) ListDiscoveredContainers(ctx context.Con
 func (r *sqliteDiscoveredContainerRepo) ListAllDiscoveredContainers(ctx context.Context) ([]*models.DiscoveredContainer, error) {
 	var rows []*models.DiscoveredContainer
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
-		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
+		SELECT `+containerSelectCols+`
 		FROM discovered_containers
 		ORDER BY infra_component_id ASC, container_name ASC`)
 	if err != nil {
@@ -120,9 +132,7 @@ func (r *sqliteDiscoveredContainerRepo) ListAllDiscoveredContainers(ctx context.
 func (r *sqliteDiscoveredContainerRepo) GetDiscoveredContainer(ctx context.Context, id string) (*models.DiscoveredContainer, error) {
 	var c models.DiscoveredContainer
 	err := r.db.GetContext(ctx, &c, `
-		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
-		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
+		SELECT `+containerSelectCols+`
 		FROM discovered_containers
 		WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -210,9 +220,7 @@ func (r *sqliteDiscoveredContainerRepo) MarkStoppedIfNotRunning(ctx context.Cont
 func (r *sqliteDiscoveredContainerRepo) FindByName(ctx context.Context, infraComponentID string, name string) (*models.DiscoveredContainer, error) {
 	var c models.DiscoveredContainer
 	err := r.db.GetContext(ctx, &c, `
-		SELECT id, infra_component_id, container_id, container_name, image, status,
-		       app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
-		       image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at
+		SELECT `+containerSelectCols+`
 		FROM discovered_containers
 		WHERE infra_component_id = ? AND container_name = ?
 		LIMIT 1`, infraComponentID, name)
@@ -242,6 +250,15 @@ func (r *sqliteDiscoveredContainerRepo) UpdateContainerImageCheck(ctx context.Co
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) UpdateContainerRestartPolicy(ctx context.Context, id string, policy string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE discovered_containers SET restart_policy = ? WHERE id = ?`, policy, id)
+	if err != nil {
+		return fmt.Errorf("update restart policy on container %s: %w", id, err)
 	}
 	return nil
 }

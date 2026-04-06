@@ -21,7 +21,8 @@ func newTopologyRouter(t *testing.T) http.Handler {
 	de := repo.NewDockerEngineRepo(db)
 	apps := repo.NewAppRepo(db)
 	rollups := repo.NewResourceRollupRepo(db)
-	h := api.NewTopologyHandler(ic, de, apps, rollups)
+	links := repo.NewComponentLinkRepo(db)
+	h := api.NewTopologyHandler(ic, de, apps, rollups, links)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
@@ -176,9 +177,10 @@ func TestGetTopology_FullChain(t *testing.T) {
 	de := repo.NewDockerEngineRepo(db)
 	apps := repo.NewAppRepo(db)
 	rollups := repo.NewResourceRollupRepo(db)
+	links := repo.NewComponentLinkRepo(db)
 
 	// Use a combined router so both topology and infra_components are available.
-	topoHandler := api.NewTopologyHandler(ic, de, apps, rollups)
+	topoHandler := api.NewTopologyHandler(ic, de, apps, rollups, links)
 	checks := repo.NewCheckRepo(db)
 	tc := repo.NewTraefikComponentRepo(db)
 	store := repo.NewStore(
@@ -189,6 +191,7 @@ func TestGetTopology_FullChain(t *testing.T) {
 		repo.NewUserRepo(db), tc,
 		repo.NewTraefikOverviewRepo(db), repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db), repo.NewDiscoveredRouteRepo(db), nil, nil, nil, nil, nil,
+		links,
 	)
 	icHandler := api.NewInfraComponentHandler(ic, rollups, checks, repo.NewEventRepo(db), store)
 	r := chi.NewRouter()
@@ -199,7 +202,7 @@ func TestGetTopology_FullChain(t *testing.T) {
 	// Create a proxmox node (root).
 	node := createInfraComponent(t, router, "proxmox-node1", "192.168.1.10", "proxmox_node", "")
 	// Create a VM parented to the node.
-	vm := createInfraComponent(t, router, "rocky-vm01", "192.168.1.50", "vm", node.ID)
+	vm := createInfraComponent(t, router, "rocky-vm01", "192.168.1.50", "vm_other", node.ID)
 	// Attach a docker engine to the VM.
 	createDockerEngine(t, router, "docker-01", "local", "/var/run/docker.sock", vm.ID)
 

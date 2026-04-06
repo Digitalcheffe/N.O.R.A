@@ -19,7 +19,7 @@ var ErrConflict = errors.New("conflict")
 // AppRepo defines CRUD operations for apps.
 type AppRepo interface {
 	List(ctx context.Context) ([]models.App, error)
-	// ListByHost returns all apps whose host_component_id matches hostID.
+	// ListByHost returns all apps that are children of hostID in component_links.
 	ListByHost(ctx context.Context, hostID string) ([]models.App, error)
 	Create(ctx context.Context, app *models.App) error
 	Get(ctx context.Context, id string) (*models.App, error)
@@ -27,10 +27,6 @@ type AppRepo interface {
 	Update(ctx context.Context, app *models.App) error
 	Delete(ctx context.Context, id string) error
 	UpdateToken(ctx context.Context, id, token string) error
-	// SetDockerEngineID sets the docker_engine_id on the app unconditionally.
-	SetDockerEngineID(ctx context.Context, appID, engineID string) error
-	// SetHostComponentID links or unlinks an app to an infrastructure component.
-	SetHostComponentID(ctx context.Context, appID string, hostID *string) error
 }
 
 type sqliteAppRepo struct {
@@ -46,8 +42,6 @@ func (r *sqliteAppRepo) List(ctx context.Context) ([]models.App, error) {
 	var apps []models.App
 	err := r.db.SelectContext(ctx, &apps, `
 		SELECT id, name, token, COALESCE(profile_id,'') AS profile_id,
-		       COALESCE(docker_engine_id,'') AS docker_engine_id,
-		       host_component_id,
 		       config, rate_limit, created_at
 		FROM apps ORDER BY created_at ASC`)
 	if err != nil {
@@ -59,11 +53,12 @@ func (r *sqliteAppRepo) List(ctx context.Context) ([]models.App, error) {
 func (r *sqliteAppRepo) ListByHost(ctx context.Context, hostID string) ([]models.App, error) {
 	var apps []models.App
 	err := r.db.SelectContext(ctx, &apps, `
-		SELECT id, name, token, COALESCE(profile_id,'') AS profile_id,
-		       COALESCE(docker_engine_id,'') AS docker_engine_id,
-		       host_component_id,
-		       config, rate_limit, created_at
-		FROM apps WHERE host_component_id = ? ORDER BY created_at ASC`, hostID)
+		SELECT a.id, a.name, a.token, COALESCE(a.profile_id,'') AS profile_id,
+		       a.config, a.rate_limit, a.created_at
+		FROM apps a
+		INNER JOIN component_links cl ON cl.child_id = a.id AND cl.child_type = 'app'
+		WHERE cl.parent_id = ?
+		ORDER BY a.created_at ASC`, hostID)
 	if err != nil {
 		return nil, fmt.Errorf("list apps by host: %w", err)
 	}
@@ -75,10 +70,9 @@ func (r *sqliteAppRepo) ListByHost(ctx context.Context, hostID string) ([]models
 
 func (r *sqliteAppRepo) Create(ctx context.Context, app *models.App) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO apps (id, name, token, profile_id, docker_engine_id, host_component_id, config, rate_limit)
-		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
-		app.ID, app.Name, app.Token, app.ProfileID, app.DockerEngineID,
-		app.HostComponentID, app.Config, app.RateLimit)
+		INSERT INTO apps (id, name, token, profile_id, config, rate_limit)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		app.ID, app.Name, app.Token, app.ProfileID, app.Config, app.RateLimit)
 	if err != nil {
 		return fmt.Errorf("create app: %w", err)
 	}
@@ -89,8 +83,6 @@ func (r *sqliteAppRepo) Get(ctx context.Context, id string) (*models.App, error)
 	var app models.App
 	err := r.db.GetContext(ctx, &app, `
 		SELECT id, name, token, COALESCE(profile_id,'') AS profile_id,
-		       COALESCE(docker_engine_id,'') AS docker_engine_id,
-		       host_component_id,
 		       config, rate_limit, created_at
 		FROM apps WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -106,8 +98,6 @@ func (r *sqliteAppRepo) GetByToken(ctx context.Context, token string) (*models.A
 	var app models.App
 	err := r.db.GetContext(ctx, &app, `
 		SELECT id, name, token, COALESCE(profile_id,'') AS profile_id,
-		       COALESCE(docker_engine_id,'') AS docker_engine_id,
-		       host_component_id,
 		       config, rate_limit, created_at
 		FROM apps WHERE token = ?`, token)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -121,11 +111,9 @@ func (r *sqliteAppRepo) GetByToken(ctx context.Context, token string) (*models.A
 
 func (r *sqliteAppRepo) Update(ctx context.Context, app *models.App) error {
 	res, err := r.db.ExecContext(ctx, `
-		UPDATE apps SET name=?, profile_id=NULLIF(?,?), docker_engine_id=NULLIF(?,?),
-		    host_component_id=?, config=?, rate_limit=?
+		UPDATE apps SET name=?, profile_id=NULLIF(?,?), config=?, rate_limit=?
 		WHERE id=?`,
-		app.Name, app.ProfileID, "", app.DockerEngineID, "",
-		app.HostComponentID, app.Config, app.RateLimit, app.ID)
+		app.Name, app.ProfileID, "", app.Config, app.RateLimit, app.ID)
 	if err != nil {
 		return fmt.Errorf("update app: %w", err)
 	}
@@ -152,30 +140,6 @@ func (r *sqliteAppRepo) UpdateToken(ctx context.Context, id, token string) error
 	res, err := r.db.ExecContext(ctx, `UPDATE apps SET token=? WHERE id=?`, token, id)
 	if err != nil {
 		return fmt.Errorf("update token: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-func (r *sqliteAppRepo) SetDockerEngineID(ctx context.Context, appID, engineID string) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE apps SET docker_engine_id=? WHERE id=?`, engineID, appID)
-	if err != nil {
-		return fmt.Errorf("set docker_engine_id on app %s: %w", appID, err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-func (r *sqliteAppRepo) SetHostComponentID(ctx context.Context, appID string, hostID *string) error {
-	res, err := r.db.ExecContext(ctx, `UPDATE apps SET host_component_id=? WHERE id=?`, hostID, appID)
-	if err != nil {
-		return fmt.Errorf("set host_component_id on app %s: %w", appID, err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {

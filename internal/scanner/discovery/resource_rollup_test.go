@@ -31,6 +31,7 @@ func newTestStore(t *testing.T) (*repo.Store, *sqlx.DB) {
 		repo.NewResourceRollupRepo(db),
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		repo.NewAppMetricSnapshotRepo(db),
+		nil,
 	)
 	return store, db
 }

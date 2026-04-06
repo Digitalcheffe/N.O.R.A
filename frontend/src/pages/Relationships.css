@@ -1,0 +1,336 @@
+/* ── Controls bar ────────────────────────────────────────────────────────────── */
+
+.rel-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.rel-filter-group {
+  display: flex;
+  gap: 2px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.rel-filter-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rel-filter-btn:hover { color: var(--text2); }
+
+.rel-filter-btn.active {
+  background: var(--bg4);
+  color: var(--text);
+  border: 1px solid var(--border2);
+}
+
+/* ── State messages ──────────────────────────────────────────────────────────── */
+
+.rel-state {
+  padding: 40px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text3);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.rel-state--error {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────────── */
+
+.rel-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg2);
+}
+
+.rel-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rel-table thead th {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.rel-table tbody td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.rel-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rel-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.rel-row:hover {
+  background: var(--bg3);
+}
+
+/* ── App cell ────────────────────────────────────────────────────────────────── */
+
+.rel-app-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rel-app-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.rel-app-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+}
+
+.rel-app-monogram {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text3);
+}
+
+.rel-app-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ── Profile badge ───────────────────────────────────────────────────────────── */
+
+.rel-profile-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+/* ── Infra link button ───────────────────────────────────────────────────────── */
+
+.rel-infra-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--accent);
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-align: left;
+}
+
+.rel-infra-btn:hover {
+  opacity: 0.8;
+}
+
+/* ── Type & status ───────────────────────────────────────────────────────────── */
+
+.rel-mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.rel-type {
+  color: var(--text2);
+}
+
+.rel-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rel-status-label {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.rel-dim {
+  color: var(--text3);
+}
+
+/* ── Action cell ─────────────────────────────────────────────────────────────── */
+
+.rel-action-cell {
+  width: 72px;
+  text-align: right;
+}
+
+.rel-unlink-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: none;
+  color: var(--text3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rel-unlink-btn:hover:not(:disabled) {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.rel-unlink-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Link button + dropdown ──────────────────────────────────────────────────── */
+
+.rel-link-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px dashed var(--border2);
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rel-link-btn:hover:not(:disabled) {
+  background: var(--bg3);
+}
+
+.rel-link-dropdown {
+  position: relative;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 6px;
+  min-width: 200px;
+  z-index: 10;
+}
+
+.rel-link-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rel-link-close {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+}
+
+.rel-link-close:hover { color: var(--text); }
+
+.rel-link-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.rel-link-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.rel-link-option:hover:not(:disabled) {
+  background: var(--bg4);
+}
+
+.rel-link-option-name {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.rel-link-option .rel-dim {
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.rel-link-empty {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 4px;
+}
+
+/* ── Status dot ──────────────────────────────────────────────────────────────── */
+
+.rel-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rel-dot--online  { background: var(--green); }
+.rel-dot--offline { background: var(--red); }
+.rel-dot--unknown { background: var(--text3); }

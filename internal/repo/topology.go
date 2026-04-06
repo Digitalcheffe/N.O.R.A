@@ -31,7 +31,7 @@ func NewDockerEngineRepo(db *sqlx.DB) DockerEngineRepo {
 func (r *sqliteDockerEngineRepo) List(ctx context.Context) ([]models.DockerEngine, error) {
 	var engines []models.DockerEngine
 	err := r.db.SelectContext(ctx, &engines,
-		`SELECT id, COALESCE(infra_component_id,'') AS infra_component_id, name, socket_type, socket_path, created_at
+		`SELECT id, name, socket_type, socket_path, created_at
 		 FROM docker_engines ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list docker_engines: %w", err)
@@ -41,8 +41,8 @@ func (r *sqliteDockerEngineRepo) List(ctx context.Context) ([]models.DockerEngin
 
 func (r *sqliteDockerEngineRepo) Create(ctx context.Context, e *models.DockerEngine) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO docker_engines (id, infra_component_id, name, socket_type, socket_path) VALUES (?, NULLIF(?, ''), ?, ?, ?)`,
-		e.ID, e.InfraComponentID, e.Name, e.SocketType, e.SocketPath)
+		`INSERT INTO docker_engines (id, name, socket_type, socket_path) VALUES (?, ?, ?, ?)`,
+		e.ID, e.Name, e.SocketType, e.SocketPath)
 	if err != nil {
 		return fmt.Errorf("create docker_engine: %w", err)
 	}
@@ -52,7 +52,7 @@ func (r *sqliteDockerEngineRepo) Create(ctx context.Context, e *models.DockerEng
 func (r *sqliteDockerEngineRepo) Get(ctx context.Context, id string) (*models.DockerEngine, error) {
 	var e models.DockerEngine
 	err := r.db.GetContext(ctx, &e,
-		`SELECT id, COALESCE(infra_component_id,'') AS infra_component_id, name, socket_type, socket_path, created_at
+		`SELECT id, name, socket_type, socket_path, created_at
 		 FROM docker_engines WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -65,8 +65,8 @@ func (r *sqliteDockerEngineRepo) Get(ctx context.Context, id string) (*models.Do
 
 func (r *sqliteDockerEngineRepo) Update(ctx context.Context, e *models.DockerEngine) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE docker_engines SET infra_component_id=NULLIF(?, ''), name=?, socket_type=?, socket_path=? WHERE id=?`,
-		e.InfraComponentID, e.Name, e.SocketType, e.SocketPath, e.ID)
+		`UPDATE docker_engines SET name=?, socket_type=?, socket_path=? WHERE id=?`,
+		e.Name, e.SocketType, e.SocketPath, e.ID)
 	if err != nil {
 		return fmt.Errorf("update docker_engine: %w", err)
 	}

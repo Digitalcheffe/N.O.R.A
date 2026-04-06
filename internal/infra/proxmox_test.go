@@ -48,6 +48,7 @@ func newProxmoxTestStore(t *testing.T) *repo.Store {
 		nil,
 		nil,
 		nil,
+		repo.NewComponentLinkRepo(db),
 	)
 }
 
@@ -318,40 +319,6 @@ func TestProxmoxPoller_Poll_VMStartedFiresInfoEvent(t *testing.T) {
 	}
 }
 
-func TestProxmoxPoller_Poll_LXCStateChangeFiresEvent(t *testing.T) {
-	srv, fs := newFakeServer(t)
-	fs.nodes = []proxmoxNode{{Node: "pve", Status: "online"}}
-	fs.statusByNode["pve"] = defaultNodeStatus()
-	fs.storageByNode["pve"] = defaultStorage()
-	fs.lxcByNode["pve"] = []proxmoxVM{{VMID: 200, Name: "debian-ct", Status: "stopped"}}
-
-	ctx := context.Background()
-	store := newProxmoxTestStore(t)
-	compID := "comp-lxc"
-	createTestComponent(t, store, compID)
-
-	poller, _ := NewProxmoxPoller(compID, makeCredentials(srv.URL))
-	if err := poller.Poll(ctx, store); err != nil {
-		t.Fatalf("first Poll: %v", err)
-	}
-
-	fs.lxcByNode["pve"] = []proxmoxVM{{VMID: 200, Name: "debian-ct", Status: "running"}}
-	if err := poller.Poll(ctx, store); err != nil {
-		t.Fatalf("second Poll: %v", err)
-	}
-
-	events, _, _ := store.Events.List(ctx, repo.ListFilter{Limit: 50})
-	found := false
-	for _, ev := range events {
-		if ev.Level == "info" && ev.Title == "LXC debian-ct is now running on pve" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected info event for LXC debian-ct started; events: %v", events)
-	}
-}
-
 func TestProxmoxPoller_Poll_NoStateChangeNoEvent(t *testing.T) {
 	srv, fs := newFakeServer(t)
 	fs.nodes = []proxmoxNode{{Node: "pve", Status: "online"}}
@@ -410,9 +377,7 @@ func TestProxmoxPoller_Poll_CreatesVMChildren(t *testing.T) {
 		{VMID: 100, Name: "ubuntu-vm", Status: "running"},
 		{VMID: 101, Name: "win11-vm", Status: "stopped"},
 	}
-	fs.lxcByNode["pve"] = []proxmoxVM{
-		{VMID: 200, Name: "debian-ct", Status: "running"},
-	}
+	// LXC is ignored since Phase 2; only QEMU VMs are discovered.
 
 	ctx := context.Background()
 	store := newProxmoxTestStore(t)
@@ -429,9 +394,9 @@ func TestProxmoxPoller_Poll_CreatesVMChildren(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	// Expect: 1 proxmox_node + 2 vms + 1 lxc = 4 total.
-	if len(all) != 4 {
-		t.Fatalf("expected 4 components, got %d", len(all))
+	// Expect: 1 proxmox_node + 2 vm_other = 3 total.
+	if len(all) != 3 {
+		t.Fatalf("expected 3 components, got %d", len(all))
 	}
 
 	byID := make(map[string]models.InfrastructureComponent)
@@ -442,7 +407,6 @@ func TestProxmoxPoller_Poll_CreatesVMChildren(t *testing.T) {
 	// Check the VM child IDs are deterministic.
 	ubuntuID := proxmoxChildID(compID, 100)
 	winID := proxmoxChildID(compID, 101)
-	ctID := proxmoxChildID(compID, 200)
 
 	for _, tc := range []struct {
 		id     string
@@ -450,9 +414,8 @@ func TestProxmoxPoller_Poll_CreatesVMChildren(t *testing.T) {
 		kind   string
 		status string
 	}{
-		{ubuntuID, "ubuntu-vm", "vm", "online"},
-		{winID, "win11-vm", "vm", "offline"},
-		{ctID, "debian-ct", "lxc", "online"},
+		{ubuntuID, "ubuntu-vm", "vm_other", "online"},
+		{winID, "win11-vm", "vm_other", "offline"},
 	} {
 		c, ok := byID[tc.id]
 		if !ok {
@@ -465,12 +428,18 @@ func TestProxmoxPoller_Poll_CreatesVMChildren(t *testing.T) {
 		if c.LastStatus != tc.status {
 			t.Errorf("%s: last_status=%q, want %q", tc.name, c.LastStatus, tc.status)
 		}
-		if c.ParentID == nil || *c.ParentID != compID {
-			t.Errorf("%s: parent_id=%v, want %q", tc.name, c.ParentID, compID)
-		}
 		if c.CollectionMethod != "none" {
 			t.Errorf("%s: collection_method=%q, want \"none\"", tc.name, c.CollectionMethod)
 		}
+	}
+
+	// Verify parent link written to component_links.
+	children, err := store.ComponentLinks.GetChildren(ctx, "proxmox_node", compID)
+	if err != nil {
+		t.Fatalf("GetChildren: %v", err)
+	}
+	if len(children) != 2 {
+		t.Errorf("expected 2 component_links children, got %d", len(children))
 	}
 }
 

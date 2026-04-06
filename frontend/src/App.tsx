@@ -14,6 +14,8 @@ import { Apps } from './pages/Apps'
 import { AppDetail } from './pages/AppDetail'
 import { Infrastructure } from './pages/Infrastructure'
 import { InfraComponentDetail } from './pages/InfraComponentDetail'
+import { NetworkMap } from './pages/NetworkMap'
+import { Relationships } from './pages/Relationships'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
 import { Profile } from './pages/Profile'
@@ -45,6 +47,8 @@ export default function App() {
               <Route path="apps/:id" element={<AppDetail />} />
               <Route path="infrastructure" element={<Infrastructure />} />
               <Route path="infrastructure/:id" element={<InfraComponentDetail />} />
+              <Route path="network-map" element={<NetworkMap />} />
+              <Route path="relationships" element={<Relationships />} />
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<Profile />} />
               <Route path="app-templates/new" element={<AppTemplateEditor />} />

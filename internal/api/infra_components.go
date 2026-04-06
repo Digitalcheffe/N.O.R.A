@@ -61,7 +61,7 @@ type infraComponentRequest struct {
 	IP               string  `json:"ip"`
 	Type             string  `json:"type"`
 	CollectionMethod string  `json:"collection_method"`
-	ParentID         *string `json:"parent_id"`
+	ParentID         *string `json:"parent_id"` // written to component_links; not stored on the component itself
 	SNMPConfig       *string `json:"snmp_config"`
 	Notes            string  `json:"notes"`
 	Enabled          *bool   `json:"enabled"`
@@ -78,7 +78,6 @@ type infraComponentResponse struct {
 	IP               string                 `json:"ip"`
 	Type             string                 `json:"type"`
 	CollectionMethod string                 `json:"collection_method"`
-	ParentID         *string                `json:"parent_id,omitempty"`
 	SNMPConfig       *string                `json:"snmp_config,omitempty"`
 	Notes            string                 `json:"notes"`
 	Enabled          bool                   `json:"enabled"`
@@ -157,7 +156,6 @@ func toResponse(c *models.InfrastructureComponent) infraComponentResponse {
 		IP:               c.IP,
 		Type:             c.Type,
 		CollectionMethod: c.CollectionMethod,
-		ParentID:         c.ParentID,
 		SNMPConfig:       c.SNMPConfig,
 		Notes:            c.Notes,
 		Enabled:          c.Enabled,
@@ -176,13 +174,13 @@ func toResponse(c *models.InfrastructureComponent) infraComponentResponse {
 
 var validComponentTypes = map[string]bool{
 	"proxmox_node":  true,
-	"synology":      true,
-	"vm":            true,
-	"lxc":           true,
-	"bare_metal":    true,
+	"vm_linux":      true,
+	"vm_windows":    true,
+	"vm_other":      true,
 	"linux_host":    true,
 	"windows_host":  true,
 	"generic_host":  true,
+	"synology":      true,
 	"docker_engine": true,
 	"traefik":       true,
 	"portainer":     true,
@@ -240,9 +238,12 @@ func (h *InfraComponentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate parent_id if provided.
+	// Validate parent_id if provided; fetch parent to get its type for component_links.
+	var parentComp *models.InfrastructureComponent
 	if req.ParentID != nil && *req.ParentID != "" {
-		if _, err := h.components.Get(r.Context(), *req.ParentID); errors.Is(err, repo.ErrNotFound) {
+		var err error
+		parentComp, err = h.components.Get(r.Context(), *req.ParentID)
+		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusUnprocessableEntity, "parent_id not found")
 			return
 		} else if err != nil {
@@ -262,7 +263,6 @@ func (h *InfraComponentHandler) Create(w http.ResponseWriter, r *http.Request) {
 		IP:               req.IP,
 		Type:             req.Type,
 		CollectionMethod: cm,
-		ParentID:         req.ParentID,
 		Credentials:      req.Credentials,
 		SNMPConfig:       req.SNMPConfig,
 		Notes:            req.Notes,
@@ -273,6 +273,12 @@ func (h *InfraComponentHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.components.Create(r.Context(), c); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if parentComp != nil {
+		if err := h.store.ComponentLinks.SetParent(r.Context(), parentComp.Type, parentComp.ID, c.Type, c.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	writeJSON(w, http.StatusCreated, toResponse(c))
 }
@@ -321,8 +327,11 @@ func (h *InfraComponentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid collection_method")
 		return
 	}
+	var parentComp *models.InfrastructureComponent
 	if req.ParentID != nil && *req.ParentID != "" {
-		if _, err := h.components.Get(r.Context(), *req.ParentID); errors.Is(err, repo.ErrNotFound) {
+		var err error
+		parentComp, err = h.components.Get(r.Context(), *req.ParentID)
+		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusUnprocessableEntity, "parent_id not found")
 			return
 		} else if err != nil {
@@ -343,7 +352,6 @@ func (h *InfraComponentHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.CollectionMethod != "" {
 		existing.CollectionMethod = req.CollectionMethod
 	}
-	existing.ParentID = req.ParentID
 	if req.SNMPConfig != nil {
 		existing.SNMPConfig = req.SNMPConfig
 	}
@@ -359,6 +367,18 @@ func (h *InfraComponentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Update parent link in component_links.
+	if parentComp != nil {
+		if err := h.store.ComponentLinks.SetParent(r.Context(), parentComp.Type, parentComp.ID, existing.Type, existing.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else if req.ParentID != nil {
+		// Explicitly cleared (parent_id present but empty/null).
+		_ = h.store.ComponentLinks.RemoveParent(r.Context(), existing.Type, existing.ID)
+	}
+
 	writeJSON(w, http.StatusOK, toResponse(existing))
 }
 
@@ -537,7 +557,7 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 	}
 
 	// SNMP pollers write resource_readings with source_type="snmp_host" regardless
-	// of the component type (linux_host, bare_metal, etc.). Use the poller's
+	// of the component type (linux_host, generic_host, etc.). Use the poller's
 	// source_type when querying rollups so the lookup matches what was stored.
 	sourceType := comp.Type
 	if comp.CollectionMethod == "snmp" {
@@ -883,13 +903,14 @@ func (h *InfraComponentHandler) ListLinkedApps(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]interface{}{"data": apps, "total": len(apps)})
 }
 
-// LinkApp sets host_component_id on an app to link it to this component.
+// LinkApp links an app to this component via component_links.
 // POST /api/v1/infrastructure/{id}/apps/{appID}
 func (h *InfraComponentHandler) LinkApp(w http.ResponseWriter, r *http.Request) {
 	id    := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appID")
 
-	if _, err := h.components.Get(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+	comp, err := h.components.Get(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "component not found")
 		return
 	} else if err != nil {
@@ -897,25 +918,35 @@ func (h *InfraComponentHandler) LinkApp(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.store.Apps.SetHostComponentID(r.Context(), appID, &id); errors.Is(err, repo.ErrNotFound) {
+	if _, err := h.store.Apps.Get(r.Context(), appID); errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "app not found")
 		return
 	} else if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", appID); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// UnlinkApp clears host_component_id on an app.
+// UnlinkApp removes the component_links entry linking this app to any component.
 // DELETE /api/v1/infrastructure/{id}/apps/{appID}
 func (h *InfraComponentHandler) UnlinkApp(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "appID")
 
-	if err := h.store.Apps.SetHostComponentID(r.Context(), appID, nil); errors.Is(err, repo.ErrNotFound) {
+	if _, err := h.store.Apps.Get(r.Context(), appID); errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "app not found")
 		return
 	} else if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if err := h.store.ComponentLinks.RemoveParent(r.Context(), "app", appID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

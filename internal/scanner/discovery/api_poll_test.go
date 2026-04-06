@@ -43,6 +43,7 @@ func newAPITestStore(t *testing.T) (*repo.Store, interface{ Close() error }) {
 		repo.NewEventRepo(db),
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		repo.NewAppMetricSnapshotRepo(db),
+		nil,
 	)
 	return full, db
 }

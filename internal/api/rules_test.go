@@ -40,6 +40,7 @@ func newRulesRouter(t *testing.T) http.Handler {
 		repo.NewRuleRepo(db),
 		nil,
 		nil,
+		nil,
 	)
 	cfg := &config.Config{Secret: "test"}
 	engine := rules.NewEngine(store, nil, cfg)

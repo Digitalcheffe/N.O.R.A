@@ -4,6 +4,7 @@
 
 import type {
   App,
+  ComponentLink,
   AppMetricSnapshot,
   AppTemplate,
   AuthUser,
@@ -499,6 +500,17 @@ export const infrastructure = {
 
   unlinkApp: (componentId: string, appId: string) =>
     request<void>('DELETE', `/infrastructure/${componentId}/apps/${appId}`),
+}
+
+// ── Component Links ───────────────────────────────────────────────────────────
+
+export const links = {
+  list: () =>
+    request<ListResponse<ComponentLink>>('GET', '/links'),
+  setParent: (parentType: string, parentId: string, childType: string, childId: string) =>
+    request<void>('POST', '/links', { parent_type: parentType, parent_id: parentId, child_type: childType, child_id: childId }),
+  removeParent: (childType: string, childId: string) =>
+    request<void>('DELETE', `/links?child_type=${encodeURIComponent(childType)}&child_id=${encodeURIComponent(childId)}`),
 }
 
 // ── Synology Detail ───────────────────────────────────────────────────────────

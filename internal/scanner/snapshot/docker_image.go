@@ -150,6 +150,15 @@ func (p *ImageUpdatePoller) Run(ctx context.Context) error {
 			continue
 		}
 
+		// Persist restart policy — available from the inspect we already have.
+		if inspect.HostConfig != nil && inspect.HostConfig.RestartPolicy.Name != "" {
+			if err := p.store.DiscoveredContainers.UpdateContainerRestartPolicy(
+				ctx, c.ID, string(inspect.HostConfig.RestartPolicy.Name),
+			); err != nil {
+				log.Printf("image update poller: persist restart policy for %s: %v", c.ContainerName, err)
+			}
+		}
+
 		checked++
 		if updateAvailable {
 			updatesAvailable++

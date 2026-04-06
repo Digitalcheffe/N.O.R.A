@@ -29,6 +29,7 @@ func newInfraComponentRouter(t *testing.T) http.Handler {
 		repo.NewUserRepo(db), tc,
 		repo.NewTraefikOverviewRepo(db), repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db), repo.NewDiscoveredRouteRepo(db), nil, nil, nil, nil, nil,
+		repo.NewComponentLinkRepo(db),
 	)
 	h := api.NewInfraComponentHandler(ic, rollups, checks, events, store)
 	r := chi.NewRouter()
@@ -43,7 +44,6 @@ type infraComponentResponse struct {
 	IP               string  `json:"ip"`
 	Type             string  `json:"type"`
 	CollectionMethod string  `json:"collection_method"`
-	ParentID         *string `json:"parent_id"`
 	Notes            string  `json:"notes"`
 	Enabled          bool    `json:"enabled"`
 	LastStatus       string  `json:"last_status"`
@@ -130,7 +130,7 @@ func TestCreateInfraComponent_InvalidType(t *testing.T) {
 
 func TestCreateInfraComponent_MissingName(t *testing.T) {
 	router := newInfraComponentRouter(t)
-	body := bytes.NewBufferString(`{"ip":"1.2.3.4","type":"bare_metal"}`)
+	body := bytes.NewBufferString(`{"ip":"1.2.3.4","type":"generic_host"}`)
 	req := httptest.NewRequest(http.MethodPost, "/infrastructure", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -143,7 +143,7 @@ func TestCreateInfraComponent_MissingName(t *testing.T) {
 func TestCreateInfraComponent_InvalidParentID(t *testing.T) {
 	router := newInfraComponentRouter(t)
 	body, _ := json.Marshal(map[string]any{
-		"name": "vm01", "ip": "1.2.3.4", "type": "vm",
+		"name": "vm01", "ip": "1.2.3.4", "type": "vm_other",
 		"parent_id": "does-not-exist",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/infrastructure", bytes.NewReader(body))
@@ -183,7 +183,7 @@ func TestCreateInfraComponent_CredentialsNotInResponse(t *testing.T) {
 
 func TestGetInfraComponent_HappyPath(t *testing.T) {
 	router := newInfraComponentRouter(t)
-	created := createInfraComponent(t, router, "host1", "10.0.0.1", "bare_metal", "")
+	created := createInfraComponent(t, router, "host1", "10.0.0.1", "generic_host", "")
 	req := httptest.NewRequest(http.MethodGet, "/infrastructure/"+created.ID, nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -206,7 +206,7 @@ func TestGetInfraComponent_NotFound(t *testing.T) {
 
 func TestUpdateInfraComponent_HappyPath(t *testing.T) {
 	router := newInfraComponentRouter(t)
-	created := createInfraComponent(t, router, "host1", "10.0.0.1", "bare_metal", "")
+	created := createInfraComponent(t, router, "host1", "10.0.0.1", "generic_host", "")
 	body, _ := json.Marshal(map[string]any{"name": "host1-renamed"})
 	req := httptest.NewRequest(http.MethodPut, "/infrastructure/"+created.ID, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -238,7 +238,7 @@ func TestUpdateInfraComponent_NotFound(t *testing.T) {
 
 func TestDeleteInfraComponent_HappyPath(t *testing.T) {
 	router := newInfraComponentRouter(t)
-	created := createInfraComponent(t, router, "host1", "10.0.0.1", "bare_metal", "")
+	created := createInfraComponent(t, router, "host1", "10.0.0.1", "generic_host", "")
 	req := httptest.NewRequest(http.MethodDelete, "/infrastructure/"+created.ID, nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -261,7 +261,7 @@ func TestDeleteInfraComponent_NotFound(t *testing.T) {
 func TestDeleteInfraComponent_DoesNotCascadeChildren(t *testing.T) {
 	router := newInfraComponentRouter(t)
 	parent := createInfraComponent(t, router, "proxmox", "10.0.0.1", "proxmox_node", "")
-	child := createInfraComponent(t, router, "vm01", "10.0.0.2", "vm", parent.ID)
+	child := createInfraComponent(t, router, "vm01", "10.0.0.2", "vm_other", parent.ID)
 
 	req := httptest.NewRequest(http.MethodDelete, "/infrastructure/"+parent.ID, nil)
 	rr := httptest.NewRecorder()
@@ -283,7 +283,7 @@ func TestDeleteInfraComponent_DoesNotCascadeChildren(t *testing.T) {
 
 func TestGetInfraComponentResources_HappyPath(t *testing.T) {
 	router := newInfraComponentRouter(t)
-	c := createInfraComponent(t, router, "host1", "10.0.0.1", "bare_metal", "")
+	c := createInfraComponent(t, router, "host1", "10.0.0.1", "generic_host", "")
 	req := httptest.NewRequest(http.MethodGet, "/infrastructure/"+c.ID+"/resources", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -315,7 +315,7 @@ func TestGetInfraComponentResources_NotFound(t *testing.T) {
 
 func TestGetInfraComponentResources_InvalidPeriod(t *testing.T) {
 	router := newInfraComponentRouter(t)
-	c := createInfraComponent(t, router, "host1", "10.0.0.1", "bare_metal", "")
+	c := createInfraComponent(t, router, "host1", "10.0.0.1", "generic_host", "")
 	req := httptest.NewRequest(http.MethodGet, "/infrastructure/"+c.ID+"/resources?period=week", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -324,36 +324,30 @@ func TestGetInfraComponentResources_InvalidPeriod(t *testing.T) {
 	}
 }
 
-// ---- List includes parent_id ------------------------------------------------
+// ---- ListChildren uses component_links ------------------------------------------------
 
-func TestListInfraComponents_IncludesParentID(t *testing.T) {
+func TestListInfraComponents_ChildrenViaLinks(t *testing.T) {
 	router := newInfraComponentRouter(t)
 	parent := createInfraComponent(t, router, "proxmox", "10.0.0.1", "proxmox_node", "")
-	createInfraComponent(t, router, "vm01", "10.0.0.2", "vm", parent.ID)
+	child := createInfraComponent(t, router, "vm01", "10.0.0.2", "vm_other", parent.ID)
 
-	req := httptest.NewRequest(http.MethodGet, "/infrastructure", nil)
+	// The child was created with parent_id — verify it appears under ListChildren.
+	req := httptest.NewRequest(http.MethodGet, "/infrastructure/"+parent.ID+"/children", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body.String())
+	}
 
 	var resp struct {
 		Data  []infraComponentResponse `json:"data"`
 		Total int                      `json:"total"`
 	}
 	json.NewDecoder(rr.Body).Decode(&resp)
-	if resp.Total != 2 {
-		t.Fatalf("expected total=2 got %d", resp.Total)
+	if resp.Total != 1 {
+		t.Fatalf("expected 1 child got %d", resp.Total)
 	}
-	// Find the child.
-	var child *infraComponentResponse
-	for i := range resp.Data {
-		if resp.Data[i].Name == "vm01" {
-			child = &resp.Data[i]
-		}
-	}
-	if child == nil {
-		t.Fatal("vm01 not in list response")
-	}
-	if child.ParentID == nil || *child.ParentID != parent.ID {
-		t.Errorf("expected parent_id=%s got %v", parent.ID, child.ParentID)
+	if resp.Data[0].ID != child.ID {
+		t.Errorf("expected child id=%s got %s", child.ID, resp.Data[0].ID)
 	}
 }

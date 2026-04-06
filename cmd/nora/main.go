@@ -96,6 +96,7 @@ func main() {
 	ruleRepo := repo.NewRuleRepo(db)
 	digestRegistryRepo := repo.NewDigestRegistryRepo(db)
 	appMetricSnapshotRepo := repo.NewAppMetricSnapshotRepo(db)
+	componentLinkRepo := repo.NewComponentLinkRepo(db)
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
@@ -108,6 +109,7 @@ func main() {
 		ruleRepo,
 		digestRegistryRepo,
 		appMetricSnapshotRepo,
+		componentLinkRepo,
 	)
 
 	// Bootstrap admin account — only runs when the users table is empty and
@@ -433,7 +435,7 @@ func main() {
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo, monitorScheduler).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
-		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo).Routes(r)
+		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo, componentLinkRepo).Routes(r)
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, eventRepo, store).Routes(r)
 		api.NewProfilesHandler(registry, customDir).Routes(r)
 		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
@@ -450,6 +452,7 @@ func main() {
 		api.NewJobsHandler(jobRegistry).Routes(r)
 		api.NewDigestRegistryHandler(store).Routes(r)
 		api.NewPortainerHandler(store).Routes(r)
+		api.NewLinksHandler(store).Routes(r)
 		authHandler.Routes(r)
 	})
 

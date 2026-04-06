@@ -9,9 +9,9 @@ import '../components/CheckForm.css'
 export const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
   proxmox_node:  'proxmox_api',
   synology:      'synology_api',
-  vm:            'snmp',
-  lxc:           'none',
-  bare_metal:    'snmp',
+  vm_linux:      'snmp',
+  vm_windows:    'snmp',
+  vm_other:      'none',
   linux_host:    'snmp',
   windows_host:  'snmp',
   generic_host:  'none',
@@ -23,9 +23,9 @@ export const COLLECTION_METHOD: Record<ComponentType, CollectionMethod> = {
 export const TYPE_LABEL: Record<ComponentType, string> = {
   proxmox_node:  'Proxmox Node',
   synology:      'Synology NAS',
-  vm:            'VM',
-  lxc:           'LXC',
-  bare_metal:    'Bare Metal',
+  vm_linux:      'VM Linux',
+  vm_windows:    'VM Windows',
+  vm_other:      'VM Other',
   linux_host:    'Linux Host',
   windows_host:  'Windows Host',
   generic_host:  'Generic Host',
@@ -34,7 +34,7 @@ export const TYPE_LABEL: Record<ComponentType, string> = {
   portainer:     'Portainer',
 }
 
-export const SNMP_TYPES = new Set<ComponentType>(['vm', 'bare_metal', 'linux_host', 'windows_host'])
+export const SNMP_TYPES = new Set<ComponentType>(['vm_linux', 'vm_windows', 'linux_host', 'windows_host'])
 
 // ── Form state ────────────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ export function componentToForm(c: InfrastructureComponent): InfraForm {
     name:      c.name,
     ip:        c.ip,
     type:      c.type,
-    parent_id: c.parent_id ?? '',
+    parent_id: '',
     notes:     c.notes,
     enabled:   c.enabled,
   }
@@ -388,16 +388,12 @@ export function InfraEditModal({
             value={form.type}
             onChange={e => setField('type', e.target.value as ComponentType)}
           >
-            <option value="bare_metal">Bare Metal</option>
-            <option value="docker_engine">Docker Engine</option>
-            <option value="generic_host">Generic Host</option>
-            <option value="linux_host">Linux Host</option>
-            <option value="portainer">Portainer</option>
-            <option value="proxmox_node">Proxmox Node</option>
-            <option value="synology">Synology NAS</option>
-            <option value="traefik">Traefik</option>
-            <option value="vm">VM</option>
-            <option value="windows_host">Windows Host</option>
+            {(Object.entries(TYPE_LABEL) as [ComponentType, string][])
+              .sort((a, b) => a[1].localeCompare(b[1]))
+              .map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))
+            }
           </select>
         </div>
 

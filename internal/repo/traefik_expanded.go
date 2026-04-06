@@ -87,11 +87,15 @@ func NewTraefikServiceRepo(db *sqlx.DB) TraefikServiceRepo {
 }
 
 func (r *sqliteTraefikServiceRepo) Upsert(ctx context.Context, svc *models.TraefikService) error {
+	if svc.FirstSeenAt == nil {
+		now := svc.LastSeen
+		svc.FirstSeenAt = &now
+	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO traefik_services
 		  (id, component_id, service_name, service_type, status,
-		   server_count, servers_up, servers_down, server_status_json, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   server_count, servers_up, servers_down, server_status_json, last_seen, first_seen_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 		  service_type       = excluded.service_type,
 		  status             = excluded.status,
@@ -102,7 +106,7 @@ func (r *sqliteTraefikServiceRepo) Upsert(ctx context.Context, svc *models.Traef
 		  last_seen          = excluded.last_seen`,
 		svc.ID, svc.ComponentID, svc.ServiceName, svc.ServiceType, svc.Status,
 		svc.ServerCount, svc.ServersUp, svc.ServersDown,
-		svc.ServerStatusJSON, svc.LastSeen)
+		svc.ServerStatusJSON, svc.LastSeen, svc.FirstSeenAt)
 	if err != nil {
 		return fmt.Errorf("upsert traefik service %s: %w", svc.ID, err)
 	}
@@ -116,7 +120,7 @@ func (r *sqliteTraefikServiceRepo) ListByComponent(ctx context.Context, componen
 		err = r.db.SelectContext(ctx, &rows, `
 			SELECT id, component_id, service_name, service_type, status,
 			       server_count, servers_up, servers_down,
-			       COALESCE(server_status_json,'{}') AS server_status_json, last_seen
+			       COALESCE(server_status_json,'{}') AS server_status_json, last_seen, first_seen_at
 			FROM traefik_services
 			WHERE component_id = ? AND servers_down > 0
 			ORDER BY service_name ASC`, componentID)
@@ -124,7 +128,7 @@ func (r *sqliteTraefikServiceRepo) ListByComponent(ctx context.Context, componen
 		err = r.db.SelectContext(ctx, &rows, `
 			SELECT id, component_id, service_name, service_type, status,
 			       server_count, servers_up, servers_down,
-			       COALESCE(server_status_json,'{}') AS server_status_json, last_seen
+			       COALESCE(server_status_json,'{}') AS server_status_json, last_seen, first_seen_at
 			FROM traefik_services
 			WHERE component_id = ?
 			ORDER BY service_name ASC`, componentID)

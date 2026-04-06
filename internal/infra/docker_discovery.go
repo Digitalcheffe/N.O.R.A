@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -49,6 +50,51 @@ func newDiscovererWithClient(store *repo.Store, registry *apptemplate.Registry, 
 	return &Discoverer{store: store, registry: registry, engineID: engineID, client: cli}
 }
 
+// containerEnrichment carries the optional metadata extracted from a
+// container.Summary (available during ScanAll, not during event-driven upserts).
+type containerEnrichment struct {
+	Ports           *string
+	Labels          *string
+	Volumes         *string
+	Networks        *string
+	DockerCreatedAt *time.Time
+}
+
+// extractEnrichment converts a container.Summary into a containerEnrichment.
+// JSON encoding errors are silently ignored — the fields are informational only.
+func extractEnrichment(c container.Summary) *containerEnrichment {
+	enc := func(v any) *string {
+		b, err := json.Marshal(v)
+		if err != nil || string(b) == "null" {
+			return nil
+		}
+		s := string(b)
+		return &s
+	}
+
+	var dockerCreatedAt *time.Time
+	if c.Created > 0 {
+		t := time.Unix(c.Created, 0).UTC()
+		dockerCreatedAt = &t
+	}
+
+	// Collect network names from NetworkSettings.
+	var networkNames []string
+	if c.NetworkSettings != nil {
+		for name := range c.NetworkSettings.Networks {
+			networkNames = append(networkNames, name)
+		}
+	}
+
+	return &containerEnrichment{
+		Ports:           enc(c.Ports),
+		Labels:          enc(c.Labels),
+		Volumes:         enc(c.Mounts),
+		Networks:        enc(networkNames),
+		DockerCreatedAt: dockerCreatedAt,
+	}
+}
+
 // ScanAll lists all running containers from the Docker daemon and upserts each
 // one into discovered_containers. Called once at NORA startup and whenever a
 // manual scan is triggered. After upserting running containers it reconciles
@@ -70,7 +116,8 @@ func (d *Discoverer) ScanAll(ctx context.Context) {
 	for _, c := range containers {
 		name := containerNameFrom(c.Names)
 		image := c.Image
-		if err := d.upsert(ctx, c.ID, name, image, "running"); err != nil {
+		meta := extractEnrichment(c)
+		if err := d.upsert(ctx, c.ID, name, image, "running", meta); err != nil {
 			log.Printf("docker discovery: upsert %s: %v", name, err)
 		}
 		runningIDs = append(runningIDs, c.ID)
@@ -93,7 +140,7 @@ func (d *Discoverer) ScanAll(ctx context.Context) {
 // into discovered_containers and runs profile matching.
 // status is one of: running | stopped | exited
 func (d *Discoverer) HandleEvent(ctx context.Context, containerID, name, image, status string) {
-	if err := d.upsert(ctx, containerID, name, image, status); err != nil {
+	if err := d.upsert(ctx, containerID, name, image, status, nil); err != nil {
 		log.Printf("docker discovery: upsert event for %s: %v", name, err)
 	}
 }
@@ -101,7 +148,8 @@ func (d *Discoverer) HandleEvent(ctx context.Context, containerID, name, image, 
 // upsert writes or updates a discovered_containers record and runs profile matching.
 // If a stale record exists for the same engine+name with a different container_id,
 // the app_id is transferred to the new record and the stale record is deleted.
-func (d *Discoverer) upsert(ctx context.Context, containerID, name, image, status string) error {
+// meta is optional enrichment from container.Summary; pass nil when not available.
+func (d *Discoverer) upsert(ctx context.Context, containerID, name, image, status string, meta *containerEnrichment) error {
 	now := time.Now().UTC()
 
 	dc := &models.DiscoveredContainer{
@@ -112,6 +160,14 @@ func (d *Discoverer) upsert(ctx context.Context, containerID, name, image, statu
 		Status:           status,
 		LastSeenAt:       now,
 		CreatedAt:        now,
+	}
+
+	if meta != nil {
+		dc.Ports = meta.Ports
+		dc.Labels = meta.Labels
+		dc.Volumes = meta.Volumes
+		dc.Networks = meta.Networks
+		dc.DockerCreatedAt = meta.DockerCreatedAt
 	}
 
 	// Run profile matching and attach suggestion if confidence is sufficient.
