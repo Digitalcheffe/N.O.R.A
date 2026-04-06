@@ -37,7 +37,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const version = "1.0.0"
+const version = "1.1.0"
 
 func main() {
 	cfg := config.Load()
@@ -441,7 +441,7 @@ func main() {
 		api.NewDigestHandler(store, digestJob).Routes(r)
 		api.NewSettingsHandler(store).Routes(r)
 		api.NewIntegrationDriversHandler(settingsRepo).Routes(r)
-		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, cfg.DBPath, startTime).Routes(r)
+		api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, db, cfg.DBPath, startTime, version).Routes(r)
 		api.NewUsersHandler(userRepo, store.Settings).Routes(r)
 		totpHandler.Routes(r)
 		api.NewProxmoxDetailHandler(infraComponentRepo).Routes(r)

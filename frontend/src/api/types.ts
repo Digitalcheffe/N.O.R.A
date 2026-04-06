@@ -785,7 +785,17 @@ export interface AppEventItem {
   count: number
 }
 
+export interface DepItem {
+  name: string
+  version: string
+  label: string
+}
+
 export interface InstanceMetrics {
+  version: string
+  go_version: string
+  sqlite_version: string
+  deps: DepItem[]
   db_size_bytes: number
   events_last_24h: number
   uptime_seconds: number

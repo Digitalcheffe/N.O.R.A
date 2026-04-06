@@ -18,7 +18,7 @@ func newMetricsRouter(t *testing.T) http.Handler {
 	eventRepo := repo.NewEventRepo(db)
 	appRepo := repo.NewAppRepo(db)
 	metricsRepo := repo.NewMetricsRepo(db)
-	h := api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, ":memory:", time.Now())
+	h := api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, db, ":memory:", time.Now(), "test")
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
@@ -100,7 +100,7 @@ func TestGetAppMetrics_EmptyTrend(t *testing.T) {
 	metricsRepo := repo.NewMetricsRepo(db)
 
 	appsHandler := api.NewAppsHandler(appRepo, nil, nil, nil, nil)
-	metricsHandler := api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, ":memory:", time.Now())
+	metricsHandler := api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, db, ":memory:", time.Now(), "test")
 
 	r := chi.NewRouter()
 	appsHandler.Routes(r)
