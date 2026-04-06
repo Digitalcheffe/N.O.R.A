@@ -180,78 +180,18 @@ func buildEnrichStore(
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-// TestEnrichAppOnLink_ProfileWithMonitorConfig verifies that a monitor check is
-// created when the app's profile has a monitor config and no matching check exists.
-func TestEnrichAppOnLink_ProfileWithMonitorConfig(t *testing.T) {
-	appID := "app-1"
-	containerUUID := "container-uuid-1"
-
-	apps := &enrichMockAppRepo{apps: map[string]*models.App{
-		appID: {
-			ID:        appID,
-			Name:      "Sonarr",
-			ProfileID: "sonarr",
-			Config:    models.ConfigJSON(`{"base_url":"http://sonarr:8989"}`),
-		},
-	}}
-	checks := &enrichMockCheckRepo{existsByTarget: map[string]bool{}}
-	containers := &enrichMockContainerRepo{containers: map[string]*models.DiscoveredContainer{
-		containerUUID: {ID: containerUUID, ContainerID: "abc123", ContainerName: "sonarr"},
-	}}
-	resources := &enrichMockResourceRepo{backfilled: 3}
-
-	profiles := &mockProfileLoader{templates: map[string]*apptemplate.AppTemplate{
-		"sonarr": {
-			Meta:    apptemplate.AppTemplateMeta{Name: "Sonarr"},
-			Monitor: apptemplate.Monitor{CheckType: "url", CheckURL: "{base_url}/ping", CheckInterval: "5m", HealthyStatus: 200},
-		},
-	}}
-
-	store := buildEnrichStore(apps, checks, containers, nil, resources)
-	if err := EnrichAppOnLink(context.Background(), store, profiles, appID, &containerUUID, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(checks.created) != 1 {
-		t.Fatalf("expected 1 monitor check created, got %d", len(checks.created))
-	}
-	c := checks.created[0]
-	if c.Type != "url" {
-		t.Errorf("check type = %q, want %q", c.Type, "url")
-	}
-	if c.Target != "http://sonarr:8989/ping" {
-		t.Errorf("check target = %q, want %q", c.Target, "http://sonarr:8989/ping")
-	}
-	if c.IntervalSecs != 300 {
-		t.Errorf("interval_secs = %d, want 300", c.IntervalSecs)
-	}
-	if c.ExpectedStatus != 200 {
-		t.Errorf("expected_status = %d, want 200", c.ExpectedStatus)
-	}
-	if c.AppID != appID {
-		t.Errorf("check app_id = %q, want %q", c.AppID, appID)
-	}
-}
-
-// TestEnrichAppOnLink_ProfileWithoutMonitorConfig verifies that no monitor check
-// is created when the profile has no monitor configuration.
-func TestEnrichAppOnLink_ProfileWithoutMonitorConfig(t *testing.T) {
+// TestEnrichAppOnLink_NoProfileNoChecks verifies that enrichment with no profile
+// and no container/route creates no checks.
+func TestEnrichAppOnLink_NoProfileNoChecks(t *testing.T) {
 	appID := "app-2"
 
 	apps := &enrichMockAppRepo{apps: map[string]*models.App{
-		appID: {ID: appID, Name: "MyApp", ProfileID: "generic", Config: models.ConfigJSON(`{}`)},
+		appID: {ID: appID, Name: "MyApp", ProfileID: "", Config: models.ConfigJSON(`{}`)},
 	}}
 	checks := &enrichMockCheckRepo{existsByTarget: map[string]bool{}}
 
-	profiles := &mockProfileLoader{templates: map[string]*apptemplate.AppTemplate{
-		"generic": {
-			Meta:    apptemplate.AppTemplateMeta{Name: "Generic"},
-			Monitor: apptemplate.Monitor{}, // no check_type or check_url
-		},
-	}}
-
 	store := buildEnrichStore(apps, checks, nil, nil, nil)
-	if err := EnrichAppOnLink(context.Background(), store, profiles, appID, nil, nil); err != nil {
+	if err := EnrichAppOnLink(context.Background(), store, &apptemplate.NoopLoader{}, appID, nil, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(checks.created) != 0 {
@@ -331,26 +271,18 @@ func TestEnrichAppOnLink_DuplicateCheckPrevention(t *testing.T) {
 	domain := "already.example.com"
 
 	apps := &enrichMockAppRepo{apps: map[string]*models.App{
-		appID: {ID: appID, Name: "App", ProfileID: "sonarr", Config: models.ConfigJSON(`{"base_url":"http://sonarr:8989"}`)},
+		appID: {ID: appID, Name: "App", ProfileID: "", Config: models.ConfigJSON(`{}`)},
 	}}
-	// Both the monitor target and the ssl target already exist.
+	// SSL target already exists.
 	checks := &enrichMockCheckRepo{existsByTarget: map[string]bool{
-		"http://sonarr:8989/ping": true,
-		domain:                   true,
+		domain: true,
 	}}
 	routes := &enrichMockRouteRepo{routes: map[string]*models.DiscoveredRoute{
 		routeUUID: {ID: routeUUID, RouterName: "r", Rule: "Host(`already.example.com`)", Domain: &domain},
 	}}
 
-	profiles := &mockProfileLoader{templates: map[string]*apptemplate.AppTemplate{
-		"sonarr": {
-			Meta:    apptemplate.AppTemplateMeta{Name: "Sonarr"},
-			Monitor: apptemplate.Monitor{CheckType: "url", CheckURL: "{base_url}/ping", CheckInterval: "5m"},
-		},
-	}}
-
 	store := buildEnrichStore(apps, checks, nil, routes, nil)
-	if err := EnrichAppOnLink(context.Background(), store, profiles, appID, nil, &routeUUID); err != nil {
+	if err := EnrichAppOnLink(context.Background(), store, &apptemplate.NoopLoader{}, appID, nil, &routeUUID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(checks.created) != 0 {
@@ -445,37 +377,3 @@ func TestSubstituteBaseURL(t *testing.T) {
 	}
 }
 
-// TestEnrichMonitorCheck_MissingBaseURL verifies that enrichment skips check
-// creation (rather than storing an unresolved {base_url} template) when the
-// app config has no base_url set.
-func TestEnrichMonitorCheck_MissingBaseURL(t *testing.T) {
-	appID := "app-no-baseurl"
-
-	apps := &enrichMockAppRepo{apps: map[string]*models.App{
-		appID: {
-			ID:        appID,
-			Name:      "Maubot",
-			ProfileID: "maubot",
-			Config:    models.ConfigJSON(`{}`), // base_url intentionally absent
-		},
-	}}
-	checks := &enrichMockCheckRepo{existsByTarget: map[string]bool{}}
-
-	profiles := &mockProfileLoader{templates: map[string]*apptemplate.AppTemplate{
-		"maubot": {
-			Meta:    apptemplate.AppTemplateMeta{Name: "Maubot"},
-			Monitor: apptemplate.Monitor{CheckType: "url", CheckURL: "{base_url}/_matrix/maubot/v1/", CheckInterval: "5m", HealthyStatus: 200},
-		},
-	}}
-
-	store := buildEnrichStore(apps, checks, nil, nil, nil)
-	if err := EnrichAppOnLink(context.Background(), store, profiles, appID, nil, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// No check should be created — storing {base_url}/... would break the runner.
-	if len(checks.created) != 0 {
-		t.Errorf("expected 0 checks created when base_url missing, got %d (target=%q)",
-			len(checks.created), checks.created[0].Target)
-	}
-}
