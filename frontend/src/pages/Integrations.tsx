@@ -35,9 +35,15 @@ const DRIVERS = [
     capabilities: ['resource metrics', 'ping baseline', 'generic host support'],
   },
   {
-    name: 'bare_metal',
-    label: 'Bare Metal',
-    description: 'Physical servers monitored via SNMP or ping.',
+    name: 'vm_linux',
+    label: 'VM Linux',
+    description: 'Linux virtual machines monitored via SNMP.',
+    capabilities: ['ping', 'SNMP polling', 'resource metrics'],
+  },
+  {
+    name: 'vm_windows',
+    label: 'VM Windows',
+    description: 'Windows virtual machines monitored via SNMP.',
     capabilities: ['ping', 'SNMP polling', 'resource metrics'],
   },
   {

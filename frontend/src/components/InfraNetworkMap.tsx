@@ -19,7 +19,7 @@ import {
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import type { InfrastructureComponent, ComponentType } from '../api/types'
+import type { InfrastructureComponent, ComponentType, ComponentLink } from '../api/types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -28,9 +28,9 @@ const POSITIONS_KEY = 'nora-infra-map-positions'
 const TYPE_COLOR: Record<ComponentType, string> = {
   proxmox_node:  '#3b82f6',
   synology:      '#a855f7',
-  vm:            '#6b7280',
-  lxc:           '#6b7280',
-  bare_metal:    '#6b7280',
+  vm_linux:      '#6b7280',
+  vm_windows:    '#6b7280',
+  vm_other:      '#6b7280',
   linux_host:    '#6b7280',
   windows_host:  '#6b7280',
   generic_host:  '#6b7280',
@@ -42,9 +42,9 @@ const TYPE_COLOR: Record<ComponentType, string> = {
 const TYPE_LABEL: Record<ComponentType, string> = {
   proxmox_node:  'Proxmox Node',
   synology:      'Synology NAS',
-  vm:            'VM',
-  lxc:           'LXC',
-  bare_metal:    'Bare Metal',
+  vm_linux:      'VM Linux',
+  vm_windows:    'VM Windows',
+  vm_other:      'VM Other',
   linux_host:    'Linux Host',
   windows_host:  'Windows Host',
   generic_host:  'Generic Host',
@@ -74,22 +74,23 @@ const EditContext = createContext<(c: InfrastructureComponent) => void>(() => {}
 const NODE_W = 240
 const NODE_H = 180
 
-function computeAutoLayout(components: InfrastructureComponent[]): Record<string, { x: number; y: number }> {
+function computeAutoLayout(components: InfrastructureComponent[], links: ComponentLink[]): Record<string, { x: number; y: number }> {
   if (components.length === 0) return {}
 
   const idSet = new Set(components.map(c => c.id))
   const childrenOf = new Map<string, string[]>()
-  const roots: string[] = []
+  const hasParent = new Set<string>()
 
-  for (const c of components) {
-    if (!c.parent_id || !idSet.has(c.parent_id)) {
-      roots.push(c.id)
-    } else {
-      const arr = childrenOf.get(c.parent_id) ?? []
-      arr.push(c.id)
-      childrenOf.set(c.parent_id, arr)
+  for (const l of links) {
+    if (idSet.has(l.parent_id) && idSet.has(l.child_id)) {
+      const arr = childrenOf.get(l.parent_id) ?? []
+      arr.push(l.child_id)
+      childrenOf.set(l.parent_id, arr)
+      hasParent.add(l.child_id)
     }
   }
+
+  const roots: string[] = components.map(c => c.id).filter(id => !hasParent.has(id))
 
   const positions: Record<string, { x: number; y: number }> = {}
   const seen = new Set<string>()
@@ -136,7 +137,6 @@ function savePositions(p: Record<string, { x: number; y: number }>) {
 function TypeIcon({ type, color }: { type: ComponentType; color: string }) {
   switch (type) {
     case 'proxmox_node':
-    case 'bare_metal':
     case 'linux_host':
       return (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -156,8 +156,9 @@ function TypeIcon({ type, color }: { type: ComponentType; color: string }) {
           <circle cx="14.5" cy="12.5" r="0.8" fill={color} />
         </svg>
       )
-    case 'vm':
-    case 'lxc':
+    case 'vm_linux':
+    case 'vm_windows':
+    case 'vm_other':
       return (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <rect x="3" y="4" width="14" height="12" rx="2" stroke={color} strokeWidth="1.5" />
@@ -279,10 +280,11 @@ const nodeTypes: NodeTypes = { infraNode: InfraNode }
 
 interface InnerProps {
   components: InfrastructureComponent[]
+  links: ComponentLink[]
   onEditComponent: (c: InfrastructureComponent) => void
 }
 
-function InfraNetworkMapInner({ components, onEditComponent }: InnerProps) {
+function InfraNetworkMapInner({ components, links, onEditComponent }: InnerProps) {
   const { fitView } = useReactFlow()
   const savedPositions = useRef<Record<string, { x: number; y: number }>>(loadPositions())
   const prevIdsRef = useRef('')
@@ -317,7 +319,9 @@ function InfraNetworkMapInner({ components, onEditComponent }: InnerProps) {
 
     // Structural change — rebuild nodes and edges
     prevIdsRef.current = componentIds
-    const auto = computeAutoLayout(components)
+    const idSet = new Set(components.map(c => c.id))
+    const infraLinks = links.filter(l => idSet.has(l.parent_id) && idSet.has(l.child_id))
+    const auto = computeAutoLayout(components, infraLinks)
 
     const newNodes: Node[] = components.map(c => ({
       id: c.id,
@@ -327,25 +331,23 @@ function InfraNetworkMapInner({ components, onEditComponent }: InnerProps) {
       draggable: true,
     }))
 
-    const newEdges: Edge[] = components
-      .filter(c => c.parent_id)
-      .map(c => ({
-        id: `e-${c.parent_id}-${c.id}`,
-        source: c.parent_id!,
-        target: c.id,
-        style: {
-          stroke: '#252d38',
-          strokeDasharray: '5 5',
-          strokeWidth: 1.5,
-          opacity: 0.7,
-        },
-        markerEnd: {
-          type: MarkerType.Arrow,
-          color: '#252d38',
-          width: 12,
-          height: 12,
-        },
-      }))
+    const newEdges: Edge[] = infraLinks.map(l => ({
+      id: `e-${l.parent_id}-${l.child_id}`,
+      source: l.parent_id,
+      target: l.child_id,
+      style: {
+        stroke: '#252d38',
+        strokeDasharray: '5 5',
+        strokeWidth: 1.5,
+        opacity: 0.7,
+      },
+      markerEnd: {
+        type: MarkerType.Arrow,
+        color: '#252d38',
+        width: 12,
+        height: 12,
+      },
+    }))
 
     setNodes(newNodes)
     setEdges(newEdges)
@@ -424,10 +426,11 @@ function InfraNetworkMapInner({ components, onEditComponent }: InnerProps) {
 
 export interface InfraNetworkMapProps {
   components: InfrastructureComponent[]
+  links?: ComponentLink[]
   onEditComponent: (c: InfrastructureComponent) => void
 }
 
-export function InfraNetworkMap({ components, onEditComponent }: InfraNetworkMapProps) {
+export function InfraNetworkMap({ components, links = [], onEditComponent }: InfraNetworkMapProps) {
   if (components.length < 2) {
     return (
       <div className="infra-map-empty">
@@ -439,7 +442,7 @@ export function InfraNetworkMap({ components, onEditComponent }: InfraNetworkMap
   return (
     <div className="infra-map-container">
       <ReactFlowProvider>
-        <InfraNetworkMapInner components={components} onEditComponent={onEditComponent} />
+        <InfraNetworkMapInner components={components} links={links} onEditComponent={onEditComponent} />
       </ReactFlowProvider>
     </div>
   )

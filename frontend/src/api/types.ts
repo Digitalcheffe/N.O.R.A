@@ -424,9 +424,9 @@ export interface SendNowResult {
 export type ComponentType =
   | 'proxmox_node'
   | 'synology'
-  | 'vm'
-  | 'lxc'
-  | 'bare_metal'
+  | 'vm_linux'
+  | 'vm_windows'
+  | 'vm_other'
   | 'linux_host'
   | 'windows_host'
   | 'generic_host'

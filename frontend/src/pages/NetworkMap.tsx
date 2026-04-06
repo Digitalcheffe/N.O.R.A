@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { Topbar } from '../components/Topbar'
 import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { InfraEditModal } from './InfraEditModal'
-import { infrastructure as infraApi } from '../api/client'
-import type { InfrastructureComponent } from '../api/types'
+import { infrastructure as infraApi, links as linksApi } from '../api/client'
+import type { InfrastructureComponent, ComponentLink } from '../api/types'
 
 export function NetworkMap() {
   const [components,     setComponents]     = useState<InfrastructureComponent[]>([])
+  const [links,          setLinks]          = useState<ComponentLink[]>([])
   const [loading,        setLoading]        = useState(true)
   const [modalOpen,      setModalOpen]      = useState(false)
   const [openKey,        setOpenKey]        = useState(0)
@@ -14,8 +15,11 @@ export function NetworkMap() {
   const [editingHasCreds,  setEditingHasCreds]  = useState(false)
 
   useEffect(() => {
-    infraApi.list()
-      .then(res => setComponents(res.data))
+    Promise.all([infraApi.list(), linksApi.list()])
+      .then(([infraRes, linkRes]) => {
+        setComponents(infraRes.data)
+        setLinks(linkRes.data)
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
@@ -44,6 +48,7 @@ export function NetworkMap() {
         ) : (
           <InfraNetworkMap
             components={components}
+            links={links}
             onEditComponent={openEdit}
           />
         )}

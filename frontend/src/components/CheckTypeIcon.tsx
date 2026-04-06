@@ -50,8 +50,9 @@ const INFRA_CDN_ICONS: Record<string, string> = {
 function InfraTypeSVGFallback({ type, size }: { type: string; size: number }) {
   const s = { ...BASE, width: size, height: size, strokeWidth: 1.4 }
   switch (type) {
-    case 'vm':
-    case 'lxc':
+    case 'vm_linux':
+    case 'vm_windows':
+    case 'vm_other':
       return (
         <svg viewBox="0 0 22 22" style={s}>
           <rect x="2" y="3" width="18" height="13" rx="2" />

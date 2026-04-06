@@ -18,9 +18,9 @@ type TimeFilter = 'day' | 'week' | 'month'
 const TYPE_LABEL: Record<string, string> = {
   proxmox_node:  'Proxmox Node',
   synology:      'Synology NAS',
-  vm:            'VM',
-  lxc:           'LXC',
-  bare_metal:    'Bare Metal',
+  vm_linux:      'VM Linux',
+  vm_windows:    'VM Windows',
+  vm_other:      'VM Other',
   linux_host:    'Linux Host',
   windows_host:  'Windows Host',
   generic_host:  'Generic Host',

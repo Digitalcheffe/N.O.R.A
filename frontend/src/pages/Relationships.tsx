@@ -13,9 +13,9 @@ import './Relationships.css'
 
 const TYPE_LABEL: Record<string, string> = {
   proxmox_node:   'Proxmox Node',
-  vm_linux:       'Linux VM',
-  vm_windows:     'Windows VM',
-  vm_other:       'VM',
+  vm_linux:       'VM Linux',
+  vm_windows:     'VM Windows',
+  vm_other:       'VM Other',
   linux_host:     'Linux Host',
   windows_host:   'Windows Host',
   generic_host:   'Generic Host',
