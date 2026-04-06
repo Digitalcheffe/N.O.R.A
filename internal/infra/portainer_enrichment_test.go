@@ -50,7 +50,7 @@ func newPortainerTestStore(t *testing.T) *repo.Store {
 		nil,
 		nil,
 		nil,
-		nil,
+		repo.NewComponentLinkRepo(db),
 	)
 }
 

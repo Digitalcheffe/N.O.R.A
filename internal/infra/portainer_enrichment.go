@@ -169,6 +169,12 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 
 			seenContainerIDs = append(seenContainerIDs, pc.ID)
 
+			// Re-fetch the full row so determineImageUpdate has the current
+			// registry_digest (set by DD-9) — the upsert only returns the id.
+			if full, fetchErr := w.store.DiscoveredContainers.GetDiscoveredContainer(ctx, rec.ID); fetchErr == nil {
+				rec = full
+			}
+
 			// Check image update availability via Portainer's Docker gateway.
 			updateAvailable := w.determineImageUpdate(ctx, client, ep.ID, pc, rec)
 
