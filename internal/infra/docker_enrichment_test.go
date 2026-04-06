@@ -32,8 +32,6 @@ func (m *enrichMockAppRepo) GetByToken(_ context.Context, _ string) (*models.App
 func (m *enrichMockAppRepo) Update(_ context.Context, _ *models.App) error                    { return nil }
 func (m *enrichMockAppRepo) Delete(_ context.Context, _ string) error                         { return nil }
 func (m *enrichMockAppRepo) UpdateToken(_ context.Context, _, _ string) error                 { return nil }
-func (m *enrichMockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error           { return nil }
-func (m *enrichMockAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error  { return nil }
 
 type enrichMockCheckRepo struct {
 	created []*models.MonitorCheck
@@ -105,6 +103,9 @@ func (m *enrichMockContainerRepo) DeleteDiscoveredContainer(_ context.Context, _
 	return nil
 }
 func (m *enrichMockContainerRepo) UpdateContainerImageCheck(_ context.Context, _, _, _ string, _ bool) error {
+	return nil
+}
+func (m *enrichMockContainerRepo) UpdateContainerRestartPolicy(_ context.Context, _ string, _ string) error {
 	return nil
 }
 

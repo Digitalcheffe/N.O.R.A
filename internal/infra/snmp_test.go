@@ -47,6 +47,7 @@ func newSNMPTestStore(t *testing.T) *repo.Store {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -57,7 +58,7 @@ func createSNMPTestComponent(t *testing.T, store *repo.Store, id string) {
 		ID:               id,
 		Name:             "snmp-" + id,
 		IP:               "127.0.0.1",
-		Type:             "bare_metal",
+		Type:             "generic_host",
 		CollectionMethod: "snmp",
 		SNMPConfig:       &cfgJSON,
 		Enabled:          true,

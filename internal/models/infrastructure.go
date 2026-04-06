@@ -10,7 +10,6 @@ type InfrastructureComponent struct {
 	IP               string  `db:"ip"                 json:"ip"`
 	Type             string  `db:"type"               json:"type"`
 	CollectionMethod string  `db:"collection_method"  json:"collection_method"`
-	ParentID         *string `db:"parent_id"          json:"parent_id,omitempty"`
 	Credentials      *string `db:"credentials"        json:"-"` // never serialised to API response
 	SNMPConfig       *string `db:"snmp_config"        json:"snmp_config,omitempty"`
 	// SNMPMeta holds the latest SNMP system identity + resource snapshot as JSON.
@@ -94,14 +93,16 @@ type TraefikOverview struct {
 // TraefikService holds per-service backend health from GET /api/http/services.
 // id = "{component_id}:{service_name}".
 type TraefikService struct {
-	ID               string    `db:"id"                 json:"id"`
-	ComponentID      string    `db:"component_id"       json:"component_id"`
-	ServiceName      string    `db:"service_name"       json:"service_name"`
-	ServiceType      string    `db:"service_type"       json:"service_type"`
-	Status           string    `db:"status"             json:"status"`
-	ServerCount      int       `db:"server_count"       json:"server_count"`
-	ServersUp        int       `db:"servers_up"         json:"servers_up"`
-	ServersDown      int       `db:"servers_down"       json:"servers_down"`
-	ServerStatusJSON string    `db:"server_status_json" json:"server_status_json,omitempty"`
-	LastSeen         time.Time `db:"last_seen"          json:"last_seen"`
+	ID               string     `db:"id"                 json:"id"`
+	ComponentID      string     `db:"component_id"       json:"component_id"`
+	ServiceName      string     `db:"service_name"       json:"service_name"`
+	ServiceType      string     `db:"service_type"       json:"service_type"`
+	Status           string     `db:"status"             json:"status"`
+	ServerCount      int        `db:"server_count"       json:"server_count"`
+	ServersUp        int        `db:"servers_up"         json:"servers_up"`
+	ServersDown      int        `db:"servers_down"       json:"servers_down"`
+	ServerStatusJSON string     `db:"server_status_json" json:"server_status_json,omitempty"`
+	LastSeen         time.Time  `db:"last_seen"          json:"last_seen"`
+	// Added in migration 038.
+	FirstSeenAt      *time.Time `db:"first_seen_at"      json:"first_seen_at,omitempty"`
 }

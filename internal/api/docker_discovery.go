@@ -338,6 +338,12 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			return
 		}
 		container.AppID = &req.AppID
+		// Wire the app into the topology: app → its discovering engine component.
+		if comp, err := h.store.InfraComponents.Get(r.Context(), container.InfraComponentID); err == nil {
+			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", req.AppID); err != nil {
+				log.Printf("LinkContainerApp: set component_link for app %s: %v", req.AppID, err)
+			}
+		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, req.AppID, &id, nil)
 		writeJSON(w, http.StatusOK, container)
 
@@ -384,6 +390,12 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		// Wire the new app into the topology: app → its discovering engine component.
+		if comp, err := h.store.InfraComponents.Get(r.Context(), container.InfraComponentID); err == nil {
+			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", app.ID); err != nil {
+				log.Printf("LinkContainerApp: set component_link for app %s: %v", app.ID, err)
+			}
+		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, app.ID, &id, nil)
 		writeJSON(w, http.StatusCreated, app)
 
@@ -414,7 +426,8 @@ func (h *DockerDiscoveryHandler) DeleteContainer(w http.ResponseWriter, r *http.
 // DELETE /api/v1/discovered-containers/{id}/link-app
 func (h *DockerDiscoveryHandler) UnlinkContainerApp(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, err := h.store.DiscoveredContainers.GetDiscoveredContainer(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+	dc, err := h.store.DiscoveredContainers.GetDiscoveredContainer(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "discovered container not found")
 		return
 	} else if err != nil {
@@ -424,6 +437,12 @@ func (h *DockerDiscoveryHandler) UnlinkContainerApp(w http.ResponseWriter, r *ht
 	if err := h.store.DiscoveredContainers.ClearDiscoveredContainerApp(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// Remove the topology link for the app that was just unlinked.
+	if dc.AppID != nil {
+		if err := h.store.ComponentLinks.RemoveParent(r.Context(), "app", *dc.AppID); err != nil {
+			log.Printf("UnlinkContainerApp: remove component_link for app %s: %v", *dc.AppID, err)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -471,9 +490,14 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = req.AppID
 		route.AppID = &linkedAppID
+		// Wire the app into the topology: app → its Traefik component.
+		if comp, err := h.store.InfraComponents.Get(r.Context(), route.InfrastructureID); err == nil {
+			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", linkedAppID); err != nil {
+				log.Printf("LinkRouteApp: set component_link for app %s: %v", linkedAppID, err)
+			}
+		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusOK, route)
-
 
 	case "create":
 		if req.Name == "" {
@@ -520,6 +544,12 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = app.ID
 		route.AppID = &linkedAppID
+		// Wire the new app into the topology: app → its Traefik component.
+		if comp, err := h.store.InfraComponents.Get(r.Context(), route.InfrastructureID); err == nil {
+			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", linkedAppID); err != nil {
+				log.Printf("LinkRouteApp: set component_link for app %s: %v", linkedAppID, err)
+			}
+		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusCreated, app)
 
@@ -532,7 +562,8 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 // DELETE /api/v1/discovered-routes/{id}/link-app
 func (h *DockerDiscoveryHandler) UnlinkRouteApp(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if _, err := h.store.DiscoveredRoutes.GetDiscoveredRoute(r.Context(), id); errors.Is(err, repo.ErrNotFound) {
+	dr, err := h.store.DiscoveredRoutes.GetDiscoveredRoute(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "discovered route not found")
 		return
 	} else if err != nil {
@@ -542,6 +573,12 @@ func (h *DockerDiscoveryHandler) UnlinkRouteApp(w http.ResponseWriter, r *http.R
 	if err := h.store.DiscoveredRoutes.ClearDiscoveredRouteApp(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// Remove the topology link for the app that was just unlinked.
+	if dr.AppID != nil {
+		if err := h.store.ComponentLinks.RemoveParent(r.Context(), "app", *dr.AppID); err != nil {
+			log.Printf("UnlinkRouteApp: remove component_link for app %s: %v", *dr.AppID, err)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

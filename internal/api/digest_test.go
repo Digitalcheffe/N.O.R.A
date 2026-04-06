@@ -30,18 +30,7 @@ func newDigestRouter(t *testing.T) (http.Handler, *repo.Store) {
 		repo.NewDockerEngineRepo(db),
 		repo.NewInfraRepo(db),
 		repo.NewSettingsRepo(db),
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	digestJob := jobs.NewDigestJob(store, &config.Config{}, nil)
 	h := api.NewDigestHandler(store, digestJob)
@@ -67,18 +56,7 @@ func newDigestRouterWithSMTP(t *testing.T) (http.Handler, *repo.Store) {
 		repo.NewDockerEngineRepo(db),
 		repo.NewInfraRepo(db),
 		repo.NewSettingsRepo(db),
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	// Seed SMTP into settings so SMTP-gated endpoints are accessible.
 	smtpSettings := models.SMTPSettings{Host: "smtp.example.com", Port: 587, From: "nora@example.com"}

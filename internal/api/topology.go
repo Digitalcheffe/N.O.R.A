@@ -20,6 +20,7 @@ type TopologyHandler struct {
 	dockerEngines   repo.DockerEngineRepo
 	apps            repo.AppRepo
 	rollups         repo.ResourceRollupRepo
+	links           repo.ComponentLinkRepo
 }
 
 // NewTopologyHandler creates a TopologyHandler.
@@ -28,12 +29,14 @@ func NewTopologyHandler(
 	dockerEngines repo.DockerEngineRepo,
 	apps repo.AppRepo,
 	rollups repo.ResourceRollupRepo,
+	links repo.ComponentLinkRepo,
 ) *TopologyHandler {
 	return &TopologyHandler{
 		infraComponents: infraComponents,
 		dockerEngines:   dockerEngines,
 		apps:            apps,
 		rollups:         rollups,
+		links:           links,
 	}
 }
 
@@ -128,9 +131,12 @@ func (h *TopologyHandler) CreateDockerEngine(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Validate FK if provided.
+	// Validate and fetch parent if provided.
+	var parent *models.InfrastructureComponent
 	if req.InfraComponentID != "" {
-		if _, err := h.infraComponents.Get(r.Context(), req.InfraComponentID); errors.Is(err, repo.ErrNotFound) {
+		var err error
+		parent, err = h.infraComponents.Get(r.Context(), req.InfraComponentID)
+		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusUnprocessableEntity, "infra_component_id not found")
 			return
 		} else if err != nil {
@@ -140,16 +146,21 @@ func (h *TopologyHandler) CreateDockerEngine(w http.ResponseWriter, r *http.Requ
 	}
 
 	engine := &models.DockerEngine{
-		ID:               uuid.New().String(),
-		InfraComponentID: req.InfraComponentID,
-		Name:             req.Name,
-		SocketType:       req.SocketType,
-		SocketPath:       req.SocketPath,
-		CreatedAt:        time.Now().UTC(),
+		ID:         uuid.New().String(),
+		Name:       req.Name,
+		SocketType: req.SocketType,
+		SocketPath: req.SocketPath,
+		CreatedAt:  time.Now().UTC(),
 	}
 	if err := h.dockerEngines.Create(r.Context(), engine); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if parent != nil {
+		if err := h.links.SetParent(r.Context(), parent.Type, parent.ID, "docker_engine", engine.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	writeJSON(w, http.StatusCreated, engine)
 }
@@ -193,8 +204,12 @@ func (h *TopologyHandler) UpdateDockerEngine(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "socket_type must be local or remote_proxy")
 		return
 	}
+
+	// Validate new parent if provided.
+	var parent *models.InfrastructureComponent
 	if req.InfraComponentID != "" {
-		if _, err := h.infraComponents.Get(r.Context(), req.InfraComponentID); errors.Is(err, repo.ErrNotFound) {
+		parent, err = h.infraComponents.Get(r.Context(), req.InfraComponentID)
+		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusUnprocessableEntity, "infra_component_id not found")
 			return
 		} else if err != nil {
@@ -212,12 +227,23 @@ func (h *TopologyHandler) UpdateDockerEngine(w http.ResponseWriter, r *http.Requ
 	if req.SocketPath != "" {
 		existing.SocketPath = req.SocketPath
 	}
-	existing.InfraComponentID = req.InfraComponentID
 
 	if err := h.dockerEngines.Update(r.Context(), existing); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Update parent link.
+	if parent != nil {
+		if err := h.links.SetParent(r.Context(), parent.Type, parent.ID, "docker_engine", existing.ID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else if req.InfraComponentID == "" {
+		// Explicitly clear parent (empty string in request = remove link).
+		_ = h.links.RemoveParent(r.Context(), "docker_engine", existing.ID)
+	}
+
 	writeJSON(w, http.StatusOK, existing)
 }
 
@@ -238,7 +264,7 @@ func (h *TopologyHandler) DeleteDockerEngine(w http.ResponseWriter, r *http.Requ
 // ---- full topology chain ----------------------------------------------------
 
 // GetTopology returns the infrastructure component tree with nested docker engines
-// and apps: infrastructure_components (parent_id tree) → docker_engines → apps.
+// and apps, built from component_links relationships.
 // GET /api/v1/topology
 func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 	allComponents, err := h.infraComponents.List(r.Context())
@@ -256,38 +282,74 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	allLinks, err := h.links.ListAll(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
-	// Index apps by docker_engine_id.
-	appsByEngine := make(map[string][]topologyApp)
+	// Build lookup maps.
+	appByID := make(map[string]models.App, len(allApps))
 	for _, a := range allApps {
-		if a.DockerEngineID != "" {
-			appsByEngine[a.DockerEngineID] = append(appsByEngine[a.DockerEngineID], topologyApp{ID: a.ID, Name: a.Name})
-		}
+		appByID[a.ID] = a
 	}
-
-	// Index engines by infra_component_id.
-	enginesByComponent := make(map[string][]topologyDockerEngine)
+	engineByID := make(map[string]models.DockerEngine, len(engines))
 	for _, e := range engines {
-		apps := appsByEngine[e.ID]
-		if apps == nil {
-			apps = []topologyApp{}
-		}
-		enginesByComponent[e.InfraComponentID] = append(enginesByComponent[e.InfraComponentID], topologyDockerEngine{
-			ID:   e.ID,
-			Name: e.Name,
-			Apps: apps,
-		})
+		engineByID[e.ID] = e
 	}
-
-	// Index children by parent_id.
-	childrenByParent := make(map[string][]models.InfrastructureComponent)
+	compByID := make(map[string]models.InfrastructureComponent, len(allComponents))
 	for _, c := range allComponents {
-		if c.ParentID != nil && *c.ParentID != "" {
-			childrenByParent[*c.ParentID] = append(childrenByParent[*c.ParentID], c)
+		compByID[c.ID] = c
+	}
+
+	// Process links in three passes.
+
+	// Pass 1: apps by parent engine ID.
+	appsByEngine := make(map[string][]topologyApp)
+	for _, link := range allLinks {
+		if link.ChildType == "app" {
+			if a, ok := appByID[link.ChildID]; ok {
+				appsByEngine[link.ParentID] = append(appsByEngine[link.ParentID], topologyApp{ID: a.ID, Name: a.Name})
+			}
 		}
 	}
 
-	// Build the response tree recursively (roots = components with no parent).
+	// Pass 2: engines by parent infra component ID.
+	enginesByComponent := make(map[string][]topologyDockerEngine)
+	for _, link := range allLinks {
+		if link.ChildType == "docker_engine" {
+			if e, ok := engineByID[link.ChildID]; ok {
+				apps := appsByEngine[e.ID]
+				if apps == nil {
+					apps = []topologyApp{}
+				}
+				enginesByComponent[link.ParentID] = append(enginesByComponent[link.ParentID], topologyDockerEngine{
+					ID:   e.ID,
+					Name: e.Name,
+					Apps: apps,
+				})
+			}
+		}
+	}
+
+	// Pass 3: infra component children by parent ID.
+	childrenByParent := make(map[string][]models.InfrastructureComponent)
+	for _, link := range allLinks {
+		if link.ChildType != "app" && link.ChildType != "docker_engine" {
+			if c, ok := compByID[link.ChildID]; ok {
+				childrenByParent[link.ParentID] = append(childrenByParent[link.ParentID], c)
+			}
+		}
+	}
+
+	// Build response tree recursively (roots = components with no entry as a child).
+	childIDs := make(map[string]bool)
+	for _, link := range allLinks {
+		if link.ChildType != "app" && link.ChildType != "docker_engine" {
+			childIDs[link.ChildID] = true
+		}
+	}
+
 	var buildNode func(c models.InfrastructureComponent) topologyComponent
 	buildNode = func(c models.InfrastructureComponent) topologyComponent {
 		des := enginesByComponent[c.ID]
@@ -309,7 +371,7 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 
 	result := []topologyComponent{}
 	for _, c := range allComponents {
-		if c.ParentID == nil || *c.ParentID == "" {
+		if !childIDs[c.ID] {
 			result = append(result, buildNode(c))
 		}
 	}

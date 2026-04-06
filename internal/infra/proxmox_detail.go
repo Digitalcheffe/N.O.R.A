@@ -147,8 +147,9 @@ func (p *ProxmoxPoller) FetchStoragePools(ctx context.Context) ([]ProxmoxStorage
 	return pools, nil
 }
 
-// FetchGuests returns all VMs and LXC containers with extended config details.
+// FetchGuests returns all VMs with extended config details.
 // Config is fetched concurrently per guest to get bridges, ostype, and onboot.
+// LXC containers are no longer tracked.
 func (p *ProxmoxPoller) FetchGuests(ctx context.Context) ([]ProxmoxGuestInfo, error) {
 	var nodes []proxmoxNode
 	if err := p.get(ctx, "/api2/json/nodes", &nodes); err != nil {
@@ -169,15 +170,6 @@ func (p *ProxmoxPoller) FetchGuests(ctx context.Context) ([]ProxmoxGuestInfo, er
 		} else {
 			for _, vm := range vms {
 				jobs = append(jobs, enrichJob{vm, "vm", node.Node})
-			}
-		}
-
-		var lxcs []proxmoxGuestRaw
-		if err := p.get(ctx, fmt.Sprintf("/api2/json/nodes/%s/lxc", node.Node), &lxcs); err != nil {
-			log.Printf("proxmox detail: lxc node %s: %v", node.Node, err)
-		} else {
-			for _, lxc := range lxcs {
-				jobs = append(jobs, enrichJob{lxc, "lxc", node.Node})
 			}
 		}
 	}
@@ -222,16 +214,11 @@ func (p *ProxmoxPoller) enrichGuest(ctx context.Context, g proxmoxGuestRaw, gues
 	}
 
 	// Fetch config for bridges, ostype, and onboot.
-	var configPath string
-	if guestType == "vm" {
-		configPath = fmt.Sprintf("/api2/json/nodes/%s/qemu/%d/config", node, g.VMID)
-	} else {
-		configPath = fmt.Sprintf("/api2/json/nodes/%s/lxc/%d/config", node, g.VMID)
-	}
+	configPath := fmt.Sprintf("/api2/json/nodes/%s/qemu/%d/config", node, g.VMID)
 
 	var config map[string]interface{}
 	if err := p.get(ctx, configPath, &config); err != nil {
-		log.Printf("proxmox detail: config %s %d: %v", guestType, g.VMID, err)
+		log.Printf("proxmox detail: config vm %d: %v", g.VMID, err)
 		return info
 	}
 
@@ -242,7 +229,7 @@ func (p *ProxmoxPoller) enrichGuest(ctx context.Context, g proxmoxGuestRaw, gues
 		info.Onboot = onboot == 1
 	}
 
-	// Extract net0..net9 bridges, deduplicating.  For LXC, also capture IP.
+	// Extract net0..net9 bridges, deduplicating.
 	bridgeSet := make(map[string]struct{})
 	for i := 0; i < 10; i++ {
 		key := fmt.Sprintf("net%d", i)
@@ -253,17 +240,14 @@ func (p *ProxmoxPoller) enrichGuest(ctx context.Context, g proxmoxGuestRaw, gues
 		if bridge := parseNetBridge(netConfig); bridge != "" {
 			bridgeSet[bridge] = struct{}{}
 		}
-		if guestType == "lxc" && info.IP == "" {
-			info.IP = parseLXCNetIP(netConfig)
-		}
 	}
 	for bridge := range bridgeSet {
 		info.NetworkBridges = append(info.NetworkBridges, bridge)
 	}
 	sort.Strings(info.NetworkBridges)
 
-	// For VMs, query the guest agent for the primary IPv4 (best-effort).
-	if guestType == "vm" && g.Status == "running" {
+	// Query the guest agent for the primary IPv4 (best-effort).
+	if g.Status == "running" {
 		info.IP = p.fetchVMIP(ctx, node, g.VMID)
 	}
 

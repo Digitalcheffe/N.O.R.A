@@ -50,8 +50,6 @@ func (r *mockAppRepo) GetByToken(_ context.Context, _ string) (*models.App, erro
 func (r *mockAppRepo) Update(_ context.Context, _ *models.App) error                         { return nil }
 func (r *mockAppRepo) Delete(_ context.Context, _ string) error                              { return nil }
 func (r *mockAppRepo) UpdateToken(_ context.Context, _, _ string) error                      { return nil }
-func (r *mockAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error                { return nil }
-func (r *mockAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error       { return nil }
 
 type mockEventRepo struct {
 	repo.EventRepo
@@ -97,7 +95,7 @@ func (r *mockEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, _, _ st
 // --- helpers -------------------------------------------------------------
 
 func newTestWatcher(appRepo repo.AppRepo, eventRepo repo.EventRepo, dc dockerAPI) *Watcher {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return &Watcher{store: store, client: dc}
 }
 

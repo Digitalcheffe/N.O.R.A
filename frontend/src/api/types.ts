@@ -84,18 +84,24 @@ export interface App {
   name: string
   token: string
   profile_id: string | null
-  docker_engine_id: string | null
-  host_component_id?: string | null
   config: Record<string, unknown>
   rate_limit: number
+  created_at: string
+}
+
+// ── Component Links ──────────────────────────────────────────────────────────
+
+export interface ComponentLink {
+  parent_type: string
+  parent_id: string
+  child_type: string
+  child_id: string
   created_at: string
 }
 
 export interface CreateAppInput {
   name: string
   profile_id?: string  // empty string clears the profile, undefined leaves it unchanged
-  docker_engine_id?: string
-  host_component_id?: string | null
   config?: Record<string, unknown>
   rate_limit?: number
 }
@@ -443,7 +449,6 @@ export interface InfrastructureComponent {
   ip: string
   type: ComponentType
   collection_method: CollectionMethod
-  parent_id?: string | null
   snmp_config?: string | null
   notes: string
   enabled: boolean
@@ -459,7 +464,7 @@ export interface InfrastructureComponentInput {
   ip: string
   type: ComponentType
   collection_method: CollectionMethod
-  parent_id?: string | null
+  parent_id?: string | null  // written to component_links server-side
   credentials?: string | null
   snmp_config?: string | null
   notes?: string

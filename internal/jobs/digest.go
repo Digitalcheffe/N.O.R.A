@@ -830,13 +830,13 @@ func capList(s []string, max int) []string {
 
 var infraTypeLabelMap = map[string]string{
 	"proxmox_node":  "Proxmox Node",
-	"synology":      "Synology NAS",
-	"vm":            "VM",
-	"lxc":           "LXC",
-	"bare_metal":    "Bare Metal",
+	"vm_linux":      "Linux VM",
+	"vm_windows":    "Windows VM",
+	"vm_other":      "VM",
 	"linux_host":    "Linux Host",
 	"windows_host":  "Windows Host",
 	"generic_host":  "Generic Host",
+	"synology":      "Synology NAS",
 	"docker_engine": "Docker Engine",
 	"traefik":       "Traefik",
 	"portainer":     "Portainer",

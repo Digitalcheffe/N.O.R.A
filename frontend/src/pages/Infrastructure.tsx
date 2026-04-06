@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
-import { InfraNetworkMap } from '../components/InfraNetworkMap'
 import { infrastructure as infraApi } from '../api/client'
 import type {
   InfrastructureComponent,
@@ -15,10 +14,6 @@ import '../components/CheckForm.css'
 
 import { InfraTypeIcon } from '../components/CheckTypeIcon'
 import { InfraEditModal, TYPE_LABEL } from './InfraEditModal'
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-type ActiveTab = 'components' | 'map'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -81,7 +76,6 @@ export function Infrastructure() {
   const [resourcesMap,    setResourcesMap]    = useState<Record<string, ResourceSummary>>({})
   const [lastPolledAt,    setLastPolledAt]    = useState<Date | null>(null)
   const [loading,         setLoading]         = useState(true)
-  const [activeTab,       setActiveTab]       = useState<ActiveTab>('components')
   const [tick,            setTick]            = useState(0)
 
   // Panel state
@@ -459,50 +453,23 @@ export function Infrastructure() {
       <Topbar title="Infrastructure" />
       <div className="content">
 
-        {/* ── Tab toggle + Add button ── */}
+        {/* ── Header row ── */}
         <div className="infra-tab-row">
-          <div className="infra-tabs">
-            <button
-              className={`infra-tab${activeTab === 'components' ? ' active' : ''}`}
-              onClick={() => setActiveTab('components')}
-            >
-              Components
-            </button>
-            <button
-              className={`infra-tab${activeTab === 'map' ? ' active' : ''}`}
-              onClick={() => setActiveTab('map')}
-            >
-              Network Map
-            </button>
-          </div>
           <button className="infra-add-btn" onClick={() => openAdd()}>
             + Add Component
           </button>
         </div>
 
-        {/* ── Components tab ── */}
-        {activeTab === 'components' && (
-          <>
-            {loading ? (
-              <div className="infra-empty">Loading…</div>
-            ) : components.length === 0 ? (
-              <div className="infra-empty">
-                No infrastructure components configured yet. Click <strong>+ Add Component</strong> to get started.
-              </div>
-            ) : (
-              <div className="infra-card-list">
-                {components.map(c => renderCard(c))}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── Network Map tab ── */}
-        {activeTab === 'map' && (
-          <InfraNetworkMap
-            components={components}
-            onEditComponent={openEdit}
-          />
+        {loading ? (
+          <div className="infra-empty">Loading…</div>
+        ) : components.length === 0 ? (
+          <div className="infra-empty">
+            No infrastructure components configured yet. Click <strong>+ Add Component</strong> to get started.
+          </div>
+        ) : (
+          <div className="infra-card-list">
+            {components.map(c => renderCard(c))}
+          </div>
         )}
 
       </div>

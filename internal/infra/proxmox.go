@@ -397,30 +397,23 @@ func (p *ProxmoxPoller) pollNode(ctx context.Context, store *repo.Store, node st
 	}
 
 	// ── VM inventory ──────────────────────────────────────────────────────────
+	// LXC containers are no longer tracked as infrastructure components.
 	var vms []proxmoxVM
 	if err := p.get(ctx, fmt.Sprintf("/api2/json/nodes/%s/qemu", node), &vms); err != nil {
 		log.Printf("proxmox poller %s: list qemu on %s: %v", p.componentID, node, err)
 	} else {
 		p.checkStateChanges(ctx, store, node, "VM", vms)
-		p.upsertChildren(ctx, store, vms, "vm", node, now)
-	}
-
-	var ctrs []proxmoxVM
-	if err := p.get(ctx, fmt.Sprintf("/api2/json/nodes/%s/lxc", node), &ctrs); err != nil {
-		log.Printf("proxmox poller %s: list lxc on %s: %v", p.componentID, node, err)
-	} else {
-		p.checkStateChanges(ctx, store, node, "LXC", ctrs)
-		p.upsertChildren(ctx, store, ctrs, "lxc", node, now)
+		p.upsertChildren(ctx, store, vms, node, now)
 	}
 
 	return nil
 }
 
 // upsertChildren creates or updates an InfrastructureComponent child record for
-// each VM or LXC in the list.  Child IDs are derived deterministically from
-// (componentID, vmid) so re-runs are fully idempotent.  The node name is used
-// to fetch the primary IPv4 address via the guest agent (VMs) or config (LXCs).
-func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, vms []proxmoxVM, kind, node string, now time.Time) {
+// each VM in the list.  Child IDs are derived deterministically from
+// (componentID, vmid) so re-runs are fully idempotent.  New VMs default to
+// type "vm_other"; the discovery scanner sets the precise type from ostype.
+func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, vms []proxmoxVM, node string, now time.Time) {
 	polledAt := now.Format(time.RFC3339Nano)
 
 	for _, vm := range vms {
@@ -431,14 +424,10 @@ func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, v
 			status = "online"
 		}
 
-		// Best-effort IP resolution — failures are swallowed inside fetch helpers.
+		// Best-effort IP resolution via guest agent.
 		var ip string
 		if vm.Status == "running" {
-			if kind == "vm" {
-				ip = p.fetchVMIP(ctx, node, vm.VMID)
-			} else {
-				ip = p.fetchLXCIP(ctx, node, vm.VMID)
-			}
+			ip = p.fetchVMIP(ctx, node, vm.VMID)
 		}
 
 		// Try an update-in-place first (fast path for subsequent polls).
@@ -446,39 +435,42 @@ func (p *ProxmoxPoller) upsertChildren(ctx context.Context, store *repo.Store, v
 		if err == nil {
 			if ip != "" {
 				if ipErr := store.InfraComponents.UpdateIP(ctx, id, ip); ipErr != nil {
-					log.Printf("proxmox poller %s: update ip for %s %q: %v", p.componentID, kind, vm.Name, ipErr)
+					log.Printf("proxmox poller %s: update ip for vm %q: %v", p.componentID, vm.Name, ipErr)
 				}
 			}
 			continue
 		}
 		if !errors.Is(err, repo.ErrNotFound) {
-			log.Printf("proxmox poller %s: update child %s %q: %v", p.componentID, kind, vm.Name, err)
+			log.Printf("proxmox poller %s: update child vm %q: %v", p.componentID, vm.Name, err)
 			continue
 		}
 
-		// First time seeing this VM/LXC — create a child component.
-		parentID := p.componentID
+		// First time seeing this VM — create a child component.
+		// Type defaults to vm_other; the discovery scanner upgrades it to
+		// vm_linux or vm_windows once it fetches the Proxmox config ostype.
 		c := &models.InfrastructureComponent{
 			ID:               id,
 			Name:             vm.Name,
 			IP:               ip,
-			Type:             kind,
+			Type:             "vm_other",
 			CollectionMethod: "none",
-			ParentID:         &parentID,
 			Enabled:          true,
 			LastStatus:       status,
 			CreatedAt:        polledAt,
 		}
 		if err := store.InfraComponents.Create(ctx, c); err != nil {
-			log.Printf("proxmox poller %s: create child %s %q: %v", p.componentID, kind, vm.Name, err)
+			log.Printf("proxmox poller %s: create child vm %q: %v", p.componentID, vm.Name, err)
 			continue
 		}
-		log.Printf("proxmox poller %s: discovered %s %q (vmid=%d, status=%s, ip=%s)",
-			p.componentID, kind, vm.Name, vm.VMID, vm.Status, ip)
+		if err := store.ComponentLinks.SetParent(ctx, "proxmox_node", p.componentID, "vm_other", id); err != nil {
+			log.Printf("proxmox poller %s: set parent link for vm %q: %v", p.componentID, vm.Name, err)
+		}
+		log.Printf("proxmox poller %s: discovered vm %q (vmid=%d, status=%s, ip=%s)",
+			p.componentID, vm.Name, vm.VMID, vm.Status, ip)
 	}
 }
 
-// checkStateChanges compares current VM/LXC statuses against the last known
+// checkStateChanges compares current VM statuses against the last known
 // state and fires events for running↔stopped transitions.
 func (p *ProxmoxPoller) checkStateChanges(ctx context.Context, store *repo.Store, node, kind string, vms []proxmoxVM) {
 	p.mu.Lock()
@@ -513,7 +505,7 @@ func (p *ProxmoxPoller) checkStateChanges(ctx context.Context, store *repo.Store
 			ID:         uuid.New().String(),
 			Level:      severity,
 			SourceName: vm.Name,
-			SourceType: "virtual_host",
+			SourceType: "vm_other",
 			SourceID:   p.componentID,
 			Title:      fmt.Sprintf("%s %s is now %s on %s", kind, vm.Name, vm.Status, node),
 			Payload:    string(rawPayload),

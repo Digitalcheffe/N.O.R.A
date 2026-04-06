@@ -18,9 +18,8 @@ import (
 // InfraComponentRepo defines CRUD for infrastructure_components.
 type InfraComponentRepo interface {
 	List(ctx context.Context) ([]models.InfrastructureComponent, error)
-	// ListByParent returns all components whose parent_id matches parentID,
-	// ordered by type then name.  Used to render VM/LXC children on a Proxmox
-	// host detail page.
+	// ListByParent returns all components that are direct children of parentID
+	// in component_links, ordered by type then name.
 	ListByParent(ctx context.Context, parentID string) ([]models.InfrastructureComponent, error)
 	Get(ctx context.Context, id string) (*models.InfrastructureComponent, error)
 	Create(ctx context.Context, c *models.InfrastructureComponent) error
@@ -50,7 +49,7 @@ func (r *sqliteInfraComponentRepo) List(ctx context.Context) ([]models.Infrastru
 	var rows []models.InfrastructureComponent
 	err := r.db.SelectContext(ctx, &rows, `
 		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
-		       parent_id, credentials, snmp_config, snmp_meta, synology_meta,
+		       credentials, snmp_config, snmp_meta, synology_meta,
 		       COALESCE(notes,'') AS notes, enabled,
 		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
 		       created_at
@@ -68,14 +67,15 @@ func (r *sqliteInfraComponentRepo) List(ctx context.Context) ([]models.Infrastru
 func (r *sqliteInfraComponentRepo) ListByParent(ctx context.Context, parentID string) ([]models.InfrastructureComponent, error) {
 	var rows []models.InfrastructureComponent
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
-		       parent_id, credentials, snmp_config, snmp_meta, synology_meta,
-		       COALESCE(notes,'') AS notes, enabled,
-		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
-		       created_at
-		FROM infrastructure_components
-		WHERE parent_id = ?
-		ORDER BY type ASC, name ASC`, parentID)
+		SELECT ic.id, ic.name, COALESCE(ic.ip,'') AS ip, ic.type, ic.collection_method,
+		       ic.credentials, ic.snmp_config, ic.snmp_meta, ic.synology_meta,
+		       COALESCE(ic.notes,'') AS notes, ic.enabled,
+		       ic.last_polled_at, COALESCE(ic.last_status,'unknown') AS last_status,
+		       ic.created_at
+		FROM infrastructure_components ic
+		INNER JOIN component_links cl ON cl.child_id = ic.id
+		WHERE cl.parent_id = ?
+		ORDER BY ic.type ASC, ic.name ASC`, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("list children for %s: %w", parentID, err)
 	}
@@ -89,7 +89,7 @@ func (r *sqliteInfraComponentRepo) Get(ctx context.Context, id string) (*models.
 	var c models.InfrastructureComponent
 	err := r.db.GetContext(ctx, &c, `
 		SELECT id, name, COALESCE(ip,'') AS ip, type, collection_method,
-		       parent_id, credentials, snmp_config, snmp_meta, synology_meta,
+		       credentials, snmp_config, snmp_meta, synology_meta,
 		       COALESCE(notes,'') AS notes, enabled,
 		       last_polled_at, COALESCE(last_status,'unknown') AS last_status,
 		       created_at
@@ -106,10 +106,10 @@ func (r *sqliteInfraComponentRepo) Get(ctx context.Context, id string) (*models.
 func (r *sqliteInfraComponentRepo) Create(ctx context.Context, c *models.InfrastructureComponent) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO infrastructure_components
-		  (id, name, ip, type, collection_method, parent_id, credentials, snmp_config, notes, enabled, last_status, created_at)
-		VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
+		  (id, name, ip, type, collection_method, credentials, snmp_config, notes, enabled, last_status, created_at)
+		VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
 		c.ID, c.Name, c.IP, c.Type, c.CollectionMethod,
-		c.ParentID, c.Credentials, c.SNMPConfig,
+		c.Credentials, c.SNMPConfig,
 		c.Notes, c.Enabled, c.LastStatus, c.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("create infrastructure_component: %w", err)
@@ -121,11 +121,11 @@ func (r *sqliteInfraComponentRepo) Update(ctx context.Context, c *models.Infrast
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE infrastructure_components
 		SET name=?, ip=NULLIF(?, ''), type=?, collection_method=?,
-		    parent_id=?, credentials=?, snmp_config=?,
+		    credentials=?, snmp_config=?,
 		    notes=NULLIF(?, ''), enabled=?, last_status=?
 		WHERE id=?`,
 		c.Name, c.IP, c.Type, c.CollectionMethod,
-		c.ParentID, c.Credentials, c.SNMPConfig,
+		c.Credentials, c.SNMPConfig,
 		c.Notes, c.Enabled, c.LastStatus, c.ID)
 	if err != nil {
 		return fmt.Errorf("update infrastructure_component: %w", err)

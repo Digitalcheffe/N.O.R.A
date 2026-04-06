@@ -22,6 +22,13 @@ type DiscoveredContainer struct {
 	RegistryDigest       *string    `db:"registry_digest"        json:"registry_digest,omitempty"`
 	ImageUpdateAvailable int        `db:"image_update_available" json:"image_update_available"`
 	ImageLastCheckedAt   *time.Time `db:"image_last_checked_at"  json:"image_last_checked_at,omitempty"`
+	// Fields added in migration 037 (AP-04).
+	Ports           *string    `db:"ports"             json:"ports,omitempty"`             // JSON array of port bindings
+	Labels          *string    `db:"labels"            json:"labels,omitempty"`            // JSON map of container labels
+	Volumes         *string    `db:"volumes"           json:"volumes,omitempty"`           // JSON array of mount points
+	Networks        *string    `db:"networks"          json:"networks,omitempty"`          // JSON array of network names
+	RestartPolicy   *string    `db:"restart_policy"    json:"restart_policy,omitempty"`   // e.g. "always", "no"
+	DockerCreatedAt *time.Time `db:"docker_created_at" json:"docker_created_at,omitempty"` // when Docker created the container
 }
 
 // DiscoveredRoute is an HTTP router entry found via a Traefik infrastructure component.

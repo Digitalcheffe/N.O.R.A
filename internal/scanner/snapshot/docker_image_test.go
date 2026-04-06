@@ -144,6 +144,9 @@ func (r *mockDiscoveredContainerRepo) UpdateContainerImageCheck(_ context.Contex
 	})
 	return nil
 }
+func (r *mockDiscoveredContainerRepo) UpdateContainerRestartPolicy(_ context.Context, _ string, _ string) error {
+	return nil
+}
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -153,7 +156,7 @@ func makePollerStore(infraComponents []models.InfrastructureComponent, container
 		nil, nil, nil, nil, nil, nil,
 		&mockImageInfraComponentRepo{components: infraComponents},
 		nil, nil, nil, nil, nil, nil, nil, nil,
-		dc, nil, nil, nil, nil, nil, nil,
+		dc, nil, nil, nil, nil, nil, nil, nil,
 	)
 	return store, dc
 }

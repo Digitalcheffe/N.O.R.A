@@ -12,8 +12,8 @@ import (
 	"github.com/digitalcheffe/nora/internal/scanner"
 )
 
-// ProxmoxDiscoveryScanner discovers VMs, LXC containers, and storage pools for
-// a Proxmox VE infrastructure component.
+// ProxmoxDiscoveryScanner discovers VMs and storage pools for
+// a Proxmox VE infrastructure component. LXC containers are not tracked.
 type ProxmoxDiscoveryScanner struct {
 	store *repo.Store
 }
@@ -71,12 +71,15 @@ func (s *ProxmoxDiscoveryScanner) Discover(ctx context.Context, entityID string,
 			status = "online"
 		}
 
+		compType := proxmoxOSTypeToComponentType(g.OSType)
+
 		existing, alreadyKnown := knownIDs[childID]
 		if alreadyKnown {
-			// Entity exists — check for name/status changes.
-			changed := existing.Name != g.Name || existing.LastStatus != status
+			// Entity exists — check for name, status, or type changes.
+			changed := existing.Name != g.Name || existing.LastStatus != status || existing.Type != compType
 			if changed {
 				existing.Name = g.Name
+				existing.Type = compType
 				if updateErr := s.store.InfraComponents.Update(ctx, existing); updateErr != nil {
 					log.Printf("proxmox discovery: update child %s: %v", childID, updateErr)
 				}
@@ -84,7 +87,7 @@ func (s *ProxmoxDiscoveryScanner) Discover(ctx context.Context, entityID string,
 					log.Printf("proxmox discovery: update status %s: %v", childID, statusErr)
 				}
 				writeDiscoveryEvent(ctx, s.store, entityID, c.Name, "physical_host", "info",
-					fmt.Sprintf("[discovery] %s updated: %s (status=%s)", g.GuestType, g.Name, status))
+					fmt.Sprintf("[discovery] vm updated: %s (status=%s, type=%s)", g.Name, status, compType))
 				found++
 			} else {
 				// Still present, no change — update status silently.
@@ -92,32 +95,33 @@ func (s *ProxmoxDiscoveryScanner) Discover(ctx context.Context, entityID string,
 			}
 		} else {
 			// New entity — create child component.
-			parentID := entityID
 			child := &models.InfrastructureComponent{
 				ID:               childID,
 				Name:             g.Name,
-				IP:               "",
-				Type:             g.GuestType,
+				IP:               g.IP,
+				Type:             compType,
 				CollectionMethod: "none",
-				ParentID:         &parentID,
 				Enabled:          true,
 				LastStatus:       status,
 				CreatedAt:        polledAt,
 			}
 			if createErr := s.store.InfraComponents.Create(ctx, child); createErr != nil {
-				log.Printf("proxmox discovery: create child %s %q: %v", g.GuestType, g.Name, createErr)
+				log.Printf("proxmox discovery: create child vm %q: %v", g.Name, createErr)
 				continue
 			}
+			if linkErr := s.store.ComponentLinks.SetParent(ctx, "proxmox_node", entityID, compType, childID); linkErr != nil {
+				log.Printf("proxmox discovery: set parent link for vm %q: %v", g.Name, linkErr)
+			}
 			writeDiscoveryEvent(ctx, s.store, entityID, c.Name, "physical_host", "info",
-				fmt.Sprintf("[discovery] New %s discovered: %s", g.GuestType, g.Name))
+				fmt.Sprintf("[discovery] New vm discovered: %s (type=%s)", g.Name, compType))
 			found++
 		}
 	}
 
-	// Mark missing children as offline.
+	// Mark missing VM children as offline.
 	disappeared := 0
 	for id, child := range knownIDs {
-		if child.Type != "vm" && child.Type != "lxc" {
+		if child.Type != "vm_linux" && child.Type != "vm_windows" && child.Type != "vm_other" {
 			continue
 		}
 		if _, stillPresent := currentIDs[id]; stillPresent {
@@ -145,6 +149,21 @@ func (s *ProxmoxDiscoveryScanner) Discover(ctx context.Context, entityID string,
 		Found:       found,
 		Disappeared: disappeared,
 	}, nil
+}
+
+// proxmoxOSTypeToComponentType maps a Proxmox ostype string to an
+// infrastructure_components type value.
+func proxmoxOSTypeToComponentType(ostype string) string {
+	switch ostype {
+	case "l24", "l26", "debian", "ubuntu", "centos", "fedora",
+		"opensuse", "archlinux", "gentoo", "alpine", "nixos":
+		return "vm_linux"
+	case "win10", "win11", "win7", "win8", "wxp",
+		"w2k", "w2k3", "w2k8", "w2k19", "w2k22":
+		return "vm_windows"
+	default:
+		return "vm_other"
+	}
 }
 
 // compile-time check that ProxmoxDiscoveryScanner satisfies the interface.

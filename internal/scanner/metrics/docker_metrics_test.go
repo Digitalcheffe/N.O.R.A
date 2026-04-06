@@ -70,8 +70,6 @@ func (r *mockMetricsAppRepo) GetByToken(_ context.Context, _ string) (*models.Ap
 func (r *mockMetricsAppRepo) Update(_ context.Context, _ *models.App) error                        { return nil }
 func (r *mockMetricsAppRepo) Delete(_ context.Context, _ string) error                             { return nil }
 func (r *mockMetricsAppRepo) UpdateToken(_ context.Context, _, _ string) error                     { return nil }
-func (r *mockMetricsAppRepo) SetDockerEngineID(_ context.Context, _, _ string) error               { return nil }
-func (r *mockMetricsAppRepo) SetHostComponentID(_ context.Context, _ string, _ *string) error      { return nil }
 
 // --- mock EventRepo -------------------------------------------------------
 
@@ -119,7 +117,7 @@ func (r *mockMetricsEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, 
 // --- helpers --------------------------------------------------------------
 
 func newTestResourcePoller(appRepo repo.AppRepo, eventRepo repo.EventRepo, resRepo repo.ResourceReadingRepo, cli resourcePollerAPI) *ResourcePoller {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, resRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, resRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return newResourcePollerWithClient(store, "", cli)
 }
 
