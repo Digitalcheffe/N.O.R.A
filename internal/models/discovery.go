@@ -2,12 +2,15 @@ package models
 
 import "time"
 
-// DiscoveredContainer is a container found by polling a Docker Engine component.
+// DiscoveredContainer is a container found by polling a Docker Engine or Portainer component.
 // app_id is set when the user links the container to an NORA app.
 // profile_suggestion is the profile_id NORA matched via image/name heuristics.
+// source_type records which kind of component discovered this container ("docker_engine" | "portainer").
+// The parent-child relationship (source component → container) is stored in component_links.
 type DiscoveredContainer struct {
 	ID                   string     `db:"id"                    json:"id"`
 	InfraComponentID     string     `db:"infra_component_id"    json:"infra_component_id"`
+	SourceType           string     `db:"source_type"           json:"source_type"`
 	ContainerID          string     `db:"container_id"          json:"container_id"`
 	ContainerName        string     `db:"container_name"        json:"container_name"`
 	Image                string     `db:"image"                 json:"image"`

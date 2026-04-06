@@ -7,7 +7,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .event-feed-header {

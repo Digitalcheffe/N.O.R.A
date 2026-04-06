@@ -564,8 +564,18 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		sourceType = "snmp_host"
 	}
 
-	rollups, err := h.rollups.LatestForSource(r.Context(), id, sourceType, period)
-	if err != nil {
+	// Proxmox writes resource_readings with a compound source_id ("componentID/nodeName")
+	// so we need prefix matching for both the rollup query and the raw-readings fallback.
+	usePrefix := comp.Type == "proxmox_node"
+
+	var rollups []models.ResourceRollup
+	var rollupErr error
+	if usePrefix {
+		rollups, rollupErr = h.rollups.LatestForSourcePrefix(r.Context(), id, sourceType, period)
+	} else {
+		rollups, rollupErr = h.rollups.LatestForSource(r.Context(), id, sourceType, period)
+	}
+	if rollupErr != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -588,7 +598,7 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		}
 		hasData := false
 		for _, a := range aggs {
-			if a.SourceID != id {
+			if a.SourceID != id && !(usePrefix && strings.HasPrefix(a.SourceID, id+"/")) {
 				continue
 			}
 			hasData = true

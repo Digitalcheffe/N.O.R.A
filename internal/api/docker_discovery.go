@@ -31,6 +31,7 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/containers", h.ListContainers)
 	r.Get("/infrastructure/{id}/routes", h.ListRoutes)
 	r.Get("/discovery/all", h.ListAll)
+	r.Get("/containers", h.ListAllContainers)
 	r.Delete("/discovered-containers/{id}", h.DeleteContainer)
 	r.Post("/discovered-containers/{id}/link-app", h.LinkContainerApp)
 	r.Delete("/discovered-containers/{id}/link-app", h.UnlinkContainerApp)
@@ -41,6 +42,8 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 // discoveredContainerResponse is the per-container shape returned by the API.
 type discoveredContainerResponse struct {
 	ID                   string     `json:"id"`
+	InfraComponentID     string     `json:"infra_component_id"`
+	SourceType           string     `json:"source_type"`
 	ContainerName        string     `json:"container_name"`
 	Image                string     `json:"image"`
 	Status               string     `json:"status"`
@@ -104,6 +107,8 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 	for i, c := range containers {
 		item := discoveredContainerResponse{
 			ID:                   c.ID,
+			InfraComponentID:     c.InfraComponentID,
+			SourceType:           c.SourceType,
 			ContainerName:        c.ContainerName,
 			Image:                c.Image,
 			Status:               c.Status,
@@ -255,6 +260,8 @@ func (h *DockerDiscoveryHandler) ListAll(w http.ResponseWriter, r *http.Request)
 	for i, c := range allContainers {
 		item := discoveredContainerResponse{
 			ID:                   c.ID,
+			InfraComponentID:     c.InfraComponentID,
+			SourceType:           c.SourceType,
 			ContainerName:        c.ContainerName,
 			Image:                c.Image,
 			Status:               c.Status,
@@ -583,3 +590,36 @@ func (h *DockerDiscoveryHandler) UnlinkRouteApp(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListAllContainers returns a flat list of every discovered container across all
+// docker_engine and portainer components.
+// GET /api/v1/containers
+func (h *DockerDiscoveryHandler) ListAllContainers(w http.ResponseWriter, r *http.Request) {
+	containers, err := h.store.DiscoveredContainers.ListAllDiscoveredContainers(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	out := make([]discoveredContainerResponse, len(containers))
+	for i, c := range containers {
+		out[i] = discoveredContainerResponse{
+			ID:                   c.ID,
+			InfraComponentID:     c.InfraComponentID,
+			SourceType:           c.SourceType,
+			ContainerName:        c.ContainerName,
+			Image:                c.Image,
+			Status:               c.Status,
+			AppID:                c.AppID,
+			ProfileSuggestion:    c.ProfileSuggestion,
+			SuggestionConfidence: c.SuggestionConfidence,
+			LastSeenAt:           c.LastSeenAt,
+			ImageUpdateAvailable: c.ImageUpdateAvailable != 0,
+			ImageLastCheckedAt:   c.ImageLastCheckedAt,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":  out,
+		"total": len(out),
+	})
+}

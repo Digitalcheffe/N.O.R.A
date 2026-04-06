@@ -95,6 +95,10 @@ func (s *ProxmoxMetricsScanner) CollectMetrics(ctx context.Context, entityID str
 
 	if len(nodeMetrics) > 0 {
 		log.Printf("proxmox metrics: %s: %d readings from %d node(s)", c.Name, readings, len(nodeMetrics))
+		polledAt := now.Format(time.RFC3339Nano)
+		if err := s.store.InfraComponents.UpdateStatus(ctx, entityID, "online", polledAt); err != nil {
+			log.Printf("proxmox metrics: update status for %s: %v", c.Name, err)
+		}
 	}
 
 	return &scanner.MetricsResult{

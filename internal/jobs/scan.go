@@ -40,6 +40,9 @@ func ScanOneComponent(ctx context.Context, store *repo.Store, c *models.Infrastr
 			return "offline", fmt.Errorf("invalid credentials: %w", err)
 		}
 		pollErr = poller.Poll(ctx, store)
+		if pollErr == nil {
+			_, _ = scanmetrics.NewProxmoxMetricsScanner(store).CollectMetrics(ctx, c.ID, c.Type)
+		}
 
 	case "synology_api":
 		source = "synology"

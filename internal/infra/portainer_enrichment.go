@@ -141,11 +141,15 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 
 			now := time.Now().UTC()
 
-			// Upsert this container under the Portainer component so that the
-			// discovery.containers(componentID) API returns it — enabling
-			// "Add App" linking on the Portainer detail page.
+			// Upsert this container under the Portainer component.
+			// source_type="portainer" records provenance; the parent relationship
+			// (portainer → container) is written to component_links below.
+			// The unique key is (infra_component_id, container_name) so rebuilding
+			// a container refreshes container_id in place.  UpsertDiscoveredContainer
+			// populates rec.ID with the stable NORA UUID via RETURNING id.
 			rec := &models.DiscoveredContainer{
 				InfraComponentID: comp.ID,
+				SourceType:       "portainer",
 				ContainerID:      pc.ID,
 				ContainerName:    name,
 				Image:            pc.Image,
@@ -158,21 +162,24 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 				continue
 			}
 
-			// Fetch the stable NORA UUID for this container (the upsert may have
-			// matched an existing row whose ID we don't know from the insert path).
-			noraRec, err := w.store.DiscoveredContainers.FindByName(ctx, comp.ID, name)
-			if err != nil {
-				log.Printf("portainer enrichment: fetch upserted container %q: %v", name, err)
-				continue
+			// Register the parent relationship in component_links.
+			if err := w.store.ComponentLinks.SetParent(ctx, "portainer", comp.ID, "container", rec.ID); err != nil {
+				log.Printf("portainer enrichment: set parent link for container %q: %v", name, err)
 			}
 
 			seenContainerIDs = append(seenContainerIDs, pc.ID)
 
+			// Re-fetch the full row so determineImageUpdate has the current
+			// registry_digest (set by DD-9) — the upsert only returns the id.
+			if full, fetchErr := w.store.DiscoveredContainers.GetDiscoveredContainer(ctx, rec.ID); fetchErr == nil {
+				rec = full
+			}
+
 			// Check image update availability via Portainer's Docker gateway.
-			updateAvailable := w.determineImageUpdate(ctx, client, ep.ID, pc, noraRec)
+			updateAvailable := w.determineImageUpdate(ctx, client, ep.ID, pc, rec)
 
 			if err := w.store.DiscoveredContainers.UpdateContainerImageCheck(
-				ctx, noraRec.ID, pc.ID, "", updateAvailable,
+				ctx, rec.ID, pc.ID, "", updateAvailable,
 			); err != nil {
 				log.Printf("portainer enrichment: update image check %q: %v", name, err)
 				continue
@@ -180,13 +187,13 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 
 			// Emit event on false→true transition only.
 			if updateAvailable {
-				prev, _ := w.lastUpdateAvailable.Load(noraRec.ID)
+				prev, _ := w.lastUpdateAvailable.Load(rec.ID)
 				prevBool, _ := prev.(bool)
 				if !prevBool {
 					w.emitImageUpdateEvent(ctx, comp, name, pc.Image)
 				}
 			}
-			w.lastUpdateAvailable.Store(noraRec.ID, updateAvailable)
+			w.lastUpdateAvailable.Store(rec.ID, updateAvailable)
 
 			upserted++
 		}
