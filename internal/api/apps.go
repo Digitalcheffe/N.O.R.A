@@ -72,10 +72,19 @@ type chainNode struct {
 }
 
 type chainTraefikRoute struct {
-	Router  string `json:"router"`
-	Rule    string `json:"rule"`
-	Service string `json:"service"`
-	Status  string `json:"status"`
+	Router      string `json:"router"`
+	Rule        string `json:"rule"`
+	Service     string `json:"service"`
+	Status      string `json:"status"`
+	// Service health from traefik_services (populated when the service is known).
+	ServiceStatus string `json:"service_status,omitempty"`
+	ServersUp     int    `json:"servers_up,omitempty"`
+	ServersDown   int    `json:"servers_down,omitempty"`
+	ServerCount   int    `json:"server_count,omitempty"`
+	// ManualLink is true when this entry represents a manually-linked Traefik
+	// component rather than a discovered route. The frontend renders it
+	// differently (no rule/service, just the component name + status).
+	ManualLink bool `json:"manual_link,omitempty"`
 }
 
 type getChainResponse struct {
@@ -114,7 +123,12 @@ func (h *AppsHandler) GetChain(w http.ResponseWriter, r *http.Request) {
 	chain := []chainNode{{Type: "app", ID: app.ID, Name: app.Name, Status: "", IconURL: appIconURL}}
 
 	// Walk component_links upward, capped at 10 hops to prevent cycles.
+	// Traefik is special: it is never a chain node — it always renders in the
+	// traefik section at the bottom. If we hit a traefik parent we stop the
+	// walk and record the component ID so we can synthesize a manual-link entry
+	// in the traefik section when no discovered routes exist.
 	curType, curID := "app", id
+	var manualTraefikID string
 	for i := 0; i < 10; i++ {
 		link, err := h.store.ComponentLinks.GetParent(ctx, curType, curID)
 		if errors.Is(err, repo.ErrNotFound) || link == nil {
@@ -122,6 +136,18 @@ func (h *AppsHandler) GetChain(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			break // non-fatal; return what we have
+		}
+		if link.ParentType == "traefik" {
+			// Record for the traefik section; do not add to chain.
+			manualTraefikID = link.ParentID
+			break
+		}
+		// traefik_route is also Traefik territory — routes are already loaded
+		// separately via ListByAppID, so stop the walk here too. Walking through
+		// traefik_route → traefik → vm_linux → proxmox is what caused infra nodes
+		// to appear in the chain when a route was auto-linked to the app.
+		if link.ParentType == "traefik_route" {
+			break
 		}
 		node := h.resolveChainNode(ctx, link.ParentType, link.ParentID)
 		chain = append(chain, node)
@@ -136,12 +162,30 @@ func (h *AppsHandler) GetChain(w http.ResponseWriter, r *http.Request) {
 		if ro.ServiceName != nil {
 			svc = *ro.ServiceName
 		}
-		traefik = append(traefik, chainTraefikRoute{
-			Router:  ro.RouterName,
-			Rule:    ro.Rule,
-			Service: svc,
-			Status:  ro.RouterStatus,
-		})
+		entry := chainTraefikRoute{
+			Router:        ro.RouterName,
+			Rule:          ro.Rule,
+			Service:       svc,
+			Status:        ro.RouterStatus,
+			ServersUp:     ro.ServersUp,
+			ServersDown:   ro.ServersDown,
+			ServerCount:   ro.ServersTotal,
+		}
+		if ro.ServiceStatus != nil {
+			entry.ServiceStatus = *ro.ServiceStatus
+		}
+		traefik = append(traefik, entry)
+	}
+	// If the app has a manually-linked Traefik component but no discovered
+	// routes, synthesize a display entry so the bottom section is still shown.
+	if len(traefik) == 0 && manualTraefikID != "" {
+		if ic, err := h.store.InfraComponents.Get(ctx, manualTraefikID); err == nil {
+			traefik = append(traefik, chainTraefikRoute{
+				Router:     ic.Name,
+				Status:     ic.LastStatus,
+				ManualLink: true,
+			})
+		}
 	}
 
 	writeJSON(w, http.StatusOK, getChainResponse{Chain: chain, Traefik: traefik})

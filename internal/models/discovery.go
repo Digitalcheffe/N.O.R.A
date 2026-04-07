@@ -57,4 +57,10 @@ type DiscoveredRoute struct {
 	HasTLSResolver   int     `db:"has_tls_resolver"   json:"has_tls_resolver"`
 	CertResolverName *string `db:"cert_resolver_name" json:"cert_resolver_name,omitempty"`
 	ServiceName      *string `db:"service_name"       json:"service_name,omitempty"`
+	// Service health — populated from Traefik /api/http/services during discovery.
+	ServiceStatus *string `db:"service_status" json:"service_status,omitempty"`
+	ServiceType   *string `db:"service_type"   json:"service_type,omitempty"`
+	ServersTotal  int     `db:"servers_total"  json:"servers_total"`
+	ServersUp     int     `db:"servers_up"     json:"servers_up"`
+	ServersDown   int     `db:"servers_down"   json:"servers_down"`
 }

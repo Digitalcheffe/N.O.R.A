@@ -297,3 +297,21 @@
   white-space: nowrap;
   margin-right: 6px;
 }
+
+.chain-traefik-manual-label {
+  font-size: 10px;
+  color: var(--text3);
+  font-style: italic;
+  margin-left: 6px;
+}
+
+.chain-traefik-svc-status {
+  margin-left: 4px;
+}
+
+.chain-traefik-servers {
+  font-size: 10px;
+  color: var(--text3);
+  font-family: var(--mono);
+  margin-left: 2px;
+}

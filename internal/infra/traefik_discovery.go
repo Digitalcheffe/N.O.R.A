@@ -84,11 +84,22 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 
 	client := NewTraefikClient(creds.APIURL, creds.APIKey)
 
-	// ── Fetch routers from Traefik ────────────────────────────────────────────
+	// ── Fetch routers and services from Traefik ──────────────────────────────
 
 	routers, err := client.FetchRouters(ctx)
 	if err != nil {
 		return err
+	}
+
+	// Build a service_name → TraefikServiceStatus map so each route can be
+	// enriched with its service's health in a single pass.
+	serviceMap := make(map[string]TraefikServiceStatus)
+	if svcs, err := client.FetchServices(ctx); err != nil {
+		log.Printf("traefik discovery: %s: fetch services (non-fatal): %v", component.Name, err)
+	} else {
+		for _, s := range svcs {
+			serviceMap[s.Name] = s
+		}
 	}
 
 	// ── Build lookup maps ─────────────────────────────────────────────────────
@@ -177,6 +188,24 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 			HasTLSResolver:   hasTLS,
 			CertResolverName: strPtr(rr.TLSCertResolver),
 			ServiceName:      strPtr(rr.ServiceName),
+		}
+
+		// Join service health — match the full service_name (e.g. "sonarr@docker")
+		// against the service map fetched above.
+		if svc, ok := serviceMap[rr.ServiceName]; ok {
+			up, down := 0, 0
+			for _, st := range svc.ServerStatus {
+				if strings.EqualFold(st, "up") {
+					up++
+				} else {
+					down++
+				}
+			}
+			route.ServiceStatus = strPtr(svc.Status)
+			route.ServiceType   = strPtr(svc.Type)
+			route.ServersTotal  = up + down
+			route.ServersUp     = up
+			route.ServersDown   = down
 		}
 
 		if err := t.store.DiscoveredRoutes.UpsertDiscoveredRoute(ctx, route); err != nil {

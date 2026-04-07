@@ -902,6 +902,11 @@ export interface ChainTraefikRoute {
   rule: string
   service: string
   status: string
+  service_status?: string
+  servers_up?: number
+  servers_down?: number
+  server_count?: number
+  manual_link?: boolean
 }
 
 export interface AppChainResponse {
