@@ -19,6 +19,27 @@ import (
 	"github.com/google/uuid"
 )
 
+// PollOneApp runs API polling for a single app identified by appID.
+// Returns an error if the app has no profile, no api_polling entries, or if polling fails.
+func PollOneApp(ctx context.Context, store *repo.Store, registry apptemplate.Loader, appID string) error {
+	app, err := store.Apps.Get(ctx, appID)
+	if err != nil {
+		return fmt.Errorf("get app: %w", err)
+	}
+	if app.ProfileID == "" {
+		return fmt.Errorf("app has no profile — API polling requires a template")
+	}
+	tmpl, err := registry.Get(app.ProfileID)
+	if err != nil || tmpl == nil {
+		return fmt.Errorf("template not found for profile %q", app.ProfileID)
+	}
+	if len(tmpl.APIPolling) == 0 {
+		return fmt.Errorf("profile %q has no api_polling entries", app.ProfileID)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	return pollApp(ctx, store, client, *app, tmpl.APIPolling)
+}
+
 // RunAPIPolling iterates all apps, finds those with a non-empty api_polling block
 // in their profile, and calls pollApp for each. It is registered as a
 // GlobalDiscoveryJob and runs on the hourly Discovery cadence.
@@ -108,13 +129,15 @@ func pollEntry(
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("api polling: app %s: GET %s: %v", app.Name, entry.Path, err)
-		return nil // log and skip; do not fire an event
+		emitPollFailureEvent(ctx, store, app, entry, fmt.Sprintf("connection error: %v", err))
+		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Printf("api polling: app %s: GET %s: non-200 status %d", app.Name, entry.Path, resp.StatusCode)
-		return nil // log and skip; do not fire an event
+		emitPollFailureEvent(ctx, store, app, entry, fmt.Sprintf("HTTP %d from %s", resp.StatusCode, entry.Path))
+		return nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -266,3 +289,21 @@ func pollJsonPathToString(v interface{}) string {
 }
 
 var pollArrayIndexRe = regexp.MustCompile(`^([^\[]+)\[(\d+)\]$`)
+
+// emitPollFailureEvent writes a warn-level event for a failed API poll entry.
+func emitPollFailureEvent(ctx context.Context, store *repo.Store, app models.App, entry apptemplate.APIPollingEntry, reason string) {
+	now := time.Now().UTC()
+	ev := &models.Event{
+		ID:         uuid.NewString(),
+		Level:      "warn",
+		SourceName: app.Name,
+		SourceType: "app",
+		SourceID:   app.ID,
+		Title:      fmt.Sprintf("API poll failed — %s: %s", entry.Label, reason),
+		Payload:    fmt.Sprintf(`{"metric":%q,"path":%q,"reason":%q}`, entry.Name, entry.Path, reason),
+		CreatedAt:  now,
+	}
+	if err := store.Events.Create(ctx, ev); err != nil {
+		log.Printf("api polling: app %s: emit failure event: %v", app.Name, err)
+	}
+}

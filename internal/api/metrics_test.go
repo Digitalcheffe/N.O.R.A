@@ -99,7 +99,7 @@ func TestGetAppMetrics_EmptyTrend(t *testing.T) {
 	eventRepo := repo.NewEventRepo(db)
 	metricsRepo := repo.NewMetricsRepo(db)
 
-	appsHandler := api.NewAppsHandler(appRepo, nil, nil, nil, nil)
+	appsHandler := api.NewAppsHandler(appRepo, nil, nil, nil, nil, nil)
 	metricsHandler := api.NewMetricsHandler(eventRepo, appRepo, metricsRepo, db, ":memory:", time.Now(), "test")
 
 	r := chi.NewRouter()

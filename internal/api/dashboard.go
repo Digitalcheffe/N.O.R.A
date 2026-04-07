@@ -368,7 +368,7 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		if a.ProfileID != "" {
 			sum.IconURL = "/api/v1/icons/" + a.ProfileID
 			if p, err := h.profiler.Get(a.ProfileID); err == nil && p != nil {
-				sum.Capability = p.Meta.Capability
+				sum.Capability = apptemplate.InferCapability(p)
 			}
 		}
 		appSummaries = append(appSummaries, sum)

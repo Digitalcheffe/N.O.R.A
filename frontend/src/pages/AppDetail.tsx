@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi, integrations as integrationsApi } from '../api/client'
-import type { App, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
-import { AppMetricsGrid } from '../components/AppMetricsGrid'
+import type { App, AppChainResponse, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
+import { AppChain } from '../components/AppChain'
+import { AppMetricCard, AppMetricCardSkeleton } from '../components/AppMetricCard'
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
 import { CheckForm } from '../components/CheckForm'
 import { SlidePanel } from '../components/SlidePanel'
@@ -14,6 +15,7 @@ import {
   validateForm,
   formToInput,
 } from '../components/checkFormHelpers'
+import '../components/AppMetricsGrid.css'
 import './AppDetail.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
@@ -49,11 +51,10 @@ export interface AppSettingsModalProps {
 }
 
 const CAPABILITY_LABEL: Record<string, string> = {
-  full:         'Webhook + Monitor',
+  full:         'Webhook + API',
   webhook_only: 'Webhook',
+  api_only:     'API',
   monitor_only: 'Monitor',
-  docker_only:  'Docker',
-  limited:      'Limited',
 }
 
 export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: AppSettingsModalProps) {
@@ -342,6 +343,9 @@ export function AppDetail() {
   const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
   const [appMetrics, setAppMetrics] = useState<AppMetricSnapshot[]>([])
   const [metricsLoading, setMetricsLoading] = useState(true)
+  const [polling, setPolling] = useState(false)
+  const [pollError, setPollError] = useState<string | null>(null)
+  const [appChain, setAppChain] = useState<AppChainResponse | null>(null)
 
   const appId = id ?? ''
 
@@ -380,6 +384,13 @@ export function AppDetail() {
       .then(res => setAppMetrics(res.data))
       .catch(() => setAppMetrics([]))
       .finally(() => setMetricsLoading(false))
+  }, [appId, tick])
+
+  useEffect(() => {
+    if (!appId) return
+    appsApi.chain(appId)
+      .then(setAppChain)
+      .catch(() => {})
   }, [appId, tick])
 
   useEffect(() => {
@@ -429,6 +440,22 @@ export function AppDetail() {
     integrationsApi.certs(integrationId)
       .then(res => setTraefikCerts(res.data))
       .catch(() => {})
+  }
+
+  async function handlePollNow() {
+    setPolling(true)
+    setPollError(null)
+    try {
+      await appsApi.pollNow(appId)
+      setMetricsLoading(true)
+      const res = await appsApi.metrics(appId)
+      setAppMetrics(res.data)
+    } catch (err: unknown) {
+      setPollError(err instanceof Error ? err.message : 'Poll failed')
+    } finally {
+      setPolling(false)
+      setMetricsLoading(false)
+    }
   }
 
   if (!id) return null
@@ -487,50 +514,79 @@ export function AppDetail() {
         icon={appIcon}
         headerExtra={AppExtraHeader}
         actions={
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {baseUrl && (
-              <a className="detail-launch-btn" href={baseUrl} target="_blank" rel="noopener noreferrer">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {baseUrl && (
+                <a className="detail-launch-btn" href={baseUrl} target="_blank" rel="noopener noreferrer">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                  Launch
+                </a>
+              )}
+              {app?.profile_id && (
+                <button
+                  className="detail-settings-btn"
+                  onClick={() => void handlePollNow()}
+                  disabled={polling}
+                  title="Run API polling now"
+                >
+                  {polling ? 'Polling…' : 'Discover Now'}
+                </button>
+              )}
+              <button className="detail-settings-btn" onClick={() => { setSettingsKey(k => k + 1); setShowSettings(true) }} title="App Settings">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
-                Launch
-              </a>
+                Settings
+              </button>
+            </div>
+            {pollError && (
+              <div style={{ fontSize: 11, color: 'var(--red)', textAlign: 'right' }}>{pollError}</div>
             )}
-            <button className="detail-settings-btn" onClick={() => { setSettingsKey(k => k + 1); setShowSettings(true) }} title="App Settings">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-              Settings
-            </button>
           </div>
         }
         sourceType="app"
         sourceId={appId}
       >
-        {/* ── Live metric cards ── */}
-        <AppMetricsGrid metrics={appMetrics} loading={metricsLoading} />
-
-        {/* ── Stats row (when available) ── */}
-        {appSummary && (appSummary.stats ?? []).length > 0 && (
-          <div className="detail-stats-row">
-            {(appSummary.stats ?? []).map(stat => (
-              <div key={stat.label} className="detail-stat-card">
-                <div className="detail-stat-label">{stat.label}</div>
-                <div className={`detail-stat-value${stat.color ? ` color-${stat.color}` : ''}`}>
-                  {stat.value}
-                </div>
-              </div>
-            ))}
-            {appSummary.sparkline.some(v => v > 0) && (
-              <div className="detail-stat-card detail-stat-sparkline-card">
-                <div className="detail-stat-label">Activity</div>
-                <Sparkline data={Array.from(appSummary.sparkline)} />
-              </div>
-            )}
+        {/* ── Live metrics + stats ── */}
+        {(metricsLoading || appMetrics.length > 0 || (appSummary?.stats ?? []).length > 0) && (
+          <div className="amg-section">
+            {!metricsLoading && <div className="amg-label">Live Metrics</div>}
+            <div className="amg-grid">
+              {metricsLoading ? (
+                [0, 1, 2].map(i => <AppMetricCardSkeleton key={i} />)
+              ) : (
+                <>
+                  {appMetrics.map(m => <AppMetricCard key={m.id} metric={m} />)}
+                  {(appSummary?.stats ?? []).map(stat => (
+                    <div key={`stat-${stat.label}`} className="amc-card">
+                      <div className={`amc-value${stat.color ? ` color-${stat.color}` : ''}`}>{stat.value}</div>
+                      <div className="amc-label">{stat.label}</div>
+                    </div>
+                  ))}
+                  {appSummary?.sparkline.some(v => v > 0) && (
+                    <div className="amc-card">
+                      <div className="amc-label">Activity</div>
+                      <Sparkline data={Array.from(appSummary.sparkline)} />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
+        )}
+
+        {/* ── Infrastructure chain ── */}
+        {appChain && appChain.chain.length > 0 && (
+          <AppChain
+            chain={appChain.chain}
+            appStatus={appSummary?.status}
+            traefik={appChain.traefik ?? []}
+          />
         )}
 
         {/* ── Monitor checks — shown for all apps ── */}

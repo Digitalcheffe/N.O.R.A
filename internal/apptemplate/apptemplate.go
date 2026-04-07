@@ -28,8 +28,28 @@ type AppTemplateMeta struct {
 	Category    string `yaml:"category"`
 	Icon        string `yaml:"icon"`         // dashboard-icons CDN slug — used to fetch the app icon
 	Description string `yaml:"description"`
-	Capability  string `yaml:"capability"`
 	Homepage    string `yaml:"homepage"`
+}
+
+// InferCapability derives the capability string from the template's actual content
+// rather than a static field. Rules:
+//   - webhook + api_polling → "full"
+//   - webhook only          → "webhook_only"
+//   - api_polling only      → "api_only"
+//   - neither               → "monitor_only"
+func InferCapability(t *AppTemplate) string {
+	hasWebhook := len(t.Webhook.FieldMappings) > 0 || len(t.Webhook.RecommendedEvents) > 0
+	hasAPI := len(t.APIPolling) > 0
+	switch {
+	case hasWebhook && hasAPI:
+		return "full"
+	case hasWebhook:
+		return "webhook_only"
+	case hasAPI:
+		return "api_only"
+	default:
+		return "monitor_only"
+	}
 }
 
 // EventTypeKeyRule synthesizes an event_type field from payload structure.

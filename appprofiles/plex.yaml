@@ -3,7 +3,6 @@ meta:
   category: Media
   icon: plex
   description: Personal media server and streaming platform
-  capability: full
   homepage: https://www.plex.tv
 
 webhook:

@@ -3,7 +3,6 @@ meta:
   category: Network
   icon: unifi
   description: Ubiquiti UniFi network controller
-  capability: monitor_only
   homepage: https://ui.com
 
 webhook:

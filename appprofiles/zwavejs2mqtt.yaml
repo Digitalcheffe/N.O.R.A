@@ -3,7 +3,6 @@ meta:
   category: Automation
   icon: zwave-js-to-mqtt
   description: Z-Wave to MQTT gateway with web UI
-  capability: monitor_only
 
 webhook:
   setup_instructions: |

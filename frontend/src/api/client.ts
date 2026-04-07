@@ -4,6 +4,7 @@
 
 import type {
   App,
+  AppChainResponse,
   ComponentLink,
   AppMetricSnapshot,
   AppTemplate,
@@ -223,6 +224,12 @@ export const apps = {
 
   metrics: (id: string) =>
     request<ListResponse<AppMetricSnapshot>>('GET', `/apps/${id}/metrics`),
+
+  pollNow: (id: string) =>
+    request<void>('POST', `/apps/${id}/poll`),
+
+  chain: (id: string) =>
+    request<AppChainResponse>('GET', `/apps/${id}/chain`),
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -557,6 +564,15 @@ export const discovery = {
 
   unlinkContainerApp: (containerId: string) =>
     request<void>('DELETE', `/discovered-containers/${containerId}/link-app`),
+
+  allRoutes: () =>
+    request<ListResponse<DiscoveredRoute>>('GET', `/routes`),
+
+  linkRouteApp: (routeId: string, appId: string) =>
+    request<unknown>('POST', `/discovered-routes/${routeId}/link-app`, { mode: 'existing', app_id: appId }),
+
+  unlinkRouteApp: (routeId: string) =>
+    request<void>('DELETE', `/discovered-routes/${routeId}/link-app`),
 }
 
 // ── Traefik expanded (Infra-10/11) ────────────────────────────────────────────

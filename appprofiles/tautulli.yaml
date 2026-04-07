@@ -3,7 +3,6 @@ meta:
   category: Media
   icon: tautulli
   description: Plex media server monitoring and statistics
-  capability: full
   homepage: https://tautulli.com
 
 webhook:

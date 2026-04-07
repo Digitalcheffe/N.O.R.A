@@ -3,7 +3,6 @@ meta:
   category: Media
   icon: seerr
   description: Media request management for Plex, Jellyfin, and Emby
-  capability: full
   homepage: https://overseerr.dev
 
 webhook:

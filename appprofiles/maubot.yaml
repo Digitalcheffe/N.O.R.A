@@ -3,7 +3,6 @@ meta:
   category: Automation
   icon: maubot
   description: Plugin-based Matrix bot manager
-  capability: monitor_only
 
 webhook:
   setup_instructions: |

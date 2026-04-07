@@ -86,6 +86,13 @@ func (r *sqliteCheckRepo) Create(ctx context.Context, check *models.MonitorCheck
 	if err != nil {
 		return fmt.Errorf("create check: %w", err)
 	}
+	// Keep component_links in sync: monitor → app.
+	if check.AppID != "" {
+		r.db.ExecContext(ctx, `
+			INSERT OR IGNORE INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+			VALUES ('monitor', ?, 'app', ?, datetime('now'))`,
+			check.ID, check.AppID)
+	}
 	return nil
 }
 
@@ -128,6 +135,16 @@ func (r *sqliteCheckRepo) Update(ctx context.Context, check *models.MonitorCheck
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return ErrNotFound
+	}
+	// Keep component_links in sync: monitor → app.
+	// Always remove the old link first, then re-insert if app_id is still set.
+	r.db.ExecContext(ctx, `
+		DELETE FROM component_links WHERE parent_type = 'monitor' AND parent_id = ?`, check.ID)
+	if check.AppID != "" {
+		r.db.ExecContext(ctx, `
+			INSERT OR IGNORE INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+			VALUES ('monitor', ?, 'app', ?, datetime('now'))`,
+			check.ID, check.AppID)
 	}
 	return nil
 }
@@ -226,6 +243,13 @@ func (r *sqliteCheckRepo) UpsertForComponent(ctx context.Context, check *models.
 		check.Enabled)
 	if err != nil {
 		return fmt.Errorf("upsert check for component: %w", err)
+	}
+	// Keep component_links in sync: monitor → app.
+	if check.AppID != "" {
+		r.db.ExecContext(ctx, `
+			INSERT OR IGNORE INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+			VALUES ('monitor', ?, 'app', ?, datetime('now'))`,
+			check.ID, check.AppID)
 	}
 	return nil
 }

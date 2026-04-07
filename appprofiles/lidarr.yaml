@@ -3,7 +3,6 @@ meta:
   category: Media
   icon: lidarr
   description: Music management and download automation
-  capability: full
   homepage: https://lidarr.audio
 
 webhook:

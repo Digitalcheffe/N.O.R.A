@@ -3,7 +3,6 @@ meta:
   category: Infrastructure
   icon: diun
   description: Docker image update notifier
-  capability: webhook_only
   homepage: https://crazymax.dev/diun
 
 webhook:

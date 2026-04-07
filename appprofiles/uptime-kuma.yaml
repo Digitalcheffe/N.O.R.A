@@ -3,7 +3,6 @@ meta:
   category: Monitoring
   icon: uptime-kuma
   description: Self-hosted uptime monitoring tool
-  capability: webhook_only
   homepage: https://github.com/louislam/uptime-kuma
 
 webhook:

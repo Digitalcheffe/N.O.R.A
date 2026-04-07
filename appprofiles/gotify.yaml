@@ -3,7 +3,6 @@ meta:
   category: Infrastructure
   icon: gotify
   description: Self-hosted push notification server
-  capability: monitor_only
   homepage: https://gotify.net
 
 webhook:
