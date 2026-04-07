@@ -134,6 +134,10 @@ func (m *enrichMockRouteRepo) ListDiscoveredRoutesByStatus(_ context.Context, _ 
 }
 func (m *enrichMockRouteRepo) SetDiscoveredRouteApp(_ context.Context, _, _ string) error { return nil }
 func (m *enrichMockRouteRepo) ClearDiscoveredRouteApp(_ context.Context, _ string) error  { return nil }
+func (m *enrichMockRouteRepo) ListByAppID(_ context.Context, _ string) ([]*models.DiscoveredRoute, error) {
+	return nil, nil
+}
+func (m *enrichMockRouteRepo) SyncRouteAppLink(_ context.Context, _, _, _ string) {}
 
 type enrichMockResourceRepo struct {
 	backfilled int64
