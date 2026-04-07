@@ -45,6 +45,10 @@
 
 .amc-timestamp--stale { color: var(--yellow, #eab308); }
 
+.amc-value.color-green  { color: var(--green); }
+.amc-value.color-yellow { color: var(--yellow); }
+.amc-value.color-red    { color: var(--red); }
+
 /* ── Skeleton ──────────────────────────────────────────────────────────────── */
 
 .amc-card--skeleton {

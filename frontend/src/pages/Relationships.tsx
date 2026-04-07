@@ -14,6 +14,7 @@ import type {
   ComponentLink,
   InfrastructureComponent,
   DiscoveredContainer,
+  DiscoveredRoute,
   MonitorCheck,
 } from '../api/types'
 import './Relationships.css'
@@ -119,14 +120,18 @@ export function Relationships() {
   const [allComponents, setAllComponents] = useState<InfrastructureComponent[]>([])
   const [allLinks,      setAllLinks]      = useState<ComponentLink[]>([])
   const [monitors,      setMonitors]      = useState<MonitorCheck[]>([])
+  const [allRoutes,     setAllRoutes]     = useState<DiscoveredRoute[]>([])
   const [loading,       setLoading]       = useState(true)
   const [error,         setError]         = useState('')
 
   // ── App panel state ─────────────────────────────────────────────────────────
-  const [appPanelApp,    setAppPanelApp]    = useState<App | null>(null)
-  const [appPanelCtrId,  setAppPanelCtrId]  = useState('')
-  const [appPanelBusy,   setAppPanelBusy]   = useState(false)
-  const [appPanelErr,    setAppPanelErr]    = useState('')
+  const [appPanelApp,       setAppPanelApp]       = useState<App | null>(null)
+  const [appPanelCtrId,     setAppPanelCtrId]     = useState('')
+  const [appPanelBusy,      setAppPanelBusy]      = useState(false)
+  const [appPanelErr,       setAppPanelErr]        = useState('')
+  const [appPanelRouteId,   setAppPanelRouteId]   = useState('')
+  const [appPanelRouteBusy, setAppPanelRouteBusy] = useState(false)
+  const [appPanelRouteErr,  setAppPanelRouteErr]  = useState('')
 
   // ── Infra panel state ───────────────────────────────────────────────────────
   const [infraPanelComp,     setInfraPanelComp]     = useState<InfrastructureComponent | null>(null)
@@ -147,12 +152,13 @@ export function Relationships() {
       setLoading(true)
       setError('')
       try {
-        const [appRes, ctrRes, infraRes, linkRes, moniRes] = await Promise.all([
+        const [appRes, ctrRes, infraRes, linkRes, moniRes, routeRes] = await Promise.all([
           appsApi.list(),
           discovery.allContainers(),
           infraApi.list(),
           linksApi.list(),
           checksApi.list(),
+          discovery.allRoutes(),
         ])
         if (cancelled) return
         setAllApps(appRes.data)
@@ -160,6 +166,7 @@ export function Relationships() {
         setAllComponents(infraRes.data)
         setAllLinks(linkRes.data)
         setMonitors(moniRes.data)
+        setAllRoutes(routeRes.data)
       } catch (e) {
         if (!cancelled) setError(String(e))
       } finally {
@@ -250,6 +257,49 @@ export function Relationships() {
     setAppPanelApp(app)
     setAppPanelCtrId(linkedCtr?.id ?? '')
     setAppPanelErr('')
+    setAppPanelRouteId('')
+    setAppPanelRouteErr('')
+  }
+
+  async function handleAppSave() {
+    if (!appPanelApp) return
+    const linkedCtr = containerByAppId.get(appPanelApp.id)
+    if (appPanelCtrId) {
+      await handleAppLink()
+    } else if (!appPanelCtrId && linkedCtr) {
+      await handleAppUnlink()
+    }
+    if (appPanelRouteId) await handleRouteLink()
+  }
+
+  async function handleRouteLink() {
+    if (!appPanelApp || !appPanelRouteId) return
+    setAppPanelRouteBusy(true); setAppPanelRouteErr('')
+    try {
+      await discovery.linkRouteApp(appPanelRouteId, appPanelApp.id)
+      setAllRoutes(prev => prev.map(r =>
+        r.id === appPanelRouteId ? { ...r, app_id: appPanelApp.id } : r
+      ))
+      setAppPanelRouteId('')
+    } catch (e) {
+      setAppPanelRouteErr(String(e))
+    } finally {
+      setAppPanelRouteBusy(false)
+    }
+  }
+
+  async function handleRouteUnlink(routeId: string) {
+    setAppPanelRouteBusy(true); setAppPanelRouteErr('')
+    try {
+      await discovery.unlinkRouteApp(routeId)
+      setAllRoutes(prev => prev.map(r =>
+        r.id === routeId ? { ...r, app_id: null } : r
+      ))
+    } catch (e) {
+      setAppPanelRouteErr(String(e))
+    } finally {
+      setAppPanelRouteBusy(false)
+    }
   }
 
   async function handleAppLink() {
@@ -344,6 +394,15 @@ export function Relationships() {
   // ── Unlinked containers: not yet linked to any app ──────────────────────────
   const unlinkedContainers = allContainers.filter(c => !c.app_id)
 
+  // ── Routes indexed by app_id ─────────────────────────────────────────────────
+  const routesByAppId = new Map<string, DiscoveredRoute[]>()
+  for (const r of allRoutes) {
+    if (r.app_id) {
+      const existing = routesByAppId.get(r.app_id) ?? []
+      routesByAppId.set(r.app_id, [...existing, r])
+    }
+  }
+
   // ── Containers linked to this app ───────────────────────────────────────────
   const appPanelLinkedCtr = appPanelApp ? containerByAppId.get(appPanelApp.id) : undefined
 
@@ -396,14 +455,16 @@ export function Relationships() {
                         <th>App</th>
                         <th>App Profile</th>
                         <th>Container</th>
+                        <th>Route</th>
                         <th>Status</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {[...allApps].sort((a, b) => a.name.localeCompare(b.name)).map(app => {
-                        const ctr  = containerByAppId.get(app.id)
-                        const comp = ctr ? componentById.get(ctr.infra_component_id) : undefined
+                        const ctr    = containerByAppId.get(app.id)
+                        const comp   = ctr ? componentById.get(ctr.infra_component_id) : undefined
+                        const routes = routesByAppId.get(app.id) ?? []
                         return (
                           <tr
                             key={app.id}
@@ -425,6 +486,17 @@ export function Relationships() {
                                 ? <span style={{ color: 'var(--text2)' }}>{ctr.container_name}</span>
                                 : <span className="rel-dim rel-unlinked-hint">Not linked</span>
                               }
+                            </td>
+
+                            <td className="rel-mono" style={{ fontSize: 11 }}>
+                              {routes.length > 0 ? (
+                                <span style={{ color: 'var(--accent)' }} title={routes.map(r => r.rule || r.router_name).join(', ')}>
+                                  {routes[0].rule || routes[0].router_name}
+                                  {routes.length > 1 && <span className="rel-dim"> +{routes.length - 1}</span>}
+                                </span>
+                              ) : (
+                                <span className="rel-dim">—</span>
+                              )}
                             </td>
 
                             <td>
@@ -650,23 +722,13 @@ export function Relationships() {
         subtitle={appPanelApp?.name}
         width={420}
         footer={
-          appPanelLinkedCtr ? (
-            <button
-              className="rel-panel-unlink-btn"
-              disabled={appPanelBusy}
-              onClick={() => void handleAppUnlink()}
-            >
-              {appPanelBusy ? 'Unlinking…' : 'Unlink'}
-            </button>
-          ) : (
-            <button
-              className="rel-panel-link-btn"
-              disabled={appPanelBusy || !appPanelCtrId}
-              onClick={() => void handleAppLink()}
-            >
-              {appPanelBusy ? 'Linking…' : 'Link'}
-            </button>
-          )
+          <button
+            className="rel-panel-link-btn"
+            disabled={appPanelBusy || appPanelRouteBusy}
+            onClick={() => void handleAppSave()}
+          >
+            {(appPanelBusy || appPanelRouteBusy) ? 'Saving…' : 'Save'}
+          </button>
         }
       >
         {appPanelApp && (
@@ -693,7 +755,7 @@ export function Relationships() {
               value={appPanelCtrId}
               onChange={e => setAppPanelCtrId(e.target.value)}
             >
-              <option value="">— Select container —</option>
+              <option value="">{appPanelLinkedCtr ? '— Remove container link —' : '— Select container —'}</option>
               {/* Show unlinked containers first, then all others */}
               {unlinkedContainers.length > 0 && (
                 <optgroup label="Available (unlinked)">
@@ -712,6 +774,68 @@ export function Relationships() {
             </select>
 
             {appPanelErr && <div className="rel-panel-error">{appPanelErr}</div>}
+
+            {/* ── Traefik Routes ── */}
+            <hr className="rel-panel-divider" />
+            <p className="rel-panel-label">Traefik Routes</p>
+
+            {(() => {
+              const linkedRoutes = allRoutes.filter(r => r.app_id === appPanelApp?.id)
+              const unlinkableRoutes = allRoutes.filter(r => !r.app_id)
+              const otherAppRoutes = allRoutes.filter(r => r.app_id && r.app_id !== appPanelApp?.id)
+              return (
+                <>
+                  {linkedRoutes.length > 0 && (
+                    <table className="rel-panel-table">
+                      <tbody>
+                        {linkedRoutes.map(r => (
+                          <tr key={r.id}>
+                            <td className="rel-mono rel-panel-table-rule" title={r.rule || r.router_name}>
+                              {r.domain ?? (r.rule || r.router_name)}
+                              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{r.router_name}</div>
+                            </td>
+                            <td className="rel-panel-table-status">
+                              <span className={`rel-route-status rel-route-status--${r.router_status}`}>{r.router_status}</span>
+                            </td>
+                            <td>
+                              <button
+                                className="rel-panel-unlink-sm"
+                                disabled={appPanelRouteBusy}
+                                onClick={() => void handleRouteUnlink(r.id)}
+                              >Unlink</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  <select
+                    className="rel-panel-select"
+                    style={{ marginTop: 8 }}
+                    value={appPanelRouteId}
+                    onChange={e => setAppPanelRouteId(e.target.value)}
+                  >
+                    <option value="">— Link a route —</option>
+                    {unlinkableRoutes.length > 0 && (
+                      <optgroup label="Unlinked">
+                        {unlinkableRoutes.map(r => (
+                          <option key={r.id} value={r.id}>{r.rule || r.router_name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherAppRoutes.length > 0 && (
+                      <optgroup label="Linked to another app">
+                        {otherAppRoutes.map(r => (
+                          <option key={r.id} value={r.id}>{r.rule || r.router_name}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  {appPanelRouteErr && <div className="rel-panel-error">{appPanelRouteErr}</div>}
+                </>
+              )
+            })()}
           </div>
         )}
       </SlidePanel>

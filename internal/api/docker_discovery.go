@@ -32,6 +32,7 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/{id}/routes", h.ListRoutes)
 	r.Get("/discovery/all", h.ListAll)
 	r.Get("/containers", h.ListAllContainers)
+	r.Get("/routes", h.ListAllRoutes)
 	r.Delete("/discovered-containers/{id}", h.DeleteContainer)
 	r.Post("/discovered-containers/{id}/link-app", h.LinkContainerApp)
 	r.Delete("/discovered-containers/{id}/link-app", h.UnlinkContainerApp)
@@ -151,6 +152,7 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 type discoveredRouteResponse struct {
 	ID             string     `json:"id"`
 	RouterName     string     `json:"router_name"`
+	Rule           string     `json:"rule"`
 	Domain         *string    `json:"domain"`
 	BackendService *string    `json:"backend_service"`
 	ContainerID    *string    `json:"container_id"`
@@ -174,6 +176,7 @@ func buildRouteResponses(routes []*models.DiscoveredRoute, containersByID map[st
 		item := discoveredRouteResponse{
 			ID:             ro.ID,
 			RouterName:     ro.RouterName,
+			Rule:           ro.Rule,
 			Domain:         ro.Domain,
 			BackendService: ro.BackendService,
 			ContainerID:    ro.ContainerID,
@@ -497,12 +500,6 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = req.AppID
 		route.AppID = &linkedAppID
-		// Wire the app into the topology: app → its Traefik component.
-		if comp, err := h.store.InfraComponents.Get(r.Context(), route.InfrastructureID); err == nil {
-			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", linkedAppID); err != nil {
-				log.Printf("LinkRouteApp: set component_link for app %s: %v", linkedAppID, err)
-			}
-		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusOK, route)
 
@@ -551,12 +548,6 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 		}
 		linkedAppID = app.ID
 		route.AppID = &linkedAppID
-		// Wire the new app into the topology: app → its Traefik component.
-		if comp, err := h.store.InfraComponents.Get(r.Context(), route.InfrastructureID); err == nil {
-			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", linkedAppID); err != nil {
-				log.Printf("LinkRouteApp: set component_link for app %s: %v", linkedAppID, err)
-			}
-		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, linkedAppID, nil, &id)
 		writeJSON(w, http.StatusCreated, app)
 
@@ -569,23 +560,13 @@ func (h *DockerDiscoveryHandler) LinkRouteApp(w http.ResponseWriter, r *http.Req
 // DELETE /api/v1/discovered-routes/{id}/link-app
 func (h *DockerDiscoveryHandler) UnlinkRouteApp(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	dr, err := h.store.DiscoveredRoutes.GetDiscoveredRoute(r.Context(), id)
-	if errors.Is(err, repo.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "discovered route not found")
-		return
-	} else if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	if err := h.store.DiscoveredRoutes.ClearDiscoveredRouteApp(r.Context(), id); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "discovered route not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-	// Remove the topology link for the app that was just unlinked.
-	if dr.AppID != nil {
-		if err := h.store.ComponentLinks.RemoveParent(r.Context(), "app", *dr.AppID); err != nil {
-			log.Printf("UnlinkRouteApp: remove component_link for app %s: %v", *dr.AppID, err)
-		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -618,6 +599,22 @@ func (h *DockerDiscoveryHandler) ListAllContainers(w http.ResponseWriter, r *htt
 		}
 	}
 
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":  out,
+		"total": len(out),
+	})
+}
+
+// ListAllRoutes returns a flat list of every discovered route across all Traefik components.
+// GET /api/v1/routes
+func (h *DockerDiscoveryHandler) ListAllRoutes(w http.ResponseWriter, r *http.Request) {
+	routes, err := h.store.DiscoveredRoutes.ListAllDiscoveredRoutes(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	allContainers, _ := h.store.DiscoveredContainers.ListAllDiscoveredContainers(r.Context())
+	out := buildRouteResponses(routes, containerNameIndex(allContainers))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data":  out,
 		"total": len(out),

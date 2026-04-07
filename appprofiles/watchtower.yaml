@@ -3,7 +3,6 @@ meta:
   category: Infrastructure
   icon: watchtower
   description: Automatic Docker container base image updates
-  capability: webhook_only
   homepage: https://containrrr.dev/watchtower
 
 webhook:

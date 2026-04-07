@@ -3,7 +3,6 @@ meta:
   category: Media
   icon: prowlarr
   description: Indexer manager and proxy for Usenet and torrents
-  capability: full
   homepage: https://prowlarr.com
 
 webhook:

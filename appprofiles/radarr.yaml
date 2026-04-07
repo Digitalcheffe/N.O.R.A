@@ -3,7 +3,6 @@ meta:
   category: Media
   icon: radarr
   description: Movie management and download automation
-  capability: full
   homepage: https://radarr.video
 
 webhook:

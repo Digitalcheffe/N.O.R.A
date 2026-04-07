@@ -3,7 +3,6 @@ meta:
   category: Storage
   icon: duplicati
   description: Open-source backup software
-  capability: webhook_only
   homepage: https://duplicati.com
 
 webhook:

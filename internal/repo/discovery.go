@@ -48,8 +48,14 @@ type DiscoveredRouteRepo interface {
 	ListDiscoveredRoutesByStatus(ctx context.Context, infrastructureID string, statusFilter string) ([]*models.DiscoveredRoute, error)
 	ListAllDiscoveredRoutes(ctx context.Context) ([]*models.DiscoveredRoute, error)
 	GetDiscoveredRoute(ctx context.Context, id string) (*models.DiscoveredRoute, error)
+	// ListByAppID returns all discovered routes linked to appID, ordered by router_name.
+	ListByAppID(ctx context.Context, appID string) ([]*models.DiscoveredRoute, error)
 	SetDiscoveredRouteApp(ctx context.Context, id string, appID string) error
 	ClearDiscoveredRouteApp(ctx context.Context, id string) error
+	// SyncRouteAppLink ensures a traefik_route → app entry exists in component_links
+	// for the route identified by (infrastructureID, routerName). Called by the
+	// Traefik discovery scanner after auto-resolving an app via container cross-ref.
+	SyncRouteAppLink(ctx context.Context, infrastructureID, routerName, appID string)
 }
 
 // ── DiscoveredContainerRepo implementation ────────────────────────────────────
@@ -101,6 +107,17 @@ func (r *sqliteDiscoveredContainerRepo) UpsertDiscoveredContainer(ctx context.Co
 	).Scan(&c.ID)
 	if err != nil {
 		return fmt.Errorf("upsert discovered container %s: %w", c.ContainerName, err)
+	}
+	// Keep component_links in sync: container → parent infra_component.
+	var parentType string
+	if err2 := r.db.QueryRowContext(ctx,
+		`SELECT type FROM infrastructure_components WHERE id = ?`, c.InfraComponentID,
+	).Scan(&parentType); err2 == nil {
+		r.db.ExecContext(ctx, `
+			INSERT INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+			VALUES (?, ?, 'container', ?, datetime('now'))
+			ON CONFLICT(child_type, child_id) DO UPDATE SET parent_type=excluded.parent_type, parent_id=excluded.parent_id`,
+			parentType, c.InfraComponentID, c.ID)
 	}
 	return nil
 }
@@ -161,10 +178,20 @@ func (r *sqliteDiscoveredContainerRepo) SetDiscoveredContainerApp(ctx context.Co
 	if n == 0 {
 		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
 	}
+	// Keep component_links in sync: app → container.
+	r.db.ExecContext(ctx, `
+		INSERT INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+		VALUES ('container', ?, 'app', ?, datetime('now'))
+		ON CONFLICT(child_type, child_id) DO UPDATE SET parent_type='container', parent_id=excluded.parent_id`,
+		id, appID)
 	return nil
 }
 
 func (r *sqliteDiscoveredContainerRepo) ClearDiscoveredContainerApp(ctx context.Context, id string) error {
+	// Resolve app_id before clearing so we can remove it from component_links.
+	var appID string
+	r.db.QueryRowContext(ctx, `SELECT app_id FROM discovered_containers WHERE id = ?`, id).Scan(&appID)
+
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE discovered_containers SET app_id = NULL WHERE id = ?`, id)
 	if err != nil {
@@ -173,6 +200,10 @@ func (r *sqliteDiscoveredContainerRepo) ClearDiscoveredContainerApp(ctx context.
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
+	}
+	// Remove the app → container link from component_links.
+	if appID != "" {
+		r.db.ExecContext(ctx, `DELETE FROM component_links WHERE child_type = 'app' AND child_id = ?`, appID)
 	}
 	return nil
 }
@@ -331,7 +362,25 @@ func (r *sqliteDiscoveredRouteRepo) UpsertDiscoveredRoute(ctx context.Context, r
 	if err != nil {
 		return fmt.Errorf("upsert discovered route %s: %w", ro.RouterName, err)
 	}
+	// Keep component_links in sync: traefik infra_component → traefik_route.
+	// Use a subquery to get the actual row ID (which may differ from ro.ID on conflict).
+	r.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+		SELECT 'traefik', ?, 'traefik_route', id, datetime('now')
+		FROM discovered_routes
+		WHERE infrastructure_id = ? AND router_name = ?`,
+		ro.InfrastructureID, ro.InfrastructureID, ro.RouterName)
 	return nil
+}
+
+func (r *sqliteDiscoveredRouteRepo) SyncRouteAppLink(ctx context.Context, infrastructureID, routerName, appID string) {
+	// INSERT OR IGNORE so we don't override an existing container → app parent.
+	r.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+		SELECT 'traefik_route', id, 'app', ?, datetime('now')
+		FROM discovered_routes
+		WHERE infrastructure_id = ? AND router_name = ?`,
+		appID, infrastructureID, routerName)
 }
 
 func (r *sqliteDiscoveredRouteRepo) ListDiscoveredRoutes(ctx context.Context, infrastructureID string) ([]*models.DiscoveredRoute, error) {
@@ -405,6 +454,24 @@ func (r *sqliteDiscoveredRouteRepo) GetDiscoveredRoute(ctx context.Context, id s
 	return &ro, nil
 }
 
+func (r *sqliteDiscoveredRouteRepo) ListByAppID(ctx context.Context, appID string) ([]*models.DiscoveredRoute, error) {
+	var routes []*models.DiscoveredRoute
+	// Match directly by app_id OR via container_id → discovered_containers.app_id
+	// (the latter handles routes discovered before app_id propagation was added).
+	err := r.db.SelectContext(ctx, &routes, `
+		SELECT `+routeSelectCols+`
+		FROM discovered_routes
+		WHERE app_id = ?
+		   OR container_id IN (
+		        SELECT id FROM discovered_containers WHERE app_id = ?
+		   )
+		ORDER BY router_name`, appID, appID)
+	if err != nil {
+		return nil, fmt.Errorf("list discovered routes for app %s: %w", appID, err)
+	}
+	return routes, nil
+}
+
 func (r *sqliteDiscoveredRouteRepo) SetDiscoveredRouteApp(ctx context.Context, id string, appID string) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE discovered_routes SET app_id = ? WHERE id = ?`, appID, id)
@@ -415,10 +482,20 @@ func (r *sqliteDiscoveredRouteRepo) SetDiscoveredRouteApp(ctx context.Context, i
 	if n == 0 {
 		return fmt.Errorf("discovered route %s: %w", id, ErrNotFound)
 	}
+	// Keep component_links in sync: traefik_route → app.
+	// INSERT OR IGNORE so we don't override an existing container → app parent link.
+	r.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO component_links (parent_type, parent_id, child_type, child_id, created_at)
+		VALUES ('traefik_route', ?, 'app', ?, datetime('now'))`,
+		id, appID)
 	return nil
 }
 
 func (r *sqliteDiscoveredRouteRepo) ClearDiscoveredRouteApp(ctx context.Context, id string) error {
+	// Resolve app_id before clearing so we can remove the specific link from component_links.
+	var appID string
+	r.db.QueryRowContext(ctx, `SELECT COALESCE(app_id,'') FROM discovered_routes WHERE id = ?`, id).Scan(&appID)
+
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE discovered_routes SET app_id = NULL WHERE id = ?`, id)
 	if err != nil {
@@ -427,6 +504,14 @@ func (r *sqliteDiscoveredRouteRepo) ClearDiscoveredRouteApp(ctx context.Context,
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return fmt.Errorf("discovered route %s: %w", id, ErrNotFound)
+	}
+	// Remove the traefik_route → app link from component_links.
+	// Only remove if this specific route was the parent (don't touch a container → app link).
+	if appID != "" {
+		r.db.ExecContext(ctx, `
+			DELETE FROM component_links
+			WHERE child_type = 'app' AND child_id = ? AND parent_type = 'traefik_route' AND parent_id = ?`,
+			appID, id)
 	}
 	return nil
 }

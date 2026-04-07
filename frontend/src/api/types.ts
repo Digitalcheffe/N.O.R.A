@@ -346,7 +346,7 @@ export interface DashboardSummaryResponse {
 
 // ── App Template Library ──────────────────────────────────────────────────────
 
-export type AppTemplateCapability = 'full' | 'webhook_only' | 'monitor_only' | 'docker_only' | 'limited'
+export type AppTemplateCapability = 'full' | 'webhook_only' | 'api_only' | 'monitor_only'
 
 export interface AppTemplate {
   id: string
@@ -885,3 +885,27 @@ export interface DigestRegistryListResponse {
   data: DigestRegistryEntry[]
   total: number
 }
+
+// ── App Infrastructure Chain ──────────────────────────────────────────────────
+
+export interface ChainNode {
+  type: string
+  id: string
+  name: string
+  status: string
+  detail?: string
+  icon_url?: string
+}
+
+export interface ChainTraefikRoute {
+  router: string
+  rule: string
+  service: string
+  status: string
+}
+
+export interface AppChainResponse {
+  chain: ChainNode[]
+  traefik: ChainTraefikRoute[]
+}
+

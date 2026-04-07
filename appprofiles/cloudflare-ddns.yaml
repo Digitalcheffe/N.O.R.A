@@ -3,7 +3,6 @@ meta:
   category: Network
   icon: cloudflare
   description: Automatic Cloudflare DNS updater for dynamic IP addresses
-  capability: docker_only
 
 webhook:
   setup_instructions: |

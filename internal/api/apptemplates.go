@@ -68,7 +68,7 @@ func (h *AppTemplatesHandler) List(w http.ResponseWriter, r *http.Request) {
 			Category:    t.Meta.Category,
 			Icon:        t.Meta.Icon,
 			Description: t.Meta.Description,
-			Capability:  t.Meta.Capability,
+			Capability:  apptemplate.InferCapability(t),
 			Homepage:    t.Meta.Homepage,
 		})
 	}
@@ -96,7 +96,7 @@ func (h *AppTemplatesHandler) Get(w http.ResponseWriter, r *http.Request) {
 			Category:    t.Meta.Category,
 			Icon:        t.Meta.Icon,
 			Description: t.Meta.Description,
-			Capability:  t.Meta.Capability,
+			Capability:  apptemplate.InferCapability(t),
 			Homepage:    t.Meta.Homepage,
 		},
 	}
@@ -181,10 +181,6 @@ func validateAppTemplateYAML(content string) []string {
 	if t.Meta.Description == "" {
 		errs = append(errs, "meta.description is required")
 	}
-	if t.Meta.Capability == "" {
-		errs = append(errs, "meta.capability is required")
-	}
-
 	return errs
 }
 

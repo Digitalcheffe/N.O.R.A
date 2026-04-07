@@ -356,10 +356,10 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 	}
 
 	// ── 3. App activity — per-app category breakdown ───────────────────────
-	// monitor_only / docker_only apps have no webhook/digest categories — route
+	// monitor_only apps have no webhook/digest categories — route
 	// them to ServiceSections so the email can render a separate Services block.
 	isServiceCapability := func(cap string) bool {
-		return cap == "monitor_only" || cap == "docker_only"
+		return cap == "monitor_only"
 	}
 
 	if d.profiler != nil {
@@ -373,7 +373,7 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 			}
 
 			// Service apps: no digest categories — list them in ServiceSections.
-			if isServiceCapability(profile.Meta.Capability) {
+			if isServiceCapability(apptemplate.InferCapability(profile)) {
 				data.ServiceSections = append(data.ServiceSections, DigestAppSection{
 					AppName:     app.Name,
 					ProfileName: profile.Meta.Name,

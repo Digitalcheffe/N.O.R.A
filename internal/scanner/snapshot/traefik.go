@@ -96,6 +96,7 @@ func (s *TraefikSnapshotScanner) TakeSnapshot(ctx context.Context, entityID, ent
 	if err != nil {
 		log.Printf("traefik snapshot: fetch services for %s: %v", c.Name, err)
 	} else {
+		log.Printf("traefik snapshot: %s: %d services from API", c.Name, len(svcs))
 		presentNames := make([]string, 0, len(svcs))
 		for _, svc := range svcs {
 			if strings.HasSuffix(svc.Name, "@internal") {

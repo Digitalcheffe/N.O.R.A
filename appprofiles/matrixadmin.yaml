@@ -3,7 +3,6 @@ meta:
   category: Infrastructure
   icon: matrix
   description: Synapse Admin UI for Matrix homeserver administration
-  capability: monitor_only
 
 webhook:
   setup_instructions: |

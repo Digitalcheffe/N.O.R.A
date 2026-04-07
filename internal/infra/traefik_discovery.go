@@ -94,13 +94,18 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 	// ── Build lookup maps ─────────────────────────────────────────────────────
 
 	// container_name → discovered_containers.id (UUID PK)
+	// container_name → discovered_containers.app_id (if linked)
 	containerByName := make(map[string]string)
+	containerAppByName := make(map[string]string) // container_name → app_id
 	containers, err := t.store.DiscoveredContainers.ListAllDiscoveredContainers(ctx)
 	if err != nil {
 		log.Printf("traefik discovery: list containers for cross-ref: %v", err)
 	} else {
 		for _, c := range containers {
 			containerByName[c.ContainerName] = c.ID
+			if c.AppID != nil && *c.AppID != "" {
+				containerAppByName[c.ContainerName] = *c.AppID
+			}
 		}
 	}
 
@@ -118,8 +123,12 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 		}
 
 		var containerIDPtr *string
+		var appIDPtr *string
 		if cid, ok := containerByName[backendService]; ok {
 			containerIDPtr = &cid
+		}
+		if aid, ok := containerAppByName[backendService]; ok {
+			appIDPtr = &aid
 		}
 
 		var domainPtr *string
@@ -158,6 +167,7 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 			Domain:           domainPtr,
 			BackendService:   backendPtr,
 			ContainerID:      containerIDPtr,
+			AppID:            appIDPtr,
 			LastSeenAt:       now,
 			CreatedAt:        now,
 			// Enriched fields (Infra-10).
@@ -171,6 +181,14 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 
 		if err := t.store.DiscoveredRoutes.UpsertDiscoveredRoute(ctx, route); err != nil {
 			log.Printf("traefik discovery: upsert route %s: %v", rr.Name, err)
+			continue
+		}
+		// If this route resolved to an app (via container cross-ref), sync
+		// the traefik_route → app link into component_links so all relationships
+		// live in the same place. INSERT OR IGNORE preserves any existing
+		// container → app parent link.
+		if appIDPtr != nil {
+			t.store.DiscoveredRoutes.SyncRouteAppLink(ctx, component.ID, rr.Name, *appIDPtr)
 		}
 	}
 

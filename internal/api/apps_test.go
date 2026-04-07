@@ -38,7 +38,7 @@ func newTestRouter(t *testing.T) http.Handler {
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
 	snapshotRepo := repo.NewAppMetricSnapshotRepo(db)
-	h := api.NewAppsHandler(appRepo, nil, nil, nil, snapshotRepo)
+	h := api.NewAppsHandler(appRepo, nil, nil, nil, snapshotRepo, nil)
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
@@ -304,7 +304,7 @@ func TestGetMetrics_ReturnsSnapshots(t *testing.T) {
 	db := newTestDB(t)
 	appRepo := repo.NewAppRepo(db)
 	snapshotRepo := repo.NewAppMetricSnapshotRepo(db)
-	h := api.NewAppsHandler(appRepo, nil, nil, nil, snapshotRepo)
+	h := api.NewAppsHandler(appRepo, nil, nil, nil, snapshotRepo, nil)
 	r := chi.NewRouter()
 	h.Routes(r)
 

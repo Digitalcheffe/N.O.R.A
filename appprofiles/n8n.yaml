@@ -3,7 +3,6 @@ meta:
   category: Automation
   icon: n8n
   description: Workflow automation platform
-  capability: full
   homepage: https://n8n.io
 
 webhook:
