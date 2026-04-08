@@ -2,15 +2,12 @@ package snapshot
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/digitalcheffe/nora/internal/infra"
-	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/internal/scanner"
 )
@@ -48,7 +45,6 @@ func (s *TraefikSnapshotScanner) TakeSnapshot(ctx context.Context, entityID, ent
 		return nil, fmt.Errorf("ping: %w", err)
 	}
 
-	now := time.Now().UTC()
 	changed := false
 
 	// ── Router enabled/disabled transitions ───────────────────────────────────
@@ -97,43 +93,12 @@ func (s *TraefikSnapshotScanner) TakeSnapshot(ctx context.Context, entityID, ent
 		log.Printf("traefik snapshot: fetch services for %s: %v", c.Name, err)
 	} else {
 		log.Printf("traefik snapshot: %s: %d services from API", c.Name, len(svcs))
-		presentNames := make([]string, 0, len(svcs))
 		for _, svc := range svcs {
 			if strings.HasSuffix(svc.Name, "@internal") {
 				continue
 			}
-			presentNames = append(presentNames, svc.Name)
 
-			// Upsert service row.
-			up, down := 0, 0
-			for _, state := range svc.ServerStatus {
-				if strings.EqualFold(state, "UP") {
-					up++
-				} else {
-					down++
-				}
-			}
-			ssJSON := "{}"
-			if b, err := json.Marshal(svc.ServerStatus); err == nil {
-				ssJSON = string(b)
-			}
-			row := &models.TraefikService{
-				ID:               entityID + ":" + svc.Name,
-				ComponentID:      entityID,
-				ServiceName:      svc.Name,
-				ServiceType:      svc.Type,
-				Status:           svc.Status,
-				ServerCount:      len(svc.ServerStatus),
-				ServersUp:        up,
-				ServersDown:      down,
-				ServerStatusJSON: ssJSON,
-				LastSeen:         now,
-			}
-			if err := s.store.TraefikServices.Upsert(ctx, row); err != nil {
-				log.Printf("traefik snapshot: upsert service %s for %s: %v", svc.Name, c.Name, err)
-			}
-
-			// Per-server state transitions.
+			// Per-server state transitions (in-memory only; health written to discovered_routes).
 			for serverURL, state := range svc.ServerStatus {
 				stateKey := entityID + ":" + svc.Name + ":" + serverURL
 				prev, _ := s.serverState.Swap(stateKey, state)
@@ -152,11 +117,6 @@ func (s *TraefikSnapshotScanner) TakeSnapshot(ctx context.Context, entityID, ent
 						fmt.Sprintf("[snapshot] Traefik backend recovered: %s → %s on %s", svc.Name, serverURL, c.Name))
 				}
 			}
-		}
-
-		// Remove services that no longer appear in Traefik.
-		if err := s.store.TraefikServices.DeleteAbsent(ctx, entityID, presentNames); err != nil {
-			log.Printf("traefik snapshot: delete absent services for %s: %v", c.Name, err)
 		}
 	}
 

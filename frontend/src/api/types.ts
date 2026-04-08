@@ -163,7 +163,6 @@ export interface TimeseriesFilter {
 
 export type CheckType = 'ping' | 'url' | 'ssl' | 'dns'
 export type CheckStatus = 'up' | 'warn' | 'down' | 'critical'
-export type SSLSource = 'traefik' | 'standalone'
 export type DNSRecordType = 'A' | 'AAAA' | 'MX' | 'CNAME' | 'TXT'
 
 export interface MonitorCheck {
@@ -176,8 +175,6 @@ export interface MonitorCheck {
   expected_status: number | null
   ssl_warn_days: number
   ssl_crit_days: number
-  ssl_source: SSLSource | null
-  integration_id: string | null
   source_component_id: string | null
   skip_tls_verify: boolean
   dns_record_type: DNSRecordType | null
@@ -199,54 +196,11 @@ export interface CreateCheckInput {
   expected_status?: number
   ssl_warn_days?: number
   ssl_crit_days?: number
-  ssl_source?: SSLSource
-  integration_id?: string
   skip_tls_verify?: boolean
   dns_record_type?: DNSRecordType
   dns_expected_value?: string
   dns_resolver?: string
   enabled?: boolean
-}
-
-// ── Infrastructure Integrations ───────────────────────────────────────────────
-
-export type IntegrationType = 'traefik'
-export type IntegrationStatus = 'ok' | 'error'
-
-export interface InfraIntegration {
-  id: string
-  type: IntegrationType
-  name: string
-  api_url: string
-  api_key?: string | null
-  enabled: boolean
-  last_synced_at: string | null
-  last_status: IntegrationStatus | null
-  last_error: string | null
-  created_at: string
-}
-
-export interface CreateIntegrationInput {
-  type: IntegrationType
-  name: string
-  api_url: string
-  api_key?: string | null
-}
-
-export interface TraefikCert {
-  id: string
-  integration_id: string
-  domain: string
-  issuer: string | null
-  expires_at: string | null
-  sans: string[]
-  last_seen_at: string
-}
-
-export interface SyncResult {
-  status: string
-  certs_found: number
-  synced_at: string
 }
 
 // ── Topology ─────────────────────────────────────────────────────────────────
@@ -374,16 +328,6 @@ export interface CustomProfile {
   name: string
   yaml_content: string
   created_at: string
-}
-
-// ── Integration Drivers ───────────────────────────────────────────────────────
-
-export interface IntegrationDriver {
-  name: string
-  label: string
-  description: string
-  capabilities: string[]
-  configured: boolean
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -662,7 +606,7 @@ export interface DiscoveredRoute {
   router_name: string
   rule: string
   domain: string | null
-  backend_service: string | null
+  service_name: string | null
   container_id: string | null
   app_id: string | null
   ssl_expiry: string | null
@@ -674,7 +618,13 @@ export interface DiscoveredRoute {
   entry_points: string | null  // JSON array string
   has_tls_resolver: number
   cert_resolver_name: string | null
-  service_name: string | null
+  // Service health fields (migration 042 / 049)
+  service_status: string | null
+  service_type: string | null
+  servers_total: number
+  servers_up: number
+  servers_down: number
+  servers_json: string | null  // JSON map: { "http://url:port": "UP"|"DOWN" }
 }
 
 export interface TraefikServiceDetail {
@@ -902,6 +852,12 @@ export interface ChainTraefikRoute {
   rule: string
   service: string
   status: string
+  service_status?: string
+  servers_up?: number
+  servers_down?: number
+  server_count?: number
+  servers_json?: string | null  // JSON map: { "http://url:port": "UP"|"DOWN" }
+  manual_link?: boolean
 }
 
 export interface AppChainResponse {

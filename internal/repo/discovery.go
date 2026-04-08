@@ -56,6 +56,10 @@ type DiscoveredRouteRepo interface {
 	// for the route identified by (infrastructureID, routerName). Called by the
 	// Traefik discovery scanner after auto-resolving an app via container cross-ref.
 	SyncRouteAppLink(ctx context.Context, infrastructureID, routerName, appID string)
+	// ListServicesForComponent returns a deduplicated service summary for a Traefik
+	// component, derived from discovered_routes grouped by service_name.
+	// If statusFilter is "down", only services with servers_down > 0 are returned.
+	ListServicesForComponent(ctx context.Context, infrastructureID string, statusFilter string) ([]*models.DiscoveredServiceSummary, error)
 }
 
 // ── DiscoveredContainerRepo implementation ────────────────────────────────────
@@ -329,7 +333,12 @@ const routeSelectCols = `id, infrastructure_id, router_name, rule,
 	last_seen_at, created_at,
 	COALESCE(router_status,'enabled') AS router_status,
 	provider, entry_points, COALESCE(has_tls_resolver,0) AS has_tls_resolver,
-	cert_resolver_name, service_name`
+	cert_resolver_name, service_name,
+	service_status, service_type,
+	COALESCE(servers_total,0) AS servers_total,
+	COALESCE(servers_up,0)    AS servers_up,
+	COALESCE(servers_down,0)  AS servers_down,
+	servers_json`
 
 func (r *sqliteDiscoveredRouteRepo) UpsertDiscoveredRoute(ctx context.Context, ro *models.DiscoveredRoute) error {
 	if ro.ID == "" {
@@ -337,28 +346,36 @@ func (r *sqliteDiscoveredRouteRepo) UpsertDiscoveredRoute(ctx context.Context, r
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO discovered_routes
-		  (id, infrastructure_id, router_name, rule, domain, backend_service,
+		  (id, infrastructure_id, router_name, rule, domain,
 		   container_id, app_id, ssl_expiry, ssl_issuer, last_seen_at, created_at,
-		   router_status, provider, entry_points, has_tls_resolver, cert_resolver_name, service_name)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   router_status, provider, entry_points, has_tls_resolver, cert_resolver_name,
+		   service_name, service_status, service_type, servers_total, servers_up, servers_down,
+		   servers_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(infrastructure_id, router_name) DO UPDATE SET
-		  rule              = excluded.rule,
-		  domain            = excluded.domain,
-		  backend_service   = excluded.backend_service,
-		  container_id      = excluded.container_id,
-		  ssl_expiry        = excluded.ssl_expiry,
-		  ssl_issuer        = excluded.ssl_issuer,
-		  last_seen_at      = excluded.last_seen_at,
-		  router_status     = excluded.router_status,
-		  provider          = excluded.provider,
-		  entry_points      = excluded.entry_points,
-		  has_tls_resolver  = excluded.has_tls_resolver,
+		  rule               = excluded.rule,
+		  domain             = excluded.domain,
+		  container_id       = excluded.container_id,
+		  ssl_expiry         = excluded.ssl_expiry,
+		  ssl_issuer         = excluded.ssl_issuer,
+		  last_seen_at       = excluded.last_seen_at,
+		  router_status      = excluded.router_status,
+		  provider           = excluded.provider,
+		  entry_points       = excluded.entry_points,
+		  has_tls_resolver   = excluded.has_tls_resolver,
 		  cert_resolver_name = excluded.cert_resolver_name,
-		  service_name      = excluded.service_name`,
-		ro.ID, ro.InfrastructureID, ro.RouterName, ro.Rule, ro.Domain, ro.BackendService,
+		  service_name       = excluded.service_name,
+		  service_status     = excluded.service_status,
+		  service_type       = excluded.service_type,
+		  servers_total      = excluded.servers_total,
+		  servers_up         = excluded.servers_up,
+		  servers_down       = excluded.servers_down,
+		  servers_json       = excluded.servers_json`,
+		ro.ID, ro.InfrastructureID, ro.RouterName, ro.Rule, ro.Domain,
 		ro.ContainerID, ro.AppID, ro.SSLExpiry, ro.SSLIssuer, ro.LastSeenAt, ro.CreatedAt,
 		ro.RouterStatus, ro.Provider, ro.EntryPoints, ro.HasTLSResolver,
-		ro.CertResolverName, ro.ServiceName)
+		ro.CertResolverName, ro.ServiceName, ro.ServiceStatus, ro.ServiceType,
+		ro.ServersTotal, ro.ServersUp, ro.ServersDown, ro.ServersJSON)
 	if err != nil {
 		return fmt.Errorf("upsert discovered route %s: %w", ro.RouterName, err)
 	}
@@ -514,4 +531,42 @@ func (r *sqliteDiscoveredRouteRepo) ClearDiscoveredRouteApp(ctx context.Context,
 			appID, id)
 	}
 	return nil
+}
+
+func (r *sqliteDiscoveredRouteRepo) ListServicesForComponent(ctx context.Context, infrastructureID string, statusFilter string) ([]*models.DiscoveredServiceSummary, error) {
+	baseQuery := `
+		SELECT
+		    infrastructure_id || ':' || service_name        AS id,
+		    infrastructure_id                               AS component_id,
+		    service_name,
+		    COALESCE(MAX(service_type), 'loadbalancer')    AS service_type,
+		    COALESCE(MAX(service_status), 'enabled')       AS status,
+		    COALESCE(MAX(servers_total), 0)                AS server_count,
+		    COALESCE(MAX(servers_up), 0)                   AS servers_up,
+		    COALESCE(MAX(servers_down), 0)                 AS servers_down,
+		    MAX(last_seen_at)                              AS last_seen
+		FROM discovered_routes
+		WHERE infrastructure_id = ? AND service_name IS NOT NULL
+		GROUP BY service_name`
+
+	var rows []*models.DiscoveredServiceSummary
+	var err error
+	if statusFilter == "down" {
+		err = r.db.SelectContext(ctx, &rows, baseQuery+`
+		HAVING COALESCE(MAX(servers_down), 0) > 0
+		ORDER BY service_name ASC`, infrastructureID)
+	} else {
+		err = r.db.SelectContext(ctx, &rows, baseQuery+`
+		ORDER BY service_name ASC`, infrastructureID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list services for infra %s: %w", infrastructureID, err)
+	}
+	for _, s := range rows {
+		s.ServerStatusJSON = "{}"
+	}
+	if rows == nil {
+		rows = []*models.DiscoveredServiceSummary{}
+	}
+	return rows, nil
 }

@@ -5,7 +5,6 @@ import type {
   InfrastructureComponent,
   TraefikOverview,
   DiscoveredRoute,
-  TraefikServiceDetail,
 } from '../api/types'
 import './TraefikDetail.css'
 
@@ -28,11 +27,13 @@ function parseEntryPoints(ep: string | null): string[] {
   return []
 }
 
-function parseServerStatus(json: string): Record<string, string> {
+function parseServersJSON(raw: string | null): [string, string][] {
+  if (!raw) return []
   try {
-    return JSON.parse(json) as Record<string, string>
+    const obj = JSON.parse(raw) as Record<string, string>
+    return Object.entries(obj)
   } catch {
-    return {}
+    return []
   }
 }
 
@@ -135,7 +136,7 @@ function OverviewSection({
   )
 }
 
-// ── Routers section ───────────────────────────────────────────────────────────
+// ── Routers + Services unified section ───────────────────────────────────────
 
 type RouterStatusFilter = 'all' | 'active' | 'disabled'
 
@@ -145,18 +146,15 @@ function RoutersSection({
   error,
   onRetry,
   sectionRef,
-  serviceHealthMap,
 }: {
   routers: DiscoveredRoute[]
   loading: boolean
   error: string | null
   onRetry: () => void
   sectionRef: React.RefObject<HTMLDivElement | null>
-  serviceHealthMap: Record<string, string>
 }) {
   const [statusFilter,   setStatusFilter]   = useState<RouterStatusFilter>('all')
   const [providerFilter, setProviderFilter] = useState<string>('all')
-  const [tooltipFor,     setTooltipFor]     = useState<string | null>(null)
 
   const providers = Array.from(
     new Set(routers.map(r => r.provider).filter((p): p is string => !!p))
@@ -222,6 +220,8 @@ function RoutersSection({
               <th>Domain / Rule</th>
               <th></th>
               <th>Service</th>
+              <th>Health</th>
+              <th>Backends</th>
               <th>Provider</th>
               <th>Entrypoint</th>
               <th></th>
@@ -233,7 +233,7 @@ function RoutersSection({
               <SkeletonRows count={5} />
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="tk-empty-cell">
+                <td colSpan={10} className="tk-empty-cell">
                   {routers.length === 0
                     ? 'No routers found — verify Traefik API is accessible.'
                     : 'No routers match the current filters.'}
@@ -241,12 +241,17 @@ function RoutersSection({
               </tr>
             ) : (
               filtered.map(r => {
-                const isEnabled = r.router_status === 'enabled'
-                const domain    = r.domain || parseDomain(r.rule)
-                const svcName   = r.service_name || r.backend_service || '—'
-                const eps       = parseEntryPoints(r.entry_points)
-                const ep0       = eps[0] ?? '—'
-                const health    = serviceHealthMap[svcName]
+                const isEnabled   = r.router_status === 'enabled'
+                const domain      = r.domain || parseDomain(r.rule)
+                const svcName     = r.service_name || '—'
+                const eps         = parseEntryPoints(r.entry_points)
+                const ep0         = eps[0] ?? '—'
+                const servers     = parseServersJSON(r.servers_json)
+                const hasHealth   = r.servers_total > 0
+                const allDown     = hasHealth && r.servers_down === r.servers_total
+                const someDown    = r.servers_down > 0 && !allDown
+                const svcDotClass = allDown ? 'offline' : someDown ? 'degraded' : hasHealth ? 'online' : 'unknown'
+                const healthLabel = hasHealth ? `${r.servers_up}/${r.servers_total}` : '—'
 
                 return (
                   <tr key={r.id} className={isEnabled ? '' : 'tk-row-disabled'}>
@@ -255,15 +260,31 @@ function RoutersSection({
                     </td>
                     <td className="tk-domain">{domain}</td>
                     <td className="tk-arrow tk-muted">→</td>
-                    <td
-                      className="tk-service-name"
-                      onMouseEnter={() => health ? setTooltipFor(r.id) : undefined}
-                      onMouseLeave={() => setTooltipFor(null)}
-                      style={{ position: 'relative' }}
-                    >
-                      {svcName}
-                      {tooltipFor === r.id && health && (
-                        <div className="tk-tooltip">{health}</div>
+                    <td className="tk-service-name">{svcName}</td>
+                    <td>
+                      {hasHealth ? (
+                        <span className="tk-svc-health">
+                          <span className={`tk-status-dot ${svcDotClass}`} />
+                          <span className={allDown ? 'tk-health-down' : someDown ? 'tk-health-partial' : 'tk-health-up'}>
+                            {healthLabel}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="tk-muted">—</span>
+                      )}
+                    </td>
+                    <td className="tk-backends-cell">
+                      {servers.length > 0 ? (
+                        <>
+                          <span className={servers[0][1].toUpperCase() === 'DOWN' ? 'tk-endpoint-down' : 'tk-endpoint'}>
+                            {servers[0][0]}
+                          </span>
+                          {servers.length > 1 && (
+                            <span className="tk-muted"> +{servers.length - 1}</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="tk-muted">—</span>
                       )}
                     </td>
                     <td>
@@ -293,133 +314,7 @@ function RoutersSection({
   )
 }
 
-// ── Services section ──────────────────────────────────────────────────────────
-
-type ServiceStatusFilter = 'all' | 'healthy' | 'degraded'
-
-function ServicesSection({
-  services,
-  loading,
-  error,
-  onRetry,
-}: {
-  services: TraefikServiceDetail[]
-  loading: boolean
-  error: string | null
-  onRetry: () => void
-}) {
-  const [statusFilter, setStatusFilter] = useState<ServiceStatusFilter>('all')
-
-  const sorted = [...services].sort((a, b) => {
-    const aDown = a.servers_down
-    const bDown = b.servers_down
-    if (aDown > 0 && bDown === 0) return -1
-    if (aDown === 0 && bDown > 0) return 1
-    return a.service_name.localeCompare(b.service_name)
-  })
-
-  const filtered = sorted.filter(s => {
-    if (statusFilter === 'healthy'  && s.servers_down > 0)  return false
-    if (statusFilter === 'degraded' && s.servers_down === 0) return false
-    return true
-  })
-
-  const degradedCount = services.filter(s => s.servers_down > 0).length
-  const countLabel = statusFilter !== 'all'
-    ? `${filtered.length} of ${services.length} services`
-    : degradedCount > 0
-      ? `${degradedCount} degraded of ${services.length}`
-      : `${services.length} service${services.length !== 1 ? 's' : ''}`
-
-  return (
-    <div className="tk-section">
-      <div className="tk-section-header-row">
-        <div className="tk-section-title" style={{ margin: 0 }}>Services</div>
-        <div className="tk-filters">
-          <select
-            className="tk-filter-select"
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as ServiceStatusFilter)}
-          >
-            <option value="all">All</option>
-            <option value="healthy">Healthy</option>
-            <option value="degraded">Degraded</option>
-          </select>
-          <span className="tk-count-label">{countLabel}</span>
-        </div>
-      </div>
-
-      {error ? (
-        <SectionError msg={error} onRetry={onRetry} />
-      ) : (
-        <table className="tk-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Service</th>
-              <th>Type</th>
-              <th>Health</th>
-              <th>Endpoints</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <SkeletonRows count={5} />
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="tk-empty-cell">
-                  {services.length === 0
-                    ? 'No services found.'
-                    : 'No services match the current filters.'}
-                </td>
-              </tr>
-            ) : (
-              filtered.map(s => {
-                const serverMap    = parseServerStatus(s.server_status_json)
-                const serverEntries = Object.entries(serverMap)
-                const first        = serverEntries[0]
-                const extra        = serverEntries.length > 1 ? serverEntries.length - 1 : 0
-
-                const allDown  = s.server_count > 0 && s.servers_down === s.server_count
-                const someDown = s.servers_down > 0 && !allDown
-                const dotClass = allDown ? 'offline' : someDown ? 'degraded' : 'online'
-                const healthFraction = s.server_count > 0 ? `${s.servers_up}/${s.server_count} UP` : '—'
-
-                return (
-                  <tr key={s.id} className={s.servers_down > 0 ? 'tk-row-error' : ''}>
-                    <td><span className={`tk-status-dot ${dotClass}`} /></td>
-                    <td className="tk-svc-name">{s.service_name}</td>
-                    <td><span className="tk-badge-muted">{s.service_type}</span></td>
-                    <td className={allDown ? 'tk-health-down' : someDown ? 'tk-health-partial' : 'tk-health-up'}>
-                      {healthFraction}
-                    </td>
-                    <td className="tk-endpoints-cell">
-                      {first ? (
-                        <>
-                          <span className={first[1].toUpperCase() === 'DOWN' ? 'tk-endpoint-down' : 'tk-endpoint'}>
-                            {first[0]}
-                          </span>
-                          {extra > 0 && <span className="tk-muted"> +{extra}</span>}
-                        </>
-                      ) : (
-                        <span className="tk-muted">—</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      )}
-    </div>
-  )
-}
-
 // ── TraefikContent ────────────────────────────────────────────────────────────
-// Content-only component rendered inside InfraComponentDetail's DetailPageLayout
-// shell. Exposes key data points via onOverviewLoaded so the parent can show
-// them in the header.
 
 interface TraefikContentProps {
   component: InfrastructureComponent
@@ -439,10 +334,6 @@ export function TraefikContent({ component, onOverviewLoaded }: TraefikContentPr
   const [routersLoading, setRoutersLoading] = useState(true)
   const [routersError,   setRoutersError]   = useState<string | null>(null)
 
-  const [services,        setServices]        = useState<TraefikServiceDetail[]>([])
-  const [servicesLoading, setServicesLoading] = useState(true)
-  const [servicesError,   setServicesError]   = useState<string | null>(null)
-
   const loadOverview = useCallback(() => {
     setOverviewLoading(true)
     traefikApi.getOverview(componentId)
@@ -459,24 +350,10 @@ export function TraefikContent({ component, onOverviewLoaded }: TraefikContentPr
       .finally(() => setRoutersLoading(false))
   }, [componentId])
 
-  const loadServices = useCallback(() => {
-    setServicesLoading(true)
-    traefikApi.getServices(componentId)
-      .then(r => { setServices(r.data); setServicesError(null) })
-      .catch(err => setServicesError(err instanceof Error ? err.message : 'Failed to load services'))
-      .finally(() => setServicesLoading(false))
-  }, [componentId])
-
   useEffect(() => {
     loadOverview()
     loadRouters()
-    loadServices()
-  }, [loadOverview, loadRouters, loadServices, tick])
-
-  const serviceHealthMap: Record<string, string> = {}
-  for (const s of services) {
-    serviceHealthMap[s.service_name] = `${s.servers_up}/${s.server_count} UP`
-  }
+  }, [loadOverview, loadRouters, tick])
 
   return (
     <>
@@ -493,20 +370,12 @@ export function TraefikContent({ component, onOverviewLoaded }: TraefikContentPr
         error={routersError}
         onRetry={loadRouters}
         sectionRef={routersSectionRef}
-        serviceHealthMap={serviceHealthMap}
-      />
-      <ServicesSection
-        services={services}
-        loading={servicesLoading}
-        error={servicesError}
-        onRetry={loadServices}
       />
     </>
   )
 }
 
-// Backward compat alias — App.tsx still imports TraefikDetail for the old route
-// which will be removed in this same cleanup pass.
+// Backward compat alias
 export { TraefikContent as TraefikDetail }
 
 // Helper used by InfraComponentDetail to build key data points from the overview.
@@ -517,4 +386,3 @@ export function traefikKeyDataPoints(overview: TraefikOverview | null): { label:
     { label: 'Services', value: overview ? String(overview.services_total) : '—' },
   ]
 }
-

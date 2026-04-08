@@ -176,18 +176,63 @@ export function AppChain({ chain, appStatus, traefik }: AppChainProps) {
           </div>
           <div className="app-chain-traefik-routes">
             {traefik.map((r, i) => (
-              <div key={i} className="chain-traefik-row">
-                <span className="chain-traefik-rule" title={r.rule}>{r.rule}</span>
-                <div className="chain-connector chain-connector--sm" aria-hidden>
-                  <span className="chain-connector-line" />
-                  <span className="chain-connector-arrow">›</span>
+              r.manual_link ? (
+                // Manually-linked Traefik component — no routes discovered yet.
+                // Show the component name + status without rule/service arrows.
+                <div key={i} className="chain-traefik-row chain-traefik-row--manual">
+                  <span className="chain-traefik-service">{r.router}</span>
+                  <div className="chain-status-row">
+                    <span className={`chain-dot ${statusClass(r.status)}`} />
+                    <span className="chain-status-text">{statusLabel(r.status) || 'Linked'}</span>
+                  </div>
+                  <span className="chain-traefik-manual-label">no routes discovered</span>
                 </div>
-                <span className="chain-traefik-service">{r.service || r.router}</span>
-                <div className="chain-status-row">
-                  <span className={`chain-dot ${statusClass(r.status)}`} />
-                  <span className="chain-status-text">{statusLabel(r.status)}</span>
+              ) : (
+                <div key={i} className="chain-traefik-row">
+                  {/* Router status + rule */}
+                  <div className="chain-status-row">
+                    <span className={`chain-dot ${statusClass(r.status)}`} title={`Router: ${statusLabel(r.status)}`} />
+                  </div>
+                  <span className="chain-traefik-rule" title={r.rule}>{r.rule}</span>
+
+                  {/* Arrow to service */}
+                  {(r.service || r.router) && (
+                    <>
+                      <div className="chain-connector chain-connector--sm" aria-hidden>
+                        <span className="chain-connector-line" />
+                        <span className="chain-connector-arrow">›</span>
+                      </div>
+                      {/* Service name + its own health */}
+                      <span className="chain-traefik-service">{r.service || r.router}</span>
+                      {r.service_status && (
+                        <div className="chain-status-row chain-traefik-svc-status">
+                          <span className={`chain-dot ${statusClass(r.service_status)}`} title={`Service: ${statusLabel(r.service_status)}`} />
+                          {(r.server_count ?? 0) > 0 && (
+                            <span className="chain-traefik-servers">
+                              {r.servers_up}/{r.server_count}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {/* First backend host from servers_json */}
+                      {(() => {
+                        if (!r.servers_json) return null
+                        try {
+                          const entries = Object.entries(JSON.parse(r.servers_json) as Record<string, string>)
+                          if (entries.length === 0) return null
+                          const [url, st] = entries[0]
+                          const isDown = st.toUpperCase() === 'DOWN'
+                          return (
+                            <span className={`chain-traefik-backend${isDown ? ' chain-traefik-backend--down' : ''}`}>
+                              {url}{entries.length > 1 ? ` +${entries.length - 1}` : ''}
+                            </span>
+                          )
+                        } catch { return null }
+                      })()}
+                    </>
+                  )}
                 </div>
-              </div>
+              )
             ))}
           </div>
         </div>

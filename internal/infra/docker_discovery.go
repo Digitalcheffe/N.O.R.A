@@ -78,11 +78,19 @@ func extractEnrichment(c container.Summary) *containerEnrichment {
 		dockerCreatedAt = &t
 	}
 
-	// Collect network names from NetworkSettings.
-	var networkNames []string
+	// Collect networks with their container IPs.
+	type networkEntry struct {
+		Name string `json:"name"`
+		IP   string `json:"ip,omitempty"`
+	}
+	var networks []networkEntry
 	if c.NetworkSettings != nil {
-		for name := range c.NetworkSettings.Networks {
-			networkNames = append(networkNames, name)
+		for name, ep := range c.NetworkSettings.Networks {
+			entry := networkEntry{Name: name}
+			if ep != nil && ep.IPAddress != "" {
+				entry.IP = ep.IPAddress
+			}
+			networks = append(networks, entry)
 		}
 	}
 
@@ -90,7 +98,7 @@ func extractEnrichment(c container.Summary) *containerEnrichment {
 		Ports:           enc(c.Ports),
 		Labels:          enc(c.Labels),
 		Volumes:         enc(c.Mounts),
-		Networks:        enc(networkNames),
+		Networks:        enc(networks),
 		DockerCreatedAt: dockerCreatedAt,
 	}
 }

@@ -767,13 +767,13 @@ func (h *InfraComponentHandler) GetSNMPDetail(w http.ResponseWriter, r *http.Req
 	}
 
 	// No poll has run yet — return a zeroed no_data response so the UI can render.
-	if comp.SNMPMeta == nil || *comp.SNMPMeta == "" {
+	if comp.Meta == nil || *comp.Meta == "" {
 		resp := snmpDetailResponse{NoData: true, Disks: []snmpDetailDisk{}}
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 
-	// Parse snmp_meta snapshot written by the poller.
+	// Parse meta snapshot written by the SNMP poller.
 	var meta struct {
 		OSDescription string  `json:"os_description"`
 		Uptime        string  `json:"uptime"`
@@ -791,8 +791,8 @@ func (h *InfraComponentHandler) GetSNMPDetail(w http.ResponseWriter, r *http.Req
 			Percent    float64 `json:"percent"`
 		} `json:"disks"`
 	}
-	if jsonErr := json.Unmarshal([]byte(*comp.SNMPMeta), &meta); jsonErr != nil {
-		writeError(w, http.StatusInternalServerError, "failed to parse snmp_meta")
+	if jsonErr := json.Unmarshal([]byte(*comp.Meta), &meta); jsonErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse meta")
 		return
 	}
 
@@ -823,7 +823,7 @@ func (h *InfraComponentHandler) GetSNMPDetail(w http.ResponseWriter, r *http.Req
 
 // ── Synology detail ───────────────────────────────────────────────────────────
 
-// GetSynologyDetail returns the latest Synology DSM snapshot stored in synology_meta.
+// GetSynologyDetail returns the latest Synology DSM snapshot stored in meta.
 // GET /api/v1/infrastructure/{id}/synology
 func (h *InfraComponentHandler) GetSynologyDetail(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
@@ -842,7 +842,7 @@ func (h *InfraComponentHandler) GetSynologyDetail(w http.ResponseWriter, r *http
 	}
 
 	// No poll has run yet — return a zero-value no_data response so the UI renders.
-	if comp.SynologyMeta == nil || *comp.SynologyMeta == "" {
+	if comp.Meta == nil || *comp.Meta == "" {
 		resp := infra.SynologyMeta{
 			Volumes: []infra.SynologyVolume{},
 			Disks:   []infra.SynologyDisk{},
@@ -852,8 +852,8 @@ func (h *InfraComponentHandler) GetSynologyDetail(w http.ResponseWriter, r *http
 	}
 
 	var meta infra.SynologyMeta
-	if jsonErr := json.Unmarshal([]byte(*comp.SynologyMeta), &meta); jsonErr != nil {
-		writeError(w, http.StatusInternalServerError, "failed to parse synology_meta")
+	if jsonErr := json.Unmarshal([]byte(*comp.Meta), &meta); jsonErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse meta")
 		return
 	}
 	if meta.Volumes == nil {
@@ -994,7 +994,8 @@ func (h *InfraComponentHandler) ListEvents(w http.ResponseWriter, r *http.Reques
 
 // ── Traefik expanded endpoints (Infra-10) ────────────────────────────────────
 
-// GetTraefikOverview returns the latest traefik_overview row for the component.
+// GetTraefikOverview returns the latest traefik overview for the component.
+// Data is read from the traefik_meta JSON column on infrastructure_components.
 // GET /api/v1/infrastructure/{id}/traefik/overview
 func (h *InfraComponentHandler) GetTraefikOverview(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
@@ -1011,8 +1012,7 @@ func (h *InfraComponentHandler) GetTraefikOverview(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadRequest, "component is not a traefik type")
 		return
 	}
-	ov, err := h.store.TraefikOverview.Get(r.Context(), id)
-	if err != nil {
+	if comp.Meta == nil || *comp.Meta == "" {
 		// Not polled yet — return a zeroed structure so the UI can render something.
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"component_id":      id,
@@ -1027,6 +1027,12 @@ func (h *InfraComponentHandler) GetTraefikOverview(w http.ResponseWriter, r *htt
 		})
 		return
 	}
+	var ov map[string]interface{}
+	if err := json.Unmarshal([]byte(*comp.Meta), &ov); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to parse meta")
+		return
+	}
+	ov["component_id"] = id
 	writeJSON(w, http.StatusOK, ov)
 }
 
@@ -1060,7 +1066,8 @@ func (h *InfraComponentHandler) GetTraefikRouters(w http.ResponseWriter, r *http
 	})
 }
 
-// GetTraefikServices returns all traefik_services for the component.
+// GetTraefikServices returns a deduplicated service summary for the component,
+// derived from discovered_routes grouped by service_name.
 // Supports ?status=down filter (servers_down > 0).
 // GET /api/v1/infrastructure/{id}/traefik/services
 func (h *InfraComponentHandler) GetTraefikServices(w http.ResponseWriter, r *http.Request) {
@@ -1079,7 +1086,7 @@ func (h *InfraComponentHandler) GetTraefikServices(w http.ResponseWriter, r *htt
 		return
 	}
 	statusFilter := r.URL.Query().Get("status")
-	svcs, err := h.store.TraefikServices.ListByComponent(r.Context(), id, statusFilter)
+	svcs, err := h.store.DiscoveredRoutes.ListServicesForComponent(r.Context(), id, statusFilter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

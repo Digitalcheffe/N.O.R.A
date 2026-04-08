@@ -32,7 +32,7 @@ func Load() *Config {
 		DBPath:         getEnvStr("NORA_DB_PATH", "/data/nora.db"),
 		TemplatesPath:  getEnvStr("NORA_TEMPLATES_PATH", "/data/templates"),
 		IconsPath:      getEnvStr("NORA_ICONS_PATH", "/data/icons"),
-		Port:           getEnvStr("NORA_PORT", "8081"),
+		Port:           getEnvStr("NORA_PORT", getEnvStr("PORT", "8081")),
 		LogLevel:       getEnvStr("NORA_LOG_LEVEL", "info"),
 		DigestSchedule: getEnvStr("NORA_DIGEST_SCHEDULE", "0 8 1 * *"),
 		Timezone:       getEnvStr("NORA_TIMEZONE", "UTC"),

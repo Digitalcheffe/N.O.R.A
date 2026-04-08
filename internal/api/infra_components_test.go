@@ -20,14 +20,12 @@ func newInfraComponentRouter(t *testing.T) http.Handler {
 	rollups := repo.NewResourceRollupRepo(db)
 	checks := repo.NewCheckRepo(db)
 	events := repo.NewEventRepo(db)
-	tc := repo.NewTraefikComponentRepo(db)
 	store := repo.NewStore(
 		repo.NewAppRepo(db), events, checks,
 		repo.NewRollupRepo(db), repo.NewResourceReadingRepo(db), rollups,
-		ic, repo.NewDockerEngineRepo(db),
-		repo.NewInfraRepo(db), repo.NewSettingsRepo(db), repo.NewMetricsRepo(db),
-		repo.NewUserRepo(db), tc,
-		repo.NewTraefikOverviewRepo(db), repo.NewTraefikServiceRepo(db),
+		ic,
+		repo.NewSettingsRepo(db), repo.NewMetricsRepo(db),
+		repo.NewUserRepo(db),
 		repo.NewDiscoveredContainerRepo(db), repo.NewDiscoveredRouteRepo(db), nil, nil, nil, nil, nil,
 		repo.NewComponentLinkRepo(db),
 	)

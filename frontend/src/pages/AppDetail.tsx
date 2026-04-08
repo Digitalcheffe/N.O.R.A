@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { DetailPageLayout } from '../components/DetailPageLayout'
-import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi, integrations as integrationsApi } from '../api/client'
-import type { App, AppChainResponse, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck, InfraIntegration, TraefikCert } from '../api/types'
+import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi } from '../api/client'
+import type { App, AppChainResponse, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck } from '../api/types'
 import { AppChain } from '../components/AppChain'
 import { AppMetricCard, AppMetricCardSkeleton } from '../components/AppMetricCard'
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
@@ -339,8 +339,6 @@ export function AppDetail() {
   const [addCheckForm, setAddCheckForm] = useState<FormFields>({ ...defaultForm })
   const [addCheckError, setAddCheckError] = useState<string | null>(null)
   const [addCheckSubmitting, setAddCheckSubmitting] = useState(false)
-  const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
-  const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
   const [appMetrics, setAppMetrics] = useState<AppMetricSnapshot[]>([])
   const [metricsLoading, setMetricsLoading] = useState(true)
   const [polling, setPolling] = useState(false)
@@ -397,20 +395,6 @@ export function AppDetail() {
     if (!id) navigate('/apps')
   }, [id, navigate])
 
-  useEffect(() => {
-    integrationsApi.list()
-      .then(res => {
-        const traefik = res.data.filter(i => i.type === 'traefik' && i.enabled)
-        setTraefikIntegrations(traefik)
-        if (traefik.length > 0) {
-          return integrationsApi.certs(traefik[0].id)
-            .then(certsRes => setTraefikCerts(certsRes.data))
-            .catch(() => {})
-        }
-      })
-      .catch(() => {})
-  }, [])
-
   function openAddCheck() {
     setAddCheckForm({ ...defaultForm, app_id: appId })
     setAddCheckError(null)
@@ -423,8 +407,7 @@ export function AppDetail() {
     if (err) { setAddCheckError(err); return }
     setAddCheckSubmitting(true)
     try {
-      const integrationId = addCheckForm.ssl_source === 'traefik' ? addCheckForm.integration_id : undefined
-      const created = await checksApi.create(formToInput(addCheckForm, integrationId))
+      const created = await checksApi.create(formToInput(addCheckForm))
       setAppChecks(prev => [...prev, created])
       setShowAddCheck(false)
       setAddCheckForm({ ...defaultForm })
@@ -433,13 +416,6 @@ export function AppDetail() {
     } finally {
       setAddCheckSubmitting(false)
     }
-  }
-
-  function handleIntegrationChange(integrationId: string) {
-    if (!integrationId) return
-    integrationsApi.certs(integrationId)
-      .then(res => setTraefikCerts(res.data))
-      .catch(() => {})
   }
 
   async function handlePollNow() {
@@ -655,9 +631,6 @@ export function AppDetail() {
           submitting={addCheckSubmitting}
           title=""
           submitLabel="Add Check"
-          traefikIntegrations={traefikIntegrations}
-          traefikCerts={traefikCerts}
-          onIntegrationChange={handleIntegrationChange}
           hideActions
         />
       </SlidePanel>

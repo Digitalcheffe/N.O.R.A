@@ -32,14 +32,9 @@ func newSNMPTestStore(t *testing.T) *repo.Store {
 		repo.NewResourceReadingRepo(db),
 		repo.NewResourceRollupRepo(db),
 		repo.NewInfraComponentRepo(db),
-		repo.NewDockerEngineRepo(db),
-		repo.NewInfraRepo(db),
 		repo.NewSettingsRepo(db),
 		repo.NewMetricsRepo(db),
 		repo.NewUserRepo(db),
-		repo.NewTraefikComponentRepo(db),
-		repo.NewTraefikOverviewRepo(db),
-		repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db),
 		repo.NewDiscoveredRouteRepo(db),
 		nil,
@@ -481,11 +476,11 @@ func TestSNMPPoller_Poll_HappyPath(t *testing.T) {
 	}
 
 	// snmp_meta should be written and parseable.
-	if comp.SNMPMeta == nil || *comp.SNMPMeta == "" {
+	if comp.Meta == nil || *comp.Meta == "" {
 		t.Fatal("snmp_meta should be set after poll")
 	}
 	var meta SNMPMeta
-	if err := json.Unmarshal([]byte(*comp.SNMPMeta), &meta); err != nil {
+	if err := json.Unmarshal([]byte(*comp.Meta), &meta); err != nil {
 		t.Fatalf("parse snmp_meta JSON: %v", err)
 	}
 	if meta.Hostname != "testhost" {

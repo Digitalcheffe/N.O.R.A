@@ -13,14 +13,9 @@ import (
 )
 
 // SSLSnapshotJob captures SSL certificate expiry conditions for all enabled
-// SSL monitor checks every SnapshotInterval.
-//
-// For Traefik-sourced checks (ssl_source="traefik"), cert data is read from the
-// traefik_certs cache. For standalone checks a direct TLS dial is made.
-//
-// Unlike the metric-based monitor scheduler, this job fires events only on
-// condition changes (ok/warn/error/critical bucket transitions), not on every
-// status change.
+// SSL monitor checks every SnapshotInterval by making a direct TLS dial.
+// It fires events only on condition changes (ok/warn/error/critical bucket
+// transitions), not on every status change.
 type SSLSnapshotJob struct {
 	store *repo.Store
 }
@@ -44,44 +39,20 @@ func (j *SSLSnapshotJob) Run(ctx context.Context) {
 		if !c.Enabled || c.Type != "ssl" {
 			continue
 		}
-		j.snapshotCheck(ctx, c.ID, c.Name, c.Target, c.SSLSource, now)
+		j.snapshotCheck(ctx, c.ID, c.Name, c.Target, now)
 	}
 }
 
-// snapshotCheck snapshots a single SSL check.
+// snapshotCheck snapshots a single SSL check by dialing the target over TLS.
 func (j *SSLSnapshotJob) snapshotCheck(
 	ctx context.Context,
 	checkID, checkName, target string,
-	sslSource *string,
 	now time.Time,
 ) {
-	var daysRemaining int
-	var issuer, subject string
-
-	if sslSource != nil && *sslSource == "traefik" {
-		domain := target
-		cert, err := j.store.Infra.GetCertByDomain(ctx, domain)
-		if err != nil {
-			log.Printf("ssl snapshot: traefik cert for %s: %v", domain, err)
-			return
-		}
-		if cert.ExpiresAt == nil {
-			return
-		}
-		daysRemaining = int(time.Until(*cert.ExpiresAt).Hours() / 24)
-		if cert.Issuer != nil {
-			issuer = *cert.Issuer
-		}
-		subject = cert.Domain
-	} else {
-		d, iss, sub, err := dialSSL(ctx, target)
-		if err != nil {
-			log.Printf("ssl snapshot: dial %s: %v", target, err)
-			return
-		}
-		daysRemaining = d
-		issuer = iss
-		subject = sub
+	daysRemaining, issuer, subject, err := dialSSL(ctx, target)
+	if err != nil {
+		log.Printf("ssl snapshot: dial %s: %v", target, err)
+		return
 	}
 
 	// Snapshot the raw days remaining value.

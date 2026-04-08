@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -119,6 +120,24 @@ func (s *DockerDiscoveryScanner) Discover(ctx context.Context, entityID string, 
 	if found == 0 && disappeared == 0 {
 		writeDiscoveryEvent(ctx, s.store, entityID, c.Name, "docker_engine", "debug",
 			fmt.Sprintf("[discovery] %s discovery completed — no changes", c.Name))
+	}
+
+	// Write container summary to meta.
+	running := 0
+	for _, ct := range containers {
+		if ct.State == "running" {
+			running++
+		}
+	}
+	if metaBytes, jsonErr := json.Marshal(map[string]interface{}{
+		"containers_running": running,
+		"containers_stopped": len(containers) - running,
+		"containers_total":   len(containers),
+		"polled_at":          now.Format(time.RFC3339),
+	}); jsonErr == nil {
+		if updateErr := s.store.InfraComponents.UpdateMeta(ctx, entityID, string(metaBytes)); updateErr != nil {
+			log.Printf("docker discovery: write meta for %s: %v", c.Name, updateErr)
+		}
 	}
 
 	return &scanner.DiscoveryResult{

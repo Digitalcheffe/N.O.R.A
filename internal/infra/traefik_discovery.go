@@ -84,11 +84,32 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 
 	client := NewTraefikClient(creds.APIURL, creds.APIKey)
 
-	// ── Fetch routers from Traefik ────────────────────────────────────────────
+	// ── Fetch routers and services from Traefik ──────────────────────────────
 
 	routers, err := client.FetchRouters(ctx)
 	if err != nil {
 		return err
+	}
+
+	// Build a service_name → TraefikServiceStatus map so each route can be
+	// enriched with its service's health in a single pass.
+	// Index by both the full name ("sonarr@docker") and the stripped name
+	// ("sonarr") because the router API often omits the provider suffix while
+	// the services API always includes it.
+	serviceMap := make(map[string]TraefikServiceStatus)
+	if svcs, err := client.FetchServices(ctx); err != nil {
+		log.Printf("traefik discovery: %s: fetch services (non-fatal): %v", component.Name, err)
+	} else {
+		for _, s := range svcs {
+			serviceMap[s.Name] = s
+			// Also index by the bare name without the @provider suffix.
+			if idx := strings.Index(s.Name, "@"); idx >= 0 {
+				bare := s.Name[:idx]
+				if _, exists := serviceMap[bare]; !exists {
+					serviceMap[bare] = s
+				}
+			}
+		}
 	}
 
 	// ── Build lookup maps ─────────────────────────────────────────────────────
@@ -115,29 +136,32 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 	for _, rr := range routers {
 		domain := ParseHostFromRule(rr.Rule)
 
-		// Strip Traefik provider suffix (e.g. "sonarr@docker" → "sonarr") for
-		// container cross-referencing only.
-		backendService := rr.ServiceName
-		if idx := strings.Index(backendService, "@"); idx >= 0 {
-			backendService = backendService[:idx]
+		// Build the full canonical service name as "name@provider" (e.g. "sonarr@docker",
+		// "api@internal"). If the service name already contains "@" it already carries
+		// its provider suffix — leave it as-is.
+		fullServiceName := rr.ServiceName
+		if !strings.Contains(rr.ServiceName, "@") && rr.Provider != "" {
+			fullServiceName = rr.ServiceName + "@" + rr.Provider
+		}
+
+		// Strip provider suffix for container cross-referencing only.
+		bareService := fullServiceName
+		if idx := strings.Index(bareService, "@"); idx >= 0 {
+			bareService = bareService[:idx]
 		}
 
 		var containerIDPtr *string
 		var appIDPtr *string
-		if cid, ok := containerByName[backendService]; ok {
+		if cid, ok := containerByName[bareService]; ok {
 			containerIDPtr = &cid
 		}
-		if aid, ok := containerAppByName[backendService]; ok {
+		if aid, ok := containerAppByName[bareService]; ok {
 			appIDPtr = &aid
 		}
 
 		var domainPtr *string
 		if domain != nil {
 			domainPtr = domain
-		}
-		var backendPtr *string
-		if backendService != "" {
-			backendPtr = &backendService
 		}
 
 		// Entry points serialised as a JSON array.
@@ -165,7 +189,6 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 			RouterName:       rr.Name,
 			Rule:             rr.Rule,
 			Domain:           domainPtr,
-			BackendService:   backendPtr,
 			ContainerID:      containerIDPtr,
 			AppID:            appIDPtr,
 			LastSeenAt:       now,
@@ -176,7 +199,30 @@ func (t *TraefikDiscovery) Run(ctx context.Context, component *models.Infrastruc
 			EntryPoints:      entryPointsJSON,
 			HasTLSResolver:   hasTLS,
 			CertResolverName: strPtr(rr.TLSCertResolver),
-			ServiceName:      strPtr(rr.ServiceName),
+			ServiceName:      strPtr(fullServiceName),
+		}
+
+		// Join service health using the full canonical service name.
+		if svc, ok := serviceMap[fullServiceName]; ok {
+			up, down := 0, 0
+			for _, st := range svc.ServerStatus {
+				if strings.EqualFold(st, "up") {
+					up++
+				} else {
+					down++
+				}
+			}
+			route.ServiceStatus = strPtr(svc.Status)
+			route.ServiceType   = strPtr(svc.Type)
+			route.ServersTotal  = up + down
+			route.ServersUp     = up
+			route.ServersDown   = down
+			if len(svc.ServerStatus) > 0 {
+				if b, jsonErr := json.Marshal(svc.ServerStatus); jsonErr == nil {
+					s := string(b)
+					route.ServersJSON = &s
+				}
+			}
 		}
 
 		if err := t.store.DiscoveredRoutes.UpsertDiscoveredRoute(ctx, route); err != nil {

@@ -62,15 +62,35 @@ type PortainerEndpoint struct {
 	Type int    `json:"Type"`
 }
 
+// PortainerContainerPort is one port binding from the Docker container list.
+type PortainerContainerPort struct {
+	IP          string `json:"IP,omitempty"`
+	PrivatePort uint16 `json:"PrivatePort"`
+	PublicPort  uint16 `json:"PublicPort,omitempty"`
+	Type        string `json:"Type"`
+}
+
+// PortainerEndpointSettings holds per-network info for a container.
+type PortainerEndpointSettings struct {
+	IPAddress string `json:"IPAddress"`
+}
+
+// PortainerNetworkSettings holds the networks map from the container list response.
+type PortainerNetworkSettings struct {
+	Networks map[string]*PortainerEndpointSettings `json:"Networks"`
+}
+
 // PortainerContainer mirrors a Docker container list entry returned via
 // GET /api/endpoints/{id}/docker/containers/json?all=true
 type PortainerContainer struct {
-	ID     string            `json:"Id"`
-	Names  []string          `json:"Names"`
-	Image  string            `json:"Image"`
-	State  string            `json:"State"`
-	Status string            `json:"Status"`
-	Labels map[string]string `json:"Labels"`
+	ID              string                   `json:"Id"`
+	Names           []string                 `json:"Names"`
+	Image           string                   `json:"Image"`
+	State           string                   `json:"State"`
+	Status          string                   `json:"Status"`
+	Labels          map[string]string        `json:"Labels"`
+	Ports           []PortainerContainerPort `json:"Ports"`
+	NetworkSettings *PortainerNetworkSettings `json:"NetworkSettings"`
 }
 
 // FirstName returns the primary container name with the leading slash stripped.

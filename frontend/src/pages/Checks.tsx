@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SSLRow } from '../components/SSLRow'
-import { checks as checksApi, integrations as integrationsApi, apps as appsApi, appTemplates as appTemplatesApi } from '../api/client'
-import type { App, MonitorCheck, SSLCert, InfraIntegration, TraefikCert } from '../api/types'
+import { checks as checksApi, apps as appsApi, appTemplates as appTemplatesApi } from '../api/client'
+import type { App, MonitorCheck, SSLCert } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
 import { SlidePanel } from '../components/SlidePanel'
 import {
@@ -54,9 +54,7 @@ function extractSSLCerts(checkList: MonitorCheck[]): SSLCert[] {
       try {
         const result = JSON.parse(c.last_result!) as { days_remaining?: number; expires_at?: string }
         if (result.days_remaining == null) return []
-        const domain = c.ssl_source === 'traefik'
-          ? c.target
-          : c.target.replace(/^https?:\/\//, '').split('/')[0]
+        const domain = c.target.replace(/^https?:\/\//, '').split('/')[0]
         const expiresAt = result.expires_at
           ? new Date(result.expires_at).toISOString().split('T')[0]
           : ''
@@ -103,7 +101,6 @@ function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick, onSetti
       <div className="check-card-target" title={check.target}>
         {check.target}
         {check.source_component_id && <span className="check-card-target-tag traefik">Traefik</span>}
-        {!check.source_component_id && check.ssl_source === 'traefik' && <span className="check-card-target-tag">Traefik</span>}
         {check.skip_tls_verify && <span className="check-card-target-tag warn">self-signed</span>}
       </div>
 
@@ -158,8 +155,6 @@ export function Checks() {
   const [checkList, setCheckList] = useState<MonitorCheck[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
-  const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
   const [appList, setAppList] = useState<App[]>([])
 
   // Add form
@@ -185,18 +180,6 @@ export function Checks() {
       .catch(() => {})
       .finally(() => setLoading(false))
 
-    integrationsApi.list()
-      .then(res => {
-        const traefik = res.data.filter(i => i.type === 'traefik' && i.enabled)
-        setTraefikIntegrations(traefik)
-        if (traefik.length > 0) {
-          return integrationsApi.certs(traefik[0].id)
-            .then(certsRes => setTraefikCerts(certsRes.data))
-            .catch(() => {})
-        }
-      })
-      .catch(() => {})
-
     appsApi.list()
       .then(res => setAppList(res.data))
       .catch(() => {})
@@ -204,23 +187,10 @@ export function Checks() {
 
   const sslCerts = extractSSLCerts(checkList)
 
-  function handleIntegrationChange(integrationId: string) {
-    if (!integrationId) return
-    integrationsApi.certs(integrationId)
-      .then(res => setTraefikCerts(res.data))
-      .catch(() => {})
-  }
-
   // ── Add form ──
 
   function handleAddChange(field: keyof FormFields, value: string) {
-    setAddForm(prev => {
-      const next = { ...prev, [field]: value }
-      if (field === 'ssl_source' && value === 'traefik' && traefikIntegrations.length > 0 && !next.integration_id) {
-        next.integration_id = traefikIntegrations[0].id
-      }
-      return next
-    })
+    setAddForm(prev => ({ ...prev, [field]: value }))
     setAddError(null)
 
     if (field === 'app_id') {
@@ -246,8 +216,7 @@ export function Checks() {
     if (err) { setAddError(err); return }
     setAddSubmitting(true)
     try {
-      const integrationId = addForm.ssl_source === 'traefik' ? addForm.integration_id : undefined
-      const created = await checksApi.create(formToInput(addForm, integrationId))
+      const created = await checksApi.create(formToInput(addForm))
       setCheckList(prev => [created, ...prev])
       setShowAddForm(false)
       setAddForm(defaultForm)
@@ -356,9 +325,6 @@ export function Checks() {
           submitting={addSubmitting}
           title=""
           submitLabel="Add Check"
-          traefikIntegrations={traefikIntegrations}
-          traefikCerts={traefikCerts}
-          onIntegrationChange={handleIntegrationChange}
           apps={appList.map(a => ({ id: a.id, name: a.name }))}
           targetSuggestion={targetSuggestion}
           hideActions

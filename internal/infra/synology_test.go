@@ -33,14 +33,9 @@ func newSynologyTestStore(t *testing.T) *repo.Store {
 		repo.NewResourceReadingRepo(db),
 		repo.NewResourceRollupRepo(db),
 		repo.NewInfraComponentRepo(db),
-		repo.NewDockerEngineRepo(db),
-		repo.NewInfraRepo(db),
 		repo.NewSettingsRepo(db),
 		repo.NewMetricsRepo(db),
 		repo.NewUserRepo(db),
-		repo.NewTraefikComponentRepo(db),
-		repo.NewTraefikOverviewRepo(db),
-		repo.NewTraefikServiceRepo(db),
 		repo.NewDiscoveredContainerRepo(db),
 		repo.NewDiscoveredRouteRepo(db),
 		nil,
@@ -641,12 +636,12 @@ func TestSynologyPoller_Poll_MetaStored(t *testing.T) {
 	}
 
 	comp, _ := store.InfraComponents.Get(ctx, compID)
-	if comp.SynologyMeta == nil || *comp.SynologyMeta == "" {
+	if comp.Meta == nil || *comp.Meta == "" {
 		t.Fatal("synology_meta should be non-empty after a successful poll")
 	}
 
 	var meta SynologyMeta
-	if err := json.Unmarshal([]byte(*comp.SynologyMeta), &meta); err != nil {
+	if err := json.Unmarshal([]byte(*comp.Meta), &meta); err != nil {
 		t.Fatalf("unmarshal synology_meta: %v", err)
 	}
 	if meta.Model != "DS920+" {

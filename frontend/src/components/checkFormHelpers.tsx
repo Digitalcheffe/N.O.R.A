@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { MonitorCheck, CreateCheckInput, CheckType, SSLSource, DNSRecordType } from '../api/types'
+import type { MonitorCheck, CreateCheckInput, CheckType, DNSRecordType } from '../api/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,9 +11,6 @@ export type FormFields = {
   expected_status: string
   ssl_warn_days: string
   ssl_crit_days: string
-  ssl_source: SSLSource
-  integration_id: string
-  traefik_domain: string
   skip_tls_verify: string   // 'true' | 'false'
   dns_record_type: DNSRecordType
   dns_expected_value: string
@@ -29,9 +26,6 @@ export const defaultForm: FormFields = {
   expected_status: '200',
   ssl_warn_days: '30',
   ssl_crit_days: '7',
-  ssl_source: 'standalone',
-  integration_id: '',
-  traefik_domain: '',
   skip_tls_verify: 'false',
   dns_record_type: 'A',
   dns_expected_value: '',
@@ -54,13 +48,9 @@ export function validateForm(form: FormFields): string | null {
   }
 
   if (form.type === 'ssl') {
-    if (form.ssl_source === 'traefik') {
-      if (!form.traefik_domain) return 'Select a domain from the Traefik cert list'
-    } else {
-      if (!form.target.trim()) return 'Target is required'
-      if (!form.target.startsWith('http://') && !form.target.startsWith('https://')) {
-        return 'Target must begin with http:// or https://'
-      }
+    if (!form.target.trim()) return 'Target is required'
+    if (!form.target.startsWith('http://') && !form.target.startsWith('https://')) {
+      return 'Target must begin with http:// or https://'
     }
   }
 
@@ -75,14 +65,11 @@ export function checkToForm(check: MonitorCheck): FormFields {
   return {
     type: check.type as CheckType,
     name: check.name,
-    target: check.type === 'ssl' && check.ssl_source === 'traefik' ? '' : check.target,
+    target: check.target,
     interval_secs: String(check.interval_secs),
     expected_status: String(check.expected_status ?? 200),
     ssl_warn_days: String(check.ssl_warn_days ?? 30),
     ssl_crit_days: String(check.ssl_crit_days ?? 7),
-    ssl_source: (check.ssl_source as SSLSource) ?? 'standalone',
-    integration_id: check.integration_id ?? '',
-    traefik_domain: check.ssl_source === 'traefik' ? check.target : '',
     skip_tls_verify: check.skip_tls_verify ? 'true' : 'false',
     dns_record_type: (check.dns_record_type ?? 'A') as DNSRecordType,
     dns_expected_value: check.dns_expected_value ?? '',
@@ -91,13 +78,11 @@ export function checkToForm(check: MonitorCheck): FormFields {
   }
 }
 
-export function formToInput(form: FormFields, integrationID?: string): CreateCheckInput {
+export function formToInput(form: FormFields): CreateCheckInput {
   const input: CreateCheckInput = {
     name: form.name.trim(),
     type: form.type,
-    target: form.type === 'ssl' && form.ssl_source === 'traefik'
-      ? form.traefik_domain
-      : form.target.trim(),
+    target: form.target.trim(),
     interval_secs: parseInt(form.interval_secs, 10),
     app_id: form.app_id || undefined,
   }
@@ -108,10 +93,6 @@ export function formToInput(form: FormFields, integrationID?: string): CreateChe
   if (form.type === 'ssl') {
     input.ssl_warn_days = parseInt(form.ssl_warn_days, 10)
     input.ssl_crit_days = parseInt(form.ssl_crit_days, 10)
-    input.ssl_source = form.ssl_source
-    if (form.ssl_source === 'traefik' && integrationID) {
-      input.integration_id = integrationID
-    }
   }
   if (form.type === 'dns') {
     input.dns_record_type = form.dns_record_type

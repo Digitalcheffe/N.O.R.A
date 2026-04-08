@@ -523,10 +523,10 @@ func (p *SynologyPoller) Poll(ctx context.Context, store *repo.Store) error {
 		}
 	}
 
-	// Persist snapshot to synology_meta column.
+	// Persist snapshot to meta column.
 	metaJSON, jsonErr := json.Marshal(meta)
 	if jsonErr == nil {
-		if storeErr := store.InfraComponents.UpdateSynologyMeta(ctx, p.componentID, string(metaJSON)); storeErr != nil {
+		if storeErr := store.InfraComponents.UpdateMeta(ctx, p.componentID, string(metaJSON)); storeErr != nil {
 			log.Printf("synology poller %s: store meta: %v", p.componentID, storeErr)
 		}
 	}

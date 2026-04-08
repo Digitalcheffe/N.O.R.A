@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -54,6 +55,7 @@ func (s *PortainerMetricsScanner) CollectMetrics(ctx context.Context, entityID, 
 
 	now := time.Now().UTC()
 	readings := 0
+	var containersRunning, containersStopped int
 
 	for _, ep := range endpoints {
 		containers, err := client.ListContainers(ctx, ep.ID)
@@ -64,8 +66,10 @@ func (s *PortainerMetricsScanner) CollectMetrics(ctx context.Context, entityID, 
 
 		for _, ct := range containers {
 			if ct.State != "running" {
+				containersStopped++
 				continue
 			}
+			containersRunning++
 
 			name := ct.FirstName()
 			if name == "" {
@@ -112,6 +116,18 @@ func (s *PortainerMetricsScanner) CollectMetrics(ctx context.Context, entityID, 
 	}
 
 	log.Printf("portainer metrics: %s: %d readings across %d endpoint(s)", c.Name, readings, len(endpoints))
+
+	// Write summary to meta.
+	if metaBytes, jsonErr := json.Marshal(map[string]interface{}{
+		"endpoints_total":    len(endpoints),
+		"containers_running": containersRunning,
+		"containers_stopped": containersStopped,
+		"polled_at":          now.Format(time.RFC3339),
+	}); jsonErr == nil {
+		if updateErr := s.store.InfraComponents.UpdateMeta(ctx, entityID, string(metaBytes)); updateErr != nil {
+			log.Printf("portainer metrics: write meta for %s: %v", c.Name, updateErr)
+		}
+	}
 
 	return &scanner.MetricsResult{
 		EntityID:   entityID,

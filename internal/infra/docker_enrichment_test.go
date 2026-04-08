@@ -138,6 +138,9 @@ func (m *enrichMockRouteRepo) ListByAppID(_ context.Context, _ string) ([]*model
 	return nil, nil
 }
 func (m *enrichMockRouteRepo) SyncRouteAppLink(_ context.Context, _, _, _ string) {}
+func (m *enrichMockRouteRepo) ListServicesForComponent(_ context.Context, _ string, _ string) ([]*models.DiscoveredServiceSummary, error) {
+	return nil, nil
+}
 
 type enrichMockResourceRepo struct {
 	backfilled int64

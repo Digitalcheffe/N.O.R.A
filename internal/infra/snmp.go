@@ -321,10 +321,10 @@ func (p *SNMPPoller) Poll(ctx context.Context, store *repo.Store) error {
 		}
 	}
 
-	// ── Persist snmp_meta snapshot ────────────────────────────────────────────
+	// ── Persist meta snapshot ─────────────────────────────────────────────────
 	if metaJSON, jsonErr := json.Marshal(meta); jsonErr == nil {
-		if updateErr := store.InfraComponents.UpdateSNMPMeta(ctx, p.componentID, string(metaJSON)); updateErr != nil {
-			log.Printf("snmp poller %s: write snmp_meta: %v", p.componentID, updateErr)
+		if updateErr := store.InfraComponents.UpdateMeta(ctx, p.componentID, string(metaJSON)); updateErr != nil {
+			log.Printf("snmp poller %s: write meta: %v", p.componentID, updateErr)
 		}
 	}
 

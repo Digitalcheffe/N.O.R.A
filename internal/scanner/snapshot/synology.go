@@ -38,8 +38,8 @@ func (s *SynologySnapshotScanner) TakeSnapshot(ctx context.Context, entityID str
 
 	// Prefer the cached SynologyMeta (written by the legacy poller) to avoid
 	// an extra API call when the poller is already running.
-	if c.SynologyMeta != nil && *c.SynologyMeta != "" {
-		return s.snapshotFromMeta(ctx, entityID, entityType, c.Name, *c.SynologyMeta)
+	if c.Meta != nil && *c.Meta != "" {
+		return s.snapshotFromMeta(ctx, entityID, entityType, c.Name, *c.Meta)
 	}
 
 	// No cached meta: fall back to a direct API call.
