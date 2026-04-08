@@ -22,10 +22,8 @@ import type {
   DiscoverResult,
   DiscoveredContainer,
   DiscoveredRoute,
-  DockerEngine,
   Event,
   EventFilter,
-  HostResources,
   InfrastructureComponent,
   InfrastructureComponentInput,
   InstanceMetrics,
@@ -43,7 +41,7 @@ import type {
   TOTPSetupResponse,
   TOTPVerifyInput,
   MonitorCheck,
-  PhysicalHost,
+  TopologyNode,
   ProxmoxGuestInfo,
   ProxmoxNodeStatusDetail,
   ProxmoxStoragePool,
@@ -64,7 +62,6 @@ import type {
   TraefikServiceDetail,
   User,
   ValidationResult,
-  VirtualHost,
 } from './types'
 
 // ── Base request ─────────────────────────────────────────────────────────────
@@ -289,40 +286,8 @@ export const checks = {
 // ── Topology ──────────────────────────────────────────────────────────────────
 
 export const topology = {
-  physicalHosts: {
-    list: () =>
-      request<ListResponse<PhysicalHost>>('GET', '/hosts/physical'),
-    create: (input: Omit<PhysicalHost, 'id' | 'created_at'>) =>
-      request<PhysicalHost>('POST', '/hosts/physical', input),
-    update: (id: string, input: Partial<Omit<PhysicalHost, 'id' | 'created_at'>>) =>
-      request<PhysicalHost>('PUT', `/hosts/physical/${id}`, input),
-    delete: (id: string) =>
-      request<void>('DELETE', `/hosts/physical/${id}`),
-    resources: (id: string, period = 'hour') =>
-      request<HostResources>('GET', `/hosts/physical/${id}/resources?period=${period}`),
-  },
-
-  virtualHosts: {
-    list: () =>
-      request<ListResponse<VirtualHost>>('GET', '/hosts/virtual'),
-    create: (input: Omit<VirtualHost, 'id' | 'created_at'>) =>
-      request<VirtualHost>('POST', '/hosts/virtual', input),
-    update: (id: string, input: Partial<Omit<VirtualHost, 'id' | 'created_at'>>) =>
-      request<VirtualHost>('PUT', `/hosts/virtual/${id}`, input),
-    delete: (id: string) =>
-      request<void>('DELETE', `/hosts/virtual/${id}`),
-  },
-
-  dockerEngines: {
-    list: () =>
-      request<ListResponse<DockerEngine>>('GET', '/docker-engines'),
-    create: (input: Omit<DockerEngine, 'id' | 'created_at'>) =>
-      request<DockerEngine>('POST', '/docker-engines', input),
-    update: (id: string, input: Partial<Omit<DockerEngine, 'id' | 'created_at'>>) =>
-      request<DockerEngine>('PUT', `/docker-engines/${id}`, input),
-    delete: (id: string) =>
-      request<void>('DELETE', `/docker-engines/${id}`),
-  },
+  getTree: () =>
+    request<TopologyNode[]>('GET', '/topology'),
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────

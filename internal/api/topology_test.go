@@ -18,7 +18,7 @@ func newTopologyRouter(t *testing.T) http.Handler {
 	ic := repo.NewInfraComponentRepo(db)
 	apps := repo.NewAppRepo(db)
 	links := repo.NewComponentLinkRepo(db)
-	h := api.NewTopologyHandler(ic, apps, links)
+	h := api.NewTopologyHandler(ic, apps, links, repo.NewDiscoveredContainerRepo(db))
 	r := chi.NewRouter()
 	h.Routes(r)
 	return r
@@ -49,7 +49,7 @@ func TestGetTopology_FullChain(t *testing.T) {
 	links := repo.NewComponentLinkRepo(db)
 
 	// Use a combined router so both topology and infra_components are available.
-	topoHandler := api.NewTopologyHandler(ic, apps, links)
+	topoHandler := api.NewTopologyHandler(ic, apps, links, repo.NewDiscoveredContainerRepo(db))
 	checks := repo.NewCheckRepo(db)
 	store := repo.NewStore(
 		apps, repo.NewEventRepo(db), checks,

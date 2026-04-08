@@ -205,43 +205,25 @@ export interface CreateCheckInput {
 
 // ── Topology ─────────────────────────────────────────────────────────────────
 
-export type PhysicalHostType = 'bare_metal' | 'proxmox_node'
-export type VirtualHostType = 'vm' | 'lxc' | 'wsl'
-export type SocketType = 'local' | 'remote_proxy'
-
-export interface PhysicalHost {
+export interface TopologyApp {
   id: string
   name: string
-  ip: string
-  type: PhysicalHostType
-  notes: string | null
-  created_at: string
+  icon_url?: string
 }
 
-export interface VirtualHost {
+export interface TopologyNode {
   id: string
-  physical_host_id: string | null
   name: string
-  ip: string
-  type: VirtualHostType
-  created_at: string
-}
-
-export interface DockerEngine {
-  id: string
-  virtual_host_id: string | null
-  name: string
-  socket_type: SocketType
-  socket_path: string
-  created_at: string
-}
-
-// ── Host Resources ────────────────────────────────────────────────────────────
-
-export interface HostResources {
-  cpu: number
-  mem: number
-  disk: number
+  type: string
+  status?: string
+  ip?: string
+  notes?: string
+  meta?: string
+  app_id?: string
+  app_name?: string
+  app_icon_url?: string
+  children: TopologyNode[]
+  apps: TopologyApp[]
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
@@ -576,6 +558,13 @@ export interface DiscoveredContainer {
   last_seen_at: string
   image_update_available: boolean
   image_last_checked_at: string | null
+  // Enrichment fields (AP-04 / migration 037).
+  ports: string | null
+  labels: string | null
+  volumes: string | null
+  networks: string | null
+  restart_policy: string | null
+  docker_created_at: string | null
 }
 
 export interface LinkAppInput {

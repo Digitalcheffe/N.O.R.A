@@ -1,825 +1,348 @@
-import { useState, useEffect, useCallback } from 'react'
-import type { ReactNode } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Topbar } from '../components/Topbar'
 import { topology as topoApi } from '../api/client'
-import { DockerEngineDetail } from '../components/DockerEngineDetail'
-import type {
-  PhysicalHost,
-  PhysicalHostType,
-  VirtualHost,
-  VirtualHostType,
-  DockerEngine,
-  SocketType,
-} from '../api/types'
-import './Checks.css'
+import type { TopologyNode } from '../api/types'
+import { InfraTypeIcon } from '../components/CheckTypeIcon'
 import './Topology.css'
 
-// ── Form field types ──────────────────────────────────────────────────────────
+// ── Type labels ───────────────────────────────────────────────────────────────
 
-type PhysicalForm = { name: string; ip: string; type: PhysicalHostType; notes: string }
-type VirtualForm  = { name: string; ip: string; type: VirtualHostType }
-type DockerForm   = { name: string; socket_type: SocketType; socket_path: string }
-
-const defaultPhysical: PhysicalForm = { name: '', ip: '', type: 'bare_metal', notes: '' }
-const defaultVirtual: VirtualForm   = { name: '', ip: '', type: 'vm' }
-const defaultDocker: DockerForm     = { name: '', socket_type: 'local', socket_path: '/var/run/docker.sock' }
-
-// ── Interaction state types ───────────────────────────────────────────────────
-
-type AddTarget =
-  | { kind: 'physical' }
-  | { kind: 'virtual'; physicalId: string }
-  | { kind: 'docker'; virtualId: string }
-
-type EditTarget =
-  | { kind: 'physical'; id: string }
-  | { kind: 'virtual'; id: string }
-  | { kind: 'docker'; id: string }
-
-// ── Label helpers ─────────────────────────────────────────────────────────────
-
-function labelPhysicalType(t: PhysicalHostType): string {
-  return t === 'proxmox_node' ? 'Proxmox Node' : 'Bare Metal'
+const TYPE_LABELS: Record<string, string> = {
+  proxmox_node:  'Proxmox',
+  bare_metal:    'Bare Metal',
+  linux_host:    'Linux',
+  windows_host:  'Windows',
+  generic_host:  'Host',
+  vm:            'VM',
+  vm_linux:      'Linux VM',
+  vm_windows:    'Windows VM',
+  vm_other:      'VM',
+  lxc:           'LXC',
+  wsl:           'WSL',
+  docker_engine: 'Docker',
+  portainer:     'Portainer',
+  traefik:       'Traefik',
+  synology:      'Synology',
+  opnsense:      'OPNsense',
+  container:     'Container',
 }
 
-function labelVirtualType(t: VirtualHostType): string {
-  return t.toUpperCase()
+function typeLabel(type: string) {
+  return TYPE_LABELS[type] ?? type
 }
 
-// ── Inline form wrapper ───────────────────────────────────────────────────────
+// ── App icon (real icon or letter fallback) ───────────────────────────────────
 
-interface FormWrapProps {
-  title: string
-  error: string | null
-  submitting: boolean
-  onSubmit: () => void
-  onCancel: () => void
-  children: ReactNode
-  isEdit?: boolean
-  onDelete?: () => void
-  deleting?: boolean
-}
-
-function FormWrap({
-  title, error, submitting, onSubmit, onCancel, children, isEdit, onDelete, deleting,
-}: FormWrapProps) {
+function AppIcon({ iconUrl, name, size }: { iconUrl?: string; name?: string; size: number }) {
+  const [failed, setFailed] = useState(false)
+  const letter = name ? name[0].toUpperCase() : '?'
+  if (iconUrl && !failed) {
+    return (
+      <img
+        src={iconUrl}
+        alt={name}
+        width={size}
+        height={size}
+        style={{ borderRadius: 4, objectFit: 'contain' }}
+        onError={() => setFailed(true)}
+      />
+    )
+  }
   return (
-    <div className="add-form">
-      <div className="form-title">{title}</div>
-      <div className="form-fields">{children}</div>
-      {error && <div className="form-error">{error}</div>}
-      <div className="form-actions">
-        <button className="form-btn primary" onClick={onSubmit} disabled={submitting}>
-          {submitting ? 'Saving…' : isEdit ? 'Save' : 'Add'}
-        </button>
-        <button className="form-btn secondary" onClick={onCancel}>
-          Cancel
-        </button>
-        {isEdit && onDelete && (
-          <button
-            className="form-btn danger"
-            onClick={onDelete}
-            disabled={deleting}
-            style={{ marginLeft: 'auto' }}
-          >
-            {deleting ? 'Deleting…' : 'Delete'}
-          </button>
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: size, height: size, borderRadius: 4,
+        background: 'rgba(99,179,237,0.15)', color: '#63b3ed',
+        fontSize: size * 0.55, fontWeight: 700,
+      }}
+    >
+      {letter}
+    </span>
+  )
+}
+
+function statusDotClass(status?: string): string {
+  if (!status) return 'topo-dot--dim'
+  const s = status.toLowerCase()
+  if (['online', 'running'].includes(s)) return 'topo-dot--green'
+  if (['offline', 'stopped', 'error'].includes(s)) return 'topo-dot--red'
+  if (['warn', 'degraded'].includes(s)) return 'topo-dot--yellow'
+  return 'topo-dot--dim'
+}
+
+// ── Rollup stats ──────────────────────────────────────────────────────────────
+
+function computeStats(node: TopologyNode) {
+  let vms = 0, engines = 0, containers = 0
+  for (const child of node.children) {
+    if (child.type === 'container') {
+      containers++
+    } else if (['docker_engine', 'portainer'].includes(child.type)) {
+      engines++
+      containers += computeStats(child).containers
+    } else if (['vm', 'vm_linux', 'vm_windows', 'vm_other', 'lxc', 'wsl'].includes(child.type)) {
+      vms++
+      const s = computeStats(child)
+      engines += s.engines
+      containers += s.containers
+    }
+  }
+  return { vms, engines, containers, apps: node.apps.length }
+}
+
+// ── Single card ───────────────────────────────────────────────────────────────
+
+interface NodeCardProps {
+  node: TopologyNode
+  selected: boolean
+  onClick: () => void
+}
+
+function NodeCard({ node, selected, onClick }: NodeCardProps) {
+  const stats = computeStats(node)
+
+  return (
+    <div
+      className={`topo-card topo-card--clickable${selected ? ' topo-card--selected' : ''}`}
+      onClick={onClick}
+    >
+      <div className="topo-card-header">
+        <span className="topo-card-icon"><InfraTypeIcon type={node.type} size={22} /></span>
+        <div className="topo-card-title">
+          <span className="topo-card-name">{node.name}</span>
+          <span className="topo-card-type">{typeLabel(node.type)}</span>
+        </div>
+        <span className={`topo-dot ${statusDotClass(node.status)}`} />
+      </div>
+      <div className="topo-card-stats">
+        {node.ip && <span className="topo-stat topo-stat--ip">{node.ip}</span>}
+        {stats.vms > 0        && <span className="topo-stat">{stats.vms} VM{stats.vms !== 1 ? 's' : ''}</span>}
+        {stats.engines > 0    && <span className="topo-stat">{stats.engines} engine{stats.engines !== 1 ? 's' : ''}</span>}
+        {stats.containers > 0 && <span className="topo-stat">{stats.containers} container{stats.containers !== 1 ? 's' : ''}</span>}
+        {stats.apps > 0       && <span className="topo-stat topo-stat--app">{stats.apps} app{stats.apps !== 1 ? 's' : ''}</span>}
+        {!node.ip && !stats.vms && !stats.engines && !stats.containers && !stats.apps && (
+          <span className="topo-stat topo-stat--empty">No children</span>
         )}
       </div>
     </div>
   )
 }
 
-// ── Sub-form field groups ─────────────────────────────────────────────────────
+// ── Container pills ───────────────────────────────────────────────────────────
 
-function PhysicalFormFields({ form, onChange }: { form: PhysicalForm; onChange: (f: PhysicalForm) => void }) {
+interface ContainerRowProps {
+  containers: TopologyNode[]
+  selected: TopologyNode | null
+  onSelect: (c: TopologyNode) => void
+}
+
+function ContainerRow({ containers, selected, onSelect }: ContainerRowProps) {
   return (
-    <>
-      <div className="form-field">
-        <div className="form-label">Name</div>
-        <input
-          className="form-input"
-          value={form.name}
-          onChange={e => onChange({ ...form, name: e.target.value })}
-          placeholder="e.g. proxmox-node1"
-        />
+    <div className="topo-level">
+      <div className="topo-level-label">
+        <span className="topo-level-connector" />
+        <span className="topo-level-title">{containers.length} container{containers.length !== 1 ? 's' : ''}</span>
       </div>
-      <div className="form-field">
-        <div className="form-label">IP Address</div>
-        <input
-          className="form-input"
-          value={form.ip}
-          onChange={e => onChange({ ...form, ip: e.target.value })}
-          placeholder="e.g. 192.168.1.10"
-        />
+      <div className="topo-container-grid">
+        {containers.map(c => (
+          <div
+            key={c.id}
+            className={`topo-container-pill${c.app_id ? ' topo-container-pill--linked' : ''}${selected?.id === c.id ? ' topo-container-pill--selected' : ''}`}
+            onClick={() => onSelect(c)}
+          >
+            <span className={`topo-dot ${statusDotClass(c.status)}`} />
+            <span className="topo-container-name">{c.name}</span>
+            {c.app_id && (
+              <AppIcon iconUrl={c.app_icon_url} name={c.app_name} size={16} />
+            )}
+          </div>
+        ))}
       </div>
-      <div className="form-field">
-        <div className="form-label">Type</div>
-        <select
-          className="form-input"
-          value={form.type}
-          onChange={e => onChange({ ...form, type: e.target.value as PhysicalHostType })}
-        >
-          <option value="bare_metal">Bare Metal</option>
-          <option value="proxmox_node">Proxmox Node</option>
-        </select>
-      </div>
-      <div className="form-field">
-        <div className="form-label">Notes</div>
-        <input
-          className="form-input"
-          value={form.notes}
-          onChange={e => onChange({ ...form, notes: e.target.value })}
-          placeholder="Optional"
-        />
-      </div>
-    </>
+    </div>
   )
 }
 
-function VirtualFormFields({ form, onChange }: { form: VirtualForm; onChange: (f: VirtualForm) => void }) {
+// ── App layer ─────────────────────────────────────────────────────────────────
+
+function AppLayer({ container }: { container: TopologyNode }) {
+  const navigate = useNavigate()
+
   return (
-    <>
-      <div className="form-field">
-        <div className="form-label">Name</div>
-        <input
-          className="form-input"
-          value={form.name}
-          onChange={e => onChange({ ...form, name: e.target.value })}
-          placeholder="e.g. rocky-vm01"
-        />
+    <div className="topo-level">
+      <div className="topo-level-label">
+        <span className="topo-level-connector" />
+        <span className="topo-level-title">{container.name} · Linked App</span>
       </div>
-      <div className="form-field">
-        <div className="form-label">IP Address</div>
-        <input
-          className="form-input"
-          value={form.ip}
-          onChange={e => onChange({ ...form, ip: e.target.value })}
-          placeholder="e.g. 192.168.1.20"
-        />
-      </div>
-      <div className="form-field">
-        <div className="form-label">Type</div>
-        <select
-          className="form-input"
-          value={form.type}
-          onChange={e => onChange({ ...form, type: e.target.value as VirtualHostType })}
+      <div className="topo-grid">
+        <div
+          className="topo-card topo-card--clickable topo-card--app"
+          onClick={() => navigate(`/apps/${container.app_id}`)}
         >
-          <option value="vm">VM</option>
-          <option value="lxc">LXC</option>
-          <option value="wsl">WSL</option>
-        </select>
+          <div className="topo-card-header">
+            <span className="topo-card-icon">
+              <AppIcon iconUrl={container.app_icon_url} name={container.app_name} size={24} />
+            </span>
+            <div className="topo-card-title">
+              <span className="topo-card-name">{container.app_name}</span>
+              <span className="topo-card-type">Application</span>
+            </div>
+            <span className="topo-app-arrow">→</span>
+          </div>
+          <div className="topo-card-stats">
+            <span className="topo-stat topo-stat--app">View app</span>
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
-function DockerFormFields({ form, onChange }: { form: DockerForm; onChange: (f: DockerForm) => void }) {
-  return (
-    <>
-      <div className="form-field">
-        <div className="form-label">Name</div>
-        <input
-          className="form-input"
-          value={form.name}
-          onChange={e => onChange({ ...form, name: e.target.value })}
-          placeholder="e.g. docker-engine-01"
-        />
-      </div>
-      <div className="form-field">
-        <div className="form-label">Socket Type</div>
-        <select
-          className="form-input"
-          value={form.socket_type}
-          onChange={e => onChange({ ...form, socket_type: e.target.value as SocketType })}
-        >
-          <option value="local">Local</option>
-          <option value="remote_proxy">Remote Proxy</option>
-        </select>
-      </div>
-      <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-        <div className="form-label">Socket Path</div>
-        <input
-          className="form-input"
-          value={form.socket_path}
-          onChange={e => onChange({ ...form, socket_path: e.target.value })}
-          placeholder="/var/run/docker.sock"
-        />
-      </div>
-    </>
-  )
-}
+// ── Page ──────────────────────────────────────────────────────────────────────
 
-// ── Tree component (embeddable, no Topbar) ────────────────────────────────────
-
-export function TopologyTree() {
-  const [physicalHosts, setPhysicalHosts] = useState<PhysicalHost[]>([])
-  const [virtualHosts,  setVirtualHosts]  = useState<VirtualHost[]>([])
-  const [dockerEngines, setDockerEngines] = useState<DockerEngine[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const [expandedPhysical, setExpandedPhysical] = useState<Set<string>>(new Set())
-  const [expandedVirtual,  setExpandedVirtual]  = useState<Set<string>>(new Set())
-  const [expandedDocker,   setExpandedDocker]   = useState<Set<string>>(new Set())
-
-  // container count badge: engineId → { total, unlinked }
-  const [containerCounts, setContainerCounts] = useState<Record<string, { total: number; unlinked: number }>>({})
-
-  const handleCountsLoaded = useCallback((engineId: string, total: number, unlinked: number) => {
-    setContainerCounts(prev => ({ ...prev, [engineId]: { total, unlinked } }))
-  }, [])
-
-  const [addTarget,  setAddTarget]  = useState<AddTarget | null>(null)
-  const [editTarget, setEditTarget] = useState<EditTarget | null>(null)
-
-  const [physicalForm, setPhysicalForm] = useState<PhysicalForm>(defaultPhysical)
-  const [virtualForm,  setVirtualForm]  = useState<VirtualForm>(defaultVirtual)
-  const [dockerForm,   setDockerForm]   = useState<DockerForm>(defaultDocker)
-
-  const [formError,   setFormError]   = useState<string | null>(null)
-  const [submitting,  setSubmitting]  = useState(false)
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
-
-  // ── Load ──────────────────────────────────────────────────────────────────
+export function TopologyPage() {
+  const [tree,               setTree]               = useState<TopologyNode[]>([])
+  const [loading,            setLoading]            = useState(true)
+  const [error,              setError]              = useState<string | null>(null)
+  // selections[i] = the infra node selected at level i
+  const [selections,         setSelections]         = useState<TopologyNode[]>([])
+  // selected container pill (at the leaf container row)
+  const [selectedContainer,  setSelectedContainer]  = useState<TopologyNode | null>(null)
 
   useEffect(() => {
-    Promise.all([
-      topoApi.physicalHosts.list(),
-      topoApi.virtualHosts.list(),
-      topoApi.dockerEngines.list(),
-    ])
-      .then(([ph, vh, de]) => {
-        setPhysicalHosts(ph.data)
-        setVirtualHosts(vh.data)
-        setDockerEngines(de.data)
-      })
-      .catch(console.error)
+    topoApi.getTree()
+      .then(data => { setTree(data); setError(null) })
+      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load topology'))
       .finally(() => setLoading(false))
   }, [])
 
-  // ── Tree helpers ──────────────────────────────────────────────────────────
-
-  function virtualsFor(physicalId: string): VirtualHost[] {
-    return virtualHosts.filter(v => v.physical_host_id === physicalId)
-  }
-
-  function enginesFor(virtualId: string): DockerEngine[] {
-    return dockerEngines.filter(e => e.virtual_host_id === virtualId)
-  }
-
-  // ── Expand / collapse ─────────────────────────────────────────────────────
-
-  function togglePhysical(id: string) {
-    setExpandedPhysical(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) { next.delete(id) } else { next.add(id) }
-      return next
-    })
-    setAddTarget(null)
-    setEditTarget(null)
-    setFormError(null)
-  }
-
-  function toggleVirtual(id: string) {
-    setExpandedVirtual(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) { next.delete(id) } else { next.add(id) }
-      return next
-    })
-    setAddTarget(null)
-    setEditTarget(null)
-    setFormError(null)
-  }
-
-  function toggleDocker(id: string) {
-    setExpandedDocker(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) { next.delete(id) } else { next.add(id) }
-      return next
+  function selectAt(level: number, node: TopologyNode) {
+    setSelectedContainer(null)
+    setSelections(prev => {
+      const next = prev.slice(0, level)
+      // Toggle off if already selected.
+      if (prev[level]?.id === node.id) return next
+      return [...next, node]
     })
   }
 
-  // ── Start edit ────────────────────────────────────────────────────────────
-
-  function startEditPhysical(ev: React.MouseEvent, host: PhysicalHost) {
-    ev.stopPropagation()
-    setEditTarget({ kind: 'physical', id: host.id })
-    setPhysicalForm({ name: host.name, ip: host.ip, type: host.type, notes: host.notes ?? '' })
-    setFormError(null)
-    setAddTarget(null)
+  function selectContainer(c: TopologyNode) {
+    setSelectedContainer(prev => prev?.id === c.id ? null : c)
   }
 
-  function startEditVirtual(ev: React.MouseEvent, host: VirtualHost) {
-    ev.stopPropagation()
-    setEditTarget({ kind: 'virtual', id: host.id })
-    setVirtualForm({ name: host.name, ip: host.ip, type: host.type })
-    setFormError(null)
-    setAddTarget(null)
-  }
-
-  function startEditDocker(ev: React.MouseEvent, engine: DockerEngine) {
-    ev.stopPropagation()
-    setEditTarget({ kind: 'docker', id: engine.id })
-    setDockerForm({ name: engine.name, socket_type: engine.socket_type, socket_path: engine.socket_path })
-    setFormError(null)
-    setAddTarget(null)
-  }
-
-  function cancelForm() {
-    setAddTarget(null)
-    setEditTarget(null)
-    setFormError(null)
-  }
-
-  // ── Start add ─────────────────────────────────────────────────────────────
-
-  function startAddPhysical() {
-    setAddTarget({ kind: 'physical' })
-    setPhysicalForm(defaultPhysical)
-    setFormError(null)
-    setEditTarget(null)
-  }
-
-  function startAddVirtual(ev: React.MouseEvent, physicalId: string) {
-    ev.stopPropagation()
-    setAddTarget({ kind: 'virtual', physicalId })
-    setVirtualForm(defaultVirtual)
-    setFormError(null)
-    setEditTarget(null)
-  }
-
-  function startAddDocker(ev: React.MouseEvent, virtualId: string) {
-    ev.stopPropagation()
-    setAddTarget({ kind: 'docker', virtualId })
-    setDockerForm(defaultDocker)
-    setFormError(null)
-    setEditTarget(null)
-  }
-
-  // ── Submit add ────────────────────────────────────────────────────────────
-
-  async function handleAddPhysical() {
-    if (!physicalForm.name.trim()) { setFormError('Name is required'); return }
-    if (!physicalForm.ip.trim())   { setFormError('IP is required');   return }
-    setSubmitting(true)
-    try {
-      const created = await topoApi.physicalHosts.create({
-        name:  physicalForm.name.trim(),
-        ip:    physicalForm.ip.trim(),
-        type:  physicalForm.type,
-        notes: physicalForm.notes.trim() || null,
-      })
-      setPhysicalHosts(prev => [...prev, created])
-      cancelForm()
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Failed to add host')
-    } finally {
-      setSubmitting(false)
+  // Build the list of infra levels to render.
+  // Level 0: root nodes
+  // Level k: non-container children of selections[k-1]
+  const levels: { nodes: TopologyNode[]; selected: TopologyNode | null }[] = [
+    { nodes: tree, selected: selections[0] ?? null },
+  ]
+  for (let i = 0; i < selections.length; i++) {
+    const children = selections[i].children.filter(c => c.type !== 'container')
+    if (children.length > 0) {
+      levels.push({ nodes: children, selected: selections[i + 1] ?? null })
     }
   }
 
-  async function handleAddVirtual(physicalId: string) {
-    if (!virtualForm.name.trim()) { setFormError('Name is required'); return }
-    if (!virtualForm.ip.trim())   { setFormError('IP is required');   return }
-    setSubmitting(true)
-    try {
-      const created = await topoApi.virtualHosts.create({
-        name:             virtualForm.name.trim(),
-        ip:               virtualForm.ip.trim(),
-        type:             virtualForm.type,
-        physical_host_id: physicalId,
-      })
-      setVirtualHosts(prev => [...prev, created])
-      cancelForm()
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Failed to add VM')
-    } finally {
-      setSubmitting(false)
-    }
-  }
+  // Container leaf row: containers under the deepest selected infra node
+  // that has containers but no further infra children.
+  const deepest = selections[selections.length - 1]
+  const containerLeaf = deepest
+    ? deepest.children.filter(c => c.type === 'container')
+    : []
+  const showContainerLeaf =
+    deepest !== undefined &&
+    containerLeaf.length > 0 &&
+    deepest.children.filter(c => c.type !== 'container').length === 0
 
-  async function handleAddDocker(virtualId: string) {
-    if (!dockerForm.name.trim())        { setFormError('Name is required');        return }
-    if (!dockerForm.socket_path.trim()) { setFormError('Socket path is required'); return }
-    setSubmitting(true)
-    try {
-      const created = await topoApi.dockerEngines.create({
-        name:            dockerForm.name.trim(),
-        socket_type:     dockerForm.socket_type,
-        socket_path:     dockerForm.socket_path.trim(),
-        virtual_host_id: virtualId,
-      })
-      setDockerEngines(prev => [...prev, created])
-      cancelForm()
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Failed to add Docker engine')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // ── Submit edit ───────────────────────────────────────────────────────────
-
-  async function handleEditPhysical(id: string) {
-    if (!physicalForm.name.trim()) { setFormError('Name is required'); return }
-    if (!physicalForm.ip.trim())   { setFormError('IP is required');   return }
-    setSubmitting(true)
-    try {
-      const updated = await topoApi.physicalHosts.update(id, {
-        name:  physicalForm.name.trim(),
-        ip:    physicalForm.ip.trim(),
-        type:  physicalForm.type,
-        notes: physicalForm.notes.trim() || null,
-      })
-      setPhysicalHosts(prev => prev.map(h => h.id === id ? updated : h))
-      setEditTarget(null)
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function handleEditVirtual(id: string) {
-    if (!virtualForm.name.trim()) { setFormError('Name is required'); return }
-    if (!virtualForm.ip.trim())   { setFormError('IP is required');   return }
-    setSubmitting(true)
-    try {
-      const updated = await topoApi.virtualHosts.update(id, {
-        name: virtualForm.name.trim(),
-        ip:   virtualForm.ip.trim(),
-        type: virtualForm.type,
-      })
-      setVirtualHosts(prev => prev.map(h => h.id === id ? updated : h))
-      setEditTarget(null)
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function handleEditDocker(id: string) {
-    if (!dockerForm.name.trim())        { setFormError('Name is required');        return }
-    if (!dockerForm.socket_path.trim()) { setFormError('Socket path is required'); return }
-    setSubmitting(true)
-    try {
-      const updated = await topoApi.dockerEngines.update(id, {
-        name:        dockerForm.name.trim(),
-        socket_type: dockerForm.socket_type,
-        socket_path: dockerForm.socket_path.trim(),
-      })
-      setDockerEngines(prev => prev.map(e => e.id === id ? updated : e))
-      setEditTarget(null)
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // ── Delete ────────────────────────────────────────────────────────────────
-
-  async function deletePhysical(ev: React.MouseEvent | null, id: string) {
-    ev?.stopPropagation()
-    setDeletingIds(prev => new Set(prev).add(id))
-    try {
-      await topoApi.physicalHosts.delete(id)
-      setPhysicalHosts(prev => prev.filter(h => h.id !== id))
-      setVirtualHosts(prev => prev.filter(v => v.physical_host_id !== id))
-      setEditTarget(null)
-      setExpandedPhysical(prev => { const n = new Set(prev); n.delete(id); return n })
-    } catch { /* keep in list */ } finally {
-      setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n })
-    }
-  }
-
-  async function deleteVirtual(ev: React.MouseEvent | null, id: string) {
-    ev?.stopPropagation()
-    setDeletingIds(prev => new Set(prev).add(id))
-    try {
-      await topoApi.virtualHosts.delete(id)
-      setVirtualHosts(prev => prev.filter(h => h.id !== id))
-      setDockerEngines(prev => prev.filter(de => de.virtual_host_id !== id))
-      setEditTarget(null)
-      setExpandedVirtual(prev => { const n = new Set(prev); n.delete(id); return n })
-    } catch { /* keep */ } finally {
-      setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n })
-    }
-  }
-
-  async function deleteDocker(ev: React.MouseEvent | null, id: string) {
-    ev?.stopPropagation()
-    setDeletingIds(prev => new Set(prev).add(id))
-    try {
-      await topoApi.dockerEngines.delete(id)
-      setDockerEngines(prev => prev.filter(de => de.id !== id))
-      setEditTarget(null)
-    } catch { /* keep */ } finally {
-      setDeletingIds(prev => { const n = new Set(prev); n.delete(id); return n })
-    }
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  // App layer: shown when a container with a linked app is selected.
+  const showAppLayer = selectedContainer && selectedContainer.app_id
 
   return (
     <>
-      {addTarget?.kind === 'physical' && (
-          <FormWrap
-            title="Add Physical Host"
-            error={formError}
-            submitting={submitting}
-            onSubmit={() => void handleAddPhysical()}
-            onCancel={cancelForm}
-          >
-            <PhysicalFormFields form={physicalForm} onChange={setPhysicalForm} />
-          </FormWrap>
-        )}
+      <Topbar title="Topology" />
+      <div className="topo-page">
 
-        <div className="section-header">
-          <span className="section-title">Physical Hosts</span>
-          <button className="section-action" onClick={startAddPhysical}>+ Add host</button>
+        {/* Page header */}
+        <div className="topo-page-header">
+          <h2 className="topo-page-title">Network Map</h2>
+          <p className="topo-page-sub">
+            {loading
+              ? 'Loading…'
+              : `${tree.length} root component${tree.length !== 1 ? 's' : ''} — click a card to drill down`}
+          </p>
+          {selections.length > 0 && (
+            <div className="topo-breadcrumb">
+              <button className="topo-crumb" onClick={() => { setSelections([]); setSelectedContainer(null) }}>
+                All
+              </button>
+              {selections.map((node, i) => (
+                <span key={node.id} className="topo-crumb-wrap">
+                  <span className="topo-crumb-arrow">→</span>
+                  <button
+                    className={`topo-crumb${i === selections.length - 1 ? ' topo-crumb--active' : ''}`}
+                    onClick={() => { setSelections(prev => prev.slice(0, i + 1)); setSelectedContainer(null) }}
+                  >
+                    {node.name}
+                  </button>
+                </span>
+              ))}
+              {selectedContainer && (
+                <span className="topo-crumb-wrap">
+                  <span className="topo-crumb-arrow">→</span>
+                  <button className="topo-crumb topo-crumb--active">{selectedContainer.name}</button>
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
-        {loading ? (
-          <div className="topology-empty">Loading…</div>
-        ) : physicalHosts.length === 0 ? (
-          <div className="topology-empty">
-            No infrastructure configured yet. Add a physical host to get started.
-          </div>
-        ) : (
-          <div className="topo-list">
-            {physicalHosts.map(ph => {
-              const expanded  = expandedPhysical.has(ph.id)
-              const isEditing = editTarget?.kind === 'physical' && editTarget.id === ph.id
-              const vhosts    = virtualsFor(ph.id)
+        {error && <p className="topo-error">{error}</p>}
 
-              return (
-                <div key={ph.id} className="topo-node">
+        {!loading && !error && (
+          <div className="topo-chain">
 
-                  {/* ── Physical host row ── */}
-                  <div
-                    className={`topo-row${isEditing ? ' editing' : ''}`}
-                    onClick={() => !isEditing && togglePhysical(ph.id)}
-                  >
-                    <span className={`topo-chevron${expanded ? ' open' : ''}`}>
-                      {expanded ? '▼' : '▶'}
-                    </span>
-                    <div className="topo-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="2" y="2" width="20" height="8" rx="2" />
-                        <rect x="2" y="14" width="20" height="8" rx="2" />
-                        <line x1="6" y1="6" x2="6.01" y2="6" />
-                        <line x1="6" y1="18" x2="6.01" y2="18" />
-                      </svg>
-                    </div>
-                    <div className="topo-info">
-                      <div className="topo-name">{ph.name}</div>
-                      <div className="topo-meta">{labelPhysicalType(ph.type)} · {ph.ip}</div>
-                    </div>
-                    <div className="topo-actions">
-                      <button
-                        className="topo-action-btn"
-                        title="Edit"
-                        onClick={ev => startEditPhysical(ev, ph)}
-                      >✎</button>
-                      <button
-                        className="topo-action-btn danger"
-                        title="Delete"
-                        disabled={deletingIds.has(ph.id)}
-                        onClick={ev => void deletePhysical(ev, ph.id)}
-                      >✕</button>
-                    </div>
+            {levels.map((level, i) => (
+              <div key={i}>
+                {/* Level connector label (except for root) */}
+                {i > 0 && (
+                  <div className="topo-level-label">
+                    <span className="topo-level-connector" />
+                    <span className="topo-level-title">{selections[i - 1].name}</span>
                   </div>
+                )}
 
-                  {/* ── Edit form ── */}
-                  {isEditing && (
-                    <div className="topo-edit-panel">
-                      <FormWrap
-                        title="Edit Physical Host"
-                        error={formError}
-                        submitting={submitting}
-                        onSubmit={() => void handleEditPhysical(ph.id)}
-                        onCancel={cancelForm}
-                        isEdit
-                        onDelete={() => void deletePhysical(null, ph.id)}
-                        deleting={deletingIds.has(ph.id)}
-                      >
-                        <PhysicalFormFields form={physicalForm} onChange={setPhysicalForm} />
-                      </FormWrap>
-                    </div>
-                  )}
-
-                  {/* ── Expanded: virtual hosts ── */}
-                  {expanded && (
-                    <div className="topo-children">
-                      {vhosts.length === 0 && addTarget?.kind !== 'virtual' && (
-                        <div className="topo-empty-children">No VMs configured under this host.</div>
-                      )}
-
-                      {vhosts.map(vh => {
-                        const vExpanded = expandedVirtual.has(vh.id)
-                        const vEditing  = editTarget?.kind === 'virtual' && editTarget.id === vh.id
-                        const engines   = enginesFor(vh.id)
-
-                        return (
-                          <div key={vh.id} className="topo-node">
-
-                            {/* ── VM row ── */}
-                            <div
-                              className={`topo-row level-1${vEditing ? ' editing' : ''}`}
-                              onClick={() => !vEditing && toggleVirtual(vh.id)}
-                            >
-                              <span className={`topo-chevron${vExpanded ? ' open' : ''}`}>
-                                {vExpanded ? '▼' : '▶'}
-                              </span>
-                              <div className="topo-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                                  <path d="M3 9h18M9 21V9" />
-                                </svg>
-                              </div>
-                              <div className="topo-info">
-                                <div className="topo-name">{vh.name}</div>
-                                <div className="topo-meta">{labelVirtualType(vh.type)} · {vh.ip}</div>
-                              </div>
-                              <div className="topo-actions">
-                                <button
-                                  className="topo-action-btn"
-                                  title="Edit"
-                                  onClick={ev => startEditVirtual(ev, vh)}
-                                >✎</button>
-                                <button
-                                  className="topo-action-btn danger"
-                                  title="Delete"
-                                  disabled={deletingIds.has(vh.id)}
-                                  onClick={ev => void deleteVirtual(ev, vh.id)}
-                                >✕</button>
-                              </div>
-                            </div>
-
-                            {vEditing && (
-                              <div className="topo-edit-panel">
-                                <FormWrap
-                                  title="Edit VM"
-                                  error={formError}
-                                  submitting={submitting}
-                                  onSubmit={() => void handleEditVirtual(vh.id)}
-                                  onCancel={cancelForm}
-                                  isEdit
-                                  onDelete={() => void deleteVirtual(null, vh.id)}
-                                  deleting={deletingIds.has(vh.id)}
-                                >
-                                  <VirtualFormFields form={virtualForm} onChange={setVirtualForm} />
-                                </FormWrap>
-                              </div>
-                            )}
-
-                            {/* ── Expanded: docker engines ── */}
-                            {vExpanded && (
-                              <div className="topo-children">
-                                {engines.length === 0 && addTarget?.kind !== 'docker' && (
-                                  <div className="topo-empty-children">No Docker engines configured.</div>
-                                )}
-
-                                {engines.map(de => {
-                                  const deEditing  = editTarget?.kind === 'docker' && editTarget.id === de.id
-                                  const deExpanded = expandedDocker.has(de.id) && !deEditing
-                                  const counts     = containerCounts[de.id]
-
-                                  return (
-                                    <div key={de.id} className="topo-node">
-                                      <div
-                                        className={`topo-row level-2${deEditing ? ' editing' : ''}${deExpanded ? ' expanded' : ''}`}
-                                        onClick={ev => {
-                                          ev.stopPropagation()
-                                          if (!deEditing) toggleDocker(de.id)
-                                        }}
-                                      >
-                                        <span className={`topo-chevron${deExpanded ? ' open' : ''}`}>
-                                          {deExpanded ? '▼' : '▶'}
-                                        </span>
-                                        <div className="topo-icon">
-                                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                            <path d="M12 22V12M3.27 6.96 12 12.01l8.73-5.05M12 2.1V12" />
-                                          </svg>
-                                        </div>
-                                        <div className="topo-info">
-                                          <div className="topo-name">{de.name}</div>
-                                          <div className="topo-meta">{de.socket_type} · {de.socket_path}</div>
-                                        </div>
-                                        {counts && (
-                                          <span className="de-count-badge">
-                                            {counts.total} container{counts.total !== 1 ? 's' : ''} · {counts.unlinked} unlinked
-                                          </span>
-                                        )}
-                                        <div className="topo-actions">
-                                          <button
-                                            className="topo-action-btn"
-                                            title="Edit"
-                                            onClick={ev => startEditDocker(ev, de)}
-                                          >✎</button>
-                                          <button
-                                            className="topo-action-btn danger"
-                                            title="Delete"
-                                            disabled={deletingIds.has(de.id)}
-                                            onClick={ev => void deleteDocker(ev, de.id)}
-                                          >✕</button>
-                                        </div>
-                                      </div>
-
-                                      {deEditing && (
-                                        <div className="topo-edit-panel">
-                                          <FormWrap
-                                            title="Edit Docker Engine"
-                                            error={formError}
-                                            submitting={submitting}
-                                            onSubmit={() => void handleEditDocker(de.id)}
-                                            onCancel={cancelForm}
-                                            isEdit
-                                            onDelete={() => void deleteDocker(null, de.id)}
-                                            deleting={deletingIds.has(de.id)}
-                                          >
-                                            <DockerFormFields form={dockerForm} onChange={setDockerForm} />
-                                          </FormWrap>
-                                        </div>
-                                      )}
-
-                                      {deExpanded && (
-                                        <DockerEngineDetail
-                                          engineId={de.id}
-                                          onCountsLoaded={(total, unlinked) =>
-                                            handleCountsLoaded(de.id, total, unlinked)
-                                          }
-                                        />
-                                      )}
-                                    </div>
-                                  )
-                                })}
-
-                                {addTarget?.kind === 'docker' && addTarget.virtualId === vh.id && (
-                                  <FormWrap
-                                    title="Add Docker Engine"
-                                    error={formError}
-                                    submitting={submitting}
-                                    onSubmit={() => void handleAddDocker(vh.id)}
-                                    onCancel={cancelForm}
-                                  >
-                                    <DockerFormFields form={dockerForm} onChange={setDockerForm} />
-                                  </FormWrap>
-                                )}
-
-                                <div className="topo-add-row">
-                                  <button className="topo-add-btn" onClick={ev => startAddDocker(ev, vh.id)}>
-                                    + Add Docker Engine
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                          </div>
-                        )
-                      })}
-
-                      {addTarget?.kind === 'virtual' && addTarget.physicalId === ph.id && (
-                        <FormWrap
-                          title="Add VM"
-                          error={formError}
-                          submitting={submitting}
-                          onSubmit={() => void handleAddVirtual(ph.id)}
-                          onCancel={cancelForm}
-                        >
-                          <VirtualFormFields form={virtualForm} onChange={setVirtualForm} />
-                        </FormWrap>
-                      )}
-
-                      <div className="topo-add-row">
-                        <button className="topo-add-btn" onClick={ev => startAddVirtual(ev, ph.id)}>
-                          + Add VM
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
+                {/* Card grid */}
+                <div className="topo-level">
+                  <div className="topo-grid">
+                    {level.nodes.map(node => (
+                      <NodeCard
+                        key={node.id}
+                        node={node}
+                        selected={level.selected?.id === node.id}
+                        onClick={() => selectAt(i, node)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              )
-            })}
+
+              </div>
+            ))}
+
+            {/* Container pill row */}
+            {showContainerLeaf && (
+              <ContainerRow
+                containers={containerLeaf}
+                selected={selectedContainer}
+                onSelect={selectContainer}
+              />
+            )}
+
+            {/* App layer */}
+            {showAppLayer && <AppLayer container={selectedContainer!} />}
+
           </div>
         )}
-
-    </>
-  )
-}
-
-// ── Standalone page ───────────────────────────────────────────────────────────
-
-export function Topology() {
-  return (
-    <>
-      <Topbar title="Infrastructure" />
-      <div className="content">
-        <TopologyTree />
       </div>
     </>
   )

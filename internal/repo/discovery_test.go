@@ -320,13 +320,11 @@ func TestDiscoveredRouteRepo_UpsertAndGet(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	domain := "sonarr.example.com"
-	svc := "sonarr-service"
 	ro := &models.DiscoveredRoute{
 		InfrastructureID: infraID,
 		RouterName:       "sonarr-router",
 		Rule:             "Host(`sonarr.example.com`)",
 		Domain:           &domain,
-		BackendService:   &svc,
 		LastSeenAt:       now,
 		CreatedAt:        now,
 	}

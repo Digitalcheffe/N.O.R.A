@@ -61,7 +61,7 @@ func (s *TraefikDiscoveryScanner) Discover(ctx context.Context, entityID, entity
 		log.Printf("traefik discovery: update status for %s: %v", c.Name, err)
 	}
 
-	writeDiscoveryEvent(ctx, s.store, entityID, c.Name, "physical_host", "debug",
+	writeDiscoveryEvent(ctx, s.store, entityID, c.Name, "traefik", "debug",
 		fmt.Sprintf("[discovery] Traefik %s: %d routes discovered", c.Name, found))
 
 	return &scanner.DiscoveryResult{

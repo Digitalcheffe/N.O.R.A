@@ -57,6 +57,13 @@ type discoveredContainerResponse struct {
 	// Image update fields (DD-9): populated by the ImageUpdatePoller.
 	ImageUpdateAvailable bool       `json:"image_update_available"`
 	ImageLastCheckedAt   *time.Time `json:"image_last_checked_at,omitempty"`
+	// Enrichment fields (AP-04 / migration 037).
+	Ports           *string    `json:"ports,omitempty"`
+	Labels          *string    `json:"labels,omitempty"`
+	Volumes         *string    `json:"volumes,omitempty"`
+	Networks        *string    `json:"networks,omitempty"`
+	RestartPolicy   *string    `json:"restart_policy,omitempty"`
+	DockerCreatedAt *time.Time `json:"docker_created_at,omitempty"`
 }
 
 type listDiscoveredContainersResponse struct {
@@ -119,6 +126,12 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 			LastSeenAt:           c.LastSeenAt,
 			ImageUpdateAvailable: c.ImageUpdateAvailable != 0,
 			ImageLastCheckedAt:   c.ImageLastCheckedAt,
+			Ports:                c.Ports,
+			Labels:               c.Labels,
+			Volumes:              c.Volumes,
+			Networks:             c.Networks,
+			RestartPolicy:        c.RestartPolicy,
+			DockerCreatedAt:      c.DockerCreatedAt,
 		}
 
 		// Walk lookup priority until we find a source ID that has metrics.
@@ -150,17 +163,28 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 
 // discoveredRouteResponse is the per-route shape returned by the routes API.
 type discoveredRouteResponse struct {
-	ID          string     `json:"id"`
-	RouterName  string     `json:"router_name"`
-	Rule        string     `json:"rule"`
-	Domain      *string    `json:"domain"`
-	ServiceName *string    `json:"service_name"`
-	ContainerID *string    `json:"container_id"`
-	ContainerName *string  `json:"container_name"`
-	AppID       *string    `json:"app_id"`
-	SSLExpiry   *time.Time `json:"ssl_expiry"`
-	SSLIssuer   *string    `json:"ssl_issuer"`
-	LastSeenAt  time.Time  `json:"last_seen_at"`
+	ID               string     `json:"id"`
+	RouterName       string     `json:"router_name"`
+	Rule             string     `json:"rule"`
+	Domain           *string    `json:"domain"`
+	ServiceName      *string    `json:"service_name"`
+	ContainerID      *string    `json:"container_id"`
+	ContainerName    *string    `json:"container_name"`
+	AppID            *string    `json:"app_id"`
+	SSLExpiry        *time.Time `json:"ssl_expiry"`
+	SSLIssuer        *string    `json:"ssl_issuer"`
+	LastSeenAt       time.Time  `json:"last_seen_at"`
+	RouterStatus     string     `json:"router_status"`
+	Provider         *string    `json:"provider,omitempty"`
+	EntryPoints      *string    `json:"entry_points,omitempty"`
+	HasTLSResolver   int        `json:"has_tls_resolver"`
+	CertResolverName *string    `json:"cert_resolver_name,omitempty"`
+	ServiceStatus    *string    `json:"service_status,omitempty"`
+	ServiceType      *string    `json:"service_type,omitempty"`
+	ServersTotal     int        `json:"servers_total"`
+	ServersUp        int        `json:"servers_up"`
+	ServersDown      int        `json:"servers_down"`
+	ServersJSON      *string    `json:"servers_json,omitempty"`
 }
 
 type listDiscoveredRoutesResponse struct {
@@ -174,16 +198,27 @@ func buildRouteResponses(routes []*models.DiscoveredRoute, containersByID map[st
 	out := make([]discoveredRouteResponse, len(routes))
 	for i, ro := range routes {
 		item := discoveredRouteResponse{
-			ID:          ro.ID,
-			RouterName:  ro.RouterName,
-			Rule:        ro.Rule,
-			Domain:      ro.Domain,
-			ServiceName: ro.ServiceName,
-			ContainerID: ro.ContainerID,
-			AppID:       ro.AppID,
-			SSLExpiry:   ro.SSLExpiry,
-			SSLIssuer:   ro.SSLIssuer,
-			LastSeenAt:  ro.LastSeenAt,
+			ID:               ro.ID,
+			RouterName:       ro.RouterName,
+			Rule:             ro.Rule,
+			Domain:           ro.Domain,
+			ServiceName:      ro.ServiceName,
+			ContainerID:      ro.ContainerID,
+			AppID:            ro.AppID,
+			SSLExpiry:        ro.SSLExpiry,
+			SSLIssuer:        ro.SSLIssuer,
+			LastSeenAt:       ro.LastSeenAt,
+			RouterStatus:     ro.RouterStatus,
+			Provider:         ro.Provider,
+			EntryPoints:      ro.EntryPoints,
+			HasTLSResolver:   ro.HasTLSResolver,
+			CertResolverName: ro.CertResolverName,
+			ServiceStatus:    ro.ServiceStatus,
+			ServiceType:      ro.ServiceType,
+			ServersTotal:     ro.ServersTotal,
+			ServersUp:        ro.ServersUp,
+			ServersDown:      ro.ServersDown,
+			ServersJSON:      ro.ServersJSON,
 		}
 		if ro.ContainerID != nil {
 			if name, ok := containersByID[*ro.ContainerID]; ok {
@@ -348,11 +383,11 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			return
 		}
 		container.AppID = &req.AppID
-		// Wire the app into the topology: app → its discovering engine component.
-		if comp, err := h.store.InfraComponents.Get(r.Context(), container.InfraComponentID); err == nil {
-			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", req.AppID); err != nil {
-				log.Printf("LinkContainerApp: set component_link for app %s: %v", req.AppID, err)
-			}
+		// Wire the app into the topology: app → container → docker_engine/portainer.
+		// Linking directly to the container (not the engine) ensures the container
+		// node appears in the app chain walk.
+		if err := h.store.ComponentLinks.SetParent(r.Context(), "container", id, "app", req.AppID); err != nil {
+			log.Printf("LinkContainerApp: set component_link for app %s: %v", req.AppID, err)
 		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, req.AppID, &id, nil)
 		writeJSON(w, http.StatusOK, container)
@@ -400,11 +435,9 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		// Wire the new app into the topology: app → its discovering engine component.
-		if comp, err := h.store.InfraComponents.Get(r.Context(), container.InfraComponentID); err == nil {
-			if err := h.store.ComponentLinks.SetParent(r.Context(), comp.Type, comp.ID, "app", app.ID); err != nil {
-				log.Printf("LinkContainerApp: set component_link for app %s: %v", app.ID, err)
-			}
+		// Wire the new app into the topology: app → container → docker_engine/portainer.
+		if err := h.store.ComponentLinks.SetParent(r.Context(), "container", id, "app", app.ID); err != nil {
+			log.Printf("LinkContainerApp: set component_link for app %s: %v", app.ID, err)
 		}
 		_ = infra.EnrichAppOnLink(r.Context(), h.store, h.profiles, app.ID, &id, nil)
 		writeJSON(w, http.StatusCreated, app)
