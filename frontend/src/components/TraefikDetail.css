@@ -410,6 +410,22 @@
   white-space: nowrap;
 }
 
+.tk-backends-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: var(--text2);
+}
+
+.tk-svc-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+}
+
 .tk-endpoint {
   color: var(--text2);
 }

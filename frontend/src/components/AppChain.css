@@ -281,9 +281,9 @@
 }
 
 .chain-traefik-rule {
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--mono);
-  color: var(--text2);
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -291,7 +291,7 @@
 }
 
 .chain-traefik-service {
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--mono);
   color: var(--text);
   white-space: nowrap;
@@ -299,7 +299,7 @@
 }
 
 .chain-traefik-manual-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text3);
   font-style: italic;
   margin-left: 6px;
@@ -310,8 +310,20 @@
 }
 
 .chain-traefik-servers {
-  font-size: 10px;
-  color: var(--text3);
+  font-size: 11px;
+  color: var(--text2);
   font-family: var(--mono);
   margin-left: 2px;
+}
+
+.chain-traefik-backend {
+  font-size: 11px;
+  color: var(--text2);
+  font-family: var(--mono);
+  margin-left: 8px;
+}
+
+.chain-traefik-backend--down {
+  color: var(--red);
+  text-decoration: line-through;
 }

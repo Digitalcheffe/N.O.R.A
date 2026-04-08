@@ -117,7 +117,7 @@ func (r *mockMetricsEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, 
 // --- helpers --------------------------------------------------------------
 
 func newTestResourcePoller(appRepo repo.AppRepo, eventRepo repo.EventRepo, resRepo repo.ResourceReadingRepo, cli resourcePollerAPI) *ResourcePoller {
-	store := repo.NewStore(appRepo, eventRepo, nil, nil, resRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	store := repo.NewStore(appRepo, eventRepo, nil, nil, resRepo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	return newResourcePollerWithClient(store, "", cli)
 }
 

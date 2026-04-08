@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { DetailPageLayout } from '../components/DetailPageLayout'
-import { checks as checksApi, integrations as integrationsApi, apps as appsApi } from '../api/client'
+import { checks as checksApi, apps as appsApi } from '../api/client'
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
-import type { MonitorCheck, InfraIntegration, TraefikCert, App } from '../api/types'
+import type { MonitorCheck, App } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
 import { SlidePanel } from '../components/SlidePanel'
 import {
@@ -24,9 +24,6 @@ interface EditPanelProps {
   open: boolean
   check: MonitorCheck
   apps: App[]
-  traefikIntegrations: InfraIntegration[]
-  traefikCerts: TraefikCert[]
-  onIntegrationChange: (id: string) => void
   onSave: (form: FormFields) => Promise<void>
   onDelete: () => Promise<void>
   onClose: () => void
@@ -36,9 +33,6 @@ function EditPanel({
   open,
   check,
   apps,
-  traefikIntegrations,
-  traefikCerts,
-  onIntegrationChange,
   onSave,
   onDelete,
   onClose,
@@ -122,9 +116,6 @@ function EditPanel({
         submitting={submitting}
         title=""
         submitLabel="Save Changes"
-        traefikIntegrations={traefikIntegrations}
-        traefikCerts={traefikCerts}
-        onIntegrationChange={onIntegrationChange}
         apps={apps}
         hideActions
       />
@@ -145,8 +136,6 @@ export function CheckDetail() {
   const [resetting, setResetting] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [editKey, setEditKey] = useState(0)
-  const [traefikIntegrations, setTraefikIntegrations] = useState<InfraIntegration[]>([])
-  const [traefikCerts, setTraefikCerts] = useState<TraefikCert[]>([])
   const [appsList, setAppsList] = useState<App[]>([])
 
   useEffect(() => {
@@ -161,17 +150,6 @@ export function CheckDetail() {
       .then(res => setAppsList(res.data))
       .catch(() => {})
 
-    integrationsApi.list()
-      .then(res => {
-        const traefik = res.data.filter(i => i.type === 'traefik' && i.enabled)
-        setTraefikIntegrations(traefik)
-        if (traefik.length > 0) {
-          return integrationsApi.certs(traefik[0].id)
-            .then(certsRes => setTraefikCerts(certsRes.data))
-            .catch(() => {})
-        }
-      })
-      .catch(() => {})
   }, [id, navigate, tick])
 
   async function handleRun() {
@@ -205,17 +183,9 @@ export function CheckDetail() {
     }
   }
 
-  function handleIntegrationChange(integrationId: string) {
-    if (!integrationId) return
-    integrationsApi.certs(integrationId)
-      .then(res => setTraefikCerts(res.data))
-      .catch(() => {})
-  }
-
   async function handleSave(form: FormFields) {
     if (!id) return
-    const integrationId = form.ssl_source === 'traefik' ? form.integration_id : undefined
-    const updated = await checksApi.update(id, formToInput(form, integrationId))
+    const updated = await checksApi.update(id, formToInput(form))
     setCheck(updated)
   }
 
@@ -318,9 +288,6 @@ export function CheckDetail() {
         open={showEdit}
         check={check}
         apps={appsList}
-        traefikIntegrations={traefikIntegrations}
-        traefikCerts={traefikCerts}
-        onIntegrationChange={handleIntegrationChange}
         onSave={handleSave}
         onDelete={handleDelete}
         onClose={() => setShowEdit(false)}

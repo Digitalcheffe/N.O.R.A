@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { CheckType, InfraIntegration, TraefikCert } from '../api/types'
+import type { CheckType } from '../api/types'
 import type { FormFields } from './checkFormHelpers'
 import './CheckForm.css'
 
@@ -13,9 +13,6 @@ interface CheckFormProps {
   title: string
   submitLabel: string
   extraAction?: ReactNode
-  traefikIntegrations: InfraIntegration[]
-  traefikCerts: TraefikCert[]
-  onIntegrationChange: (integrationId: string) => void
   apps?: { id: string; name: string }[]
   targetSuggestion?: string  // ghost-text placeholder derived from the linked app's profile
   hideActions?: boolean      // when true, omit the built-in form-actions row (SlidePanel footer takes over)
@@ -34,16 +31,10 @@ export function CheckForm({
   title,
   submitLabel,
   extraAction,
-  traefikIntegrations,
-  traefikCerts,
-  onIntegrationChange,
   apps,
   targetSuggestion,
   hideActions = false,
 }: CheckFormProps) {
-  const hasTraefik = traefikIntegrations.length > 0
-  const selectedIntegration = traefikIntegrations.find(i => i.id === form.integration_id)
-
   return (
     <div className="add-form">
       {title && <div className="form-title">{title}</div>}
@@ -85,77 +76,7 @@ export function CheckForm({
           </div>
         )}
 
-        {form.type === 'ssl' && (
-          <div className="form-field">
-            <div className="form-label">SSL Source</div>
-            {!hasTraefik ? (
-              <div className="ssl-no-traefik-banner">
-                Connect Traefik in Settings → Integrations to enable automatic SSL discovery.
-              </div>
-            ) : (
-              <div className="type-selector">
-                <button
-                  className={`type-btn${form.ssl_source === 'traefik' ? ' active' : ''}`}
-                  onClick={() => onChange('ssl_source', 'traefik')}
-                >
-                  Traefik
-                </button>
-                <button
-                  className={`type-btn${form.ssl_source === 'standalone' ? ' active' : ''}`}
-                  onClick={() => onChange('ssl_source', 'standalone')}
-                >
-                  Standalone
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {form.type === 'ssl' && form.ssl_source === 'traefik' && hasTraefik && (
-          <>
-            {traefikIntegrations.length > 1 && (
-              <div className="form-field">
-                <div className="form-label">Traefik Integration</div>
-                <select
-                  className="form-input"
-                  value={form.integration_id}
-                  onChange={e => {
-                    onChange('integration_id', e.target.value)
-                    onIntegrationChange(e.target.value)
-                  }}
-                >
-                  <option value="">Select integration…</option>
-                  {[...traefikIntegrations].sort((a, b) => a.name.localeCompare(b.name)).map(i => (
-                    <option key={i.id} value={i.id}>{i.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="form-field">
-              <div className="form-label">Domain</div>
-              {traefikCerts.length === 0 ? (
-                <div className="ssl-no-certs-msg">
-                  {selectedIntegration
-                    ? 'No certs discovered yet — run a sync in Settings → Integrations.'
-                    : 'Select an integration to see available domains.'}
-                </div>
-              ) : (
-                <select
-                  className="form-input"
-                  value={form.traefik_domain}
-                  onChange={e => onChange('traefik_domain', e.target.value)}
-                >
-                  <option value="">Select domain…</option>
-                  {[...traefikCerts].sort((a, b) => a.domain.localeCompare(b.domain)).map(c => (
-                    <option key={c.id} value={c.domain}>{c.domain}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </>
-        )}
-
-        {(form.type !== 'ssl' || form.ssl_source === 'standalone' || !hasTraefik) && form.type !== 'dns' && (
+        {form.type !== 'dns' && (
           <div className="form-field">
             <div className="form-label">{form.type === 'ping' ? 'Host / IP' : 'URL'}</div>
             <input
@@ -168,12 +89,6 @@ export function CheckForm({
                   : form.type === 'ping' ? 'e.g. 192.168.1.1' : 'https://example.com'
               }
             />
-            {form.type === 'ssl' && form.ssl_source === 'standalone' && (
-              <div className="ssl-standalone-warning">
-                ⚠ Standalone SSL checks make a direct TLS connection. This may fail for
-                services proxied through Traefik on the same host. Use for external URLs only.
-              </div>
-            )}
           </div>
         )}
 

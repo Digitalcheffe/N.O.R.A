@@ -13,10 +13,6 @@ type MonitorCheck struct {
 	ExpectedStatus int        `db:"expected_status" json:"expected_status,omitempty"`
 	SSLWarnDays    int        `db:"ssl_warn_days"   json:"ssl_warn_days"`
 	SSLCritDays    int        `db:"ssl_crit_days"   json:"ssl_crit_days"`
-	// SSLSource distinguishes Traefik-mode SSL checks (cert read from cache)
-	// from standalone checks (direct TLS handshake). Nil means standalone.
-	SSLSource     *string `db:"ssl_source"      json:"ssl_source,omitempty"`
-	IntegrationID *string `db:"integration_id"  json:"integration_id,omitempty"`
 	// SourceComponentID is set for SSL checks auto-created by a Traefik component poller.
 	// When set, the check is owned by the component and cannot be deleted by the user directly.
 	SourceComponentID *string `db:"source_component_id" json:"source_component_id,omitempty"`

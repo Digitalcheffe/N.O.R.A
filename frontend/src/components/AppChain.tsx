@@ -214,6 +214,21 @@ export function AppChain({ chain, appStatus, traefik }: AppChainProps) {
                           )}
                         </div>
                       )}
+                      {/* First backend host from servers_json */}
+                      {(() => {
+                        if (!r.servers_json) return null
+                        try {
+                          const entries = Object.entries(JSON.parse(r.servers_json) as Record<string, string>)
+                          if (entries.length === 0) return null
+                          const [url, st] = entries[0]
+                          const isDown = st.toUpperCase() === 'DOWN'
+                          return (
+                            <span className={`chain-traefik-backend${isDown ? ' chain-traefik-backend--down' : ''}`}>
+                              {url}{entries.length > 1 ? ` +${entries.length - 1}` : ''}
+                            </span>
+                          )
+                        } catch { return null }
+                      })()}
                     </>
                   )}
                 </div>

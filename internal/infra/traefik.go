@@ -3,16 +3,11 @@ package infra
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/digitalcheffe/nora/internal/models"
 )
 
 // TraefikClient calls the Traefik dashboard API to discover TLS certificates
@@ -52,48 +47,6 @@ func (c *TraefikClient) Ping(ctx context.Context) error {
 }
 
 // traefikRawCert mirrors the JSON shape returned by GET /api/tls/certificates.
-type traefikRawCert struct {
-	Domain struct {
-		Main string   `json:"main"`
-		SANs []string `json:"sans"`
-	} `json:"domain"`
-	Certificate string `json:"certificate"` // base64-encoded PEM
-}
-
-// FetchCerts calls GET /api/tls/certificates, parses each entry through the
-// x509 library, and returns a slice of TraefikCert ready for the cache.
-func (c *TraefikClient) FetchCerts(ctx context.Context) ([]*models.TraefikCert, error) {
-	req, err := c.newRequest(ctx, "GET", "/api/tls/certificates")
-	if err != nil {
-		return nil, err
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("traefik fetch certs: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("traefik fetch certs: unexpected status %d", resp.StatusCode)
-	}
-
-	var raw []traefikRawCert
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("traefik fetch certs: decode: %w", err)
-	}
-
-	out := make([]*models.TraefikCert, 0, len(raw))
-	for _, r := range raw {
-		cert, err := parseCert(r)
-		if err != nil {
-			// Skip malformed entries rather than failing the whole sync.
-			continue
-		}
-		out = append(out, cert)
-	}
-	return out, nil
-}
-
 // traefikOverviewRaw mirrors the JSON shape returned by GET /api/overview.
 type traefikOverviewRaw struct {
 	Version string `json:"version"`
@@ -275,49 +228,3 @@ func (c *TraefikClient) newRequest(ctx context.Context, method, path string) (*h
 	return req, nil
 }
 
-// parseCert extracts certificate metadata from a raw Traefik cert entry.
-// The Certificate field is base64-encoded PEM (not DER).
-func parseCert(r traefikRawCert) (*models.TraefikCert, error) {
-	pemBytes, err := base64.StdEncoding.DecodeString(r.Certificate)
-	if err != nil {
-		// Some Traefik builds emit plain (non-base64) PEM.
-		pemBytes = []byte(r.Certificate)
-	}
-
-	block, _ := pem.Decode(pemBytes)
-	if block == nil {
-		return nil, fmt.Errorf("no PEM block in certificate data")
-	}
-
-	x509cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse x509: %w", err)
-	}
-
-	domain := r.Domain.Main
-	if domain == "" {
-		domain = x509cert.Subject.CommonName
-	}
-
-	sans := x509cert.DNSNames
-	if sans == nil {
-		sans = []string{}
-	}
-
-	issuer := strings.Join(x509cert.Issuer.Organization, ", ")
-	if issuer == "" {
-		issuer = x509cert.Issuer.CommonName
-	}
-
-	expiresAt := x509cert.NotAfter.UTC()
-
-	cert := &models.TraefikCert{
-		Domain:    domain,
-		SANs:      sans,
-		ExpiresAt: &expiresAt,
-	}
-	if issuer != "" {
-		cert.Issuer = &issuer
-	}
-	return cert, nil
-}

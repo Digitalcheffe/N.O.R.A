@@ -63,4 +63,20 @@ type DiscoveredRoute struct {
 	ServersTotal  int     `db:"servers_total"  json:"servers_total"`
 	ServersUp     int     `db:"servers_up"     json:"servers_up"`
 	ServersDown   int     `db:"servers_down"   json:"servers_down"`
+	ServersJSON   *string `db:"servers_json"   json:"servers_json,omitempty"` // JSON map: URL → "UP"|"DOWN"
+}
+
+// DiscoveredServiceSummary is a deduplicated service entry derived from
+// discovered_routes, grouped by service_name. Replaces the traefik_services table.
+type DiscoveredServiceSummary struct {
+	ID              string    `db:"id"           json:"id"`
+	ComponentID     string    `db:"component_id" json:"component_id"`
+	ServiceName     string    `db:"service_name" json:"service_name"`
+	ServiceType     string    `db:"service_type" json:"service_type"`
+	Status          string    `db:"status"       json:"status"`
+	ServerCount     int       `db:"server_count" json:"server_count"`
+	ServersUp       int       `db:"servers_up"   json:"servers_up"`
+	ServersDown     int       `db:"servers_down" json:"servers_down"`
+	ServerStatusJSON string   `db:"-"            json:"server_status_json"` // always "{}" — per-server map not stored
+	LastSeen        time.Time `db:"last_seen"    json:"last_seen"`
 }

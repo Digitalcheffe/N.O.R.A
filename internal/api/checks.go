@@ -59,8 +59,6 @@ type checkRequest struct {
 	ExpectedStatus   int     `json:"expected_status"`
 	SSLWarnDays      int     `json:"ssl_warn_days"`
 	SSLCritDays      int     `json:"ssl_crit_days"`
-	SSLSource        *string `json:"ssl_source"`      // "traefik" | "standalone" | nil
-	IntegrationID    *string `json:"integration_id"`  // required when ssl_source == "traefik"
 	Enabled          *bool   `json:"enabled"`          // nil = no change, false = disable, true = enable
 	SkipTLSVerify    *bool   `json:"skip_tls_verify"`  // nil = no change; for url checks only
 	DNSRecordType    string  `json:"dns_record_type"`    // A | AAAA | MX | CNAME | TXT
@@ -107,14 +105,9 @@ func validateCheck(req checkRequest) string {
 			return "dns_record_type must be one of: A, AAAA, MX, CNAME, TXT"
 		}
 	}
-	// For SSL checks, only require a URL prefix in standalone mode.
-	// Traefik-mode SSL checks use a bare domain name as the target.
 	if req.Type == "ssl" {
-		isTraefik := req.SSLSource != nil && *req.SSLSource == "traefik"
-		if !isTraefik {
-			if !strings.HasPrefix(req.Target, "http://") && !strings.HasPrefix(req.Target, "https://") {
-				return "target must begin with http:// or https:// for standalone ssl checks"
-			}
+		if !strings.HasPrefix(req.Target, "http://") && !strings.HasPrefix(req.Target, "https://") {
+			return "target must begin with http:// or https:// for ssl checks"
 		}
 	}
 	return ""
@@ -169,8 +162,6 @@ func (h *ChecksHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ExpectedStatus:   req.ExpectedStatus,
 		SSLWarnDays:      warnDays,
 		SSLCritDays:      critDays,
-		SSLSource:        req.SSLSource,
-		IntegrationID:    req.IntegrationID,
 		SkipTLSVerify:    skipTLS,
 		DNSRecordType:    strings.ToUpper(req.DNSRecordType),
 		DNSExpectedValue: req.DNSExpectedValue,
@@ -270,12 +261,6 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.SSLCritDays != 0 {
 		existing.SSLCritDays = req.SSLCritDays
 	}
-	if req.SSLSource != nil {
-		existing.SSLSource = req.SSLSource
-	}
-	if req.IntegrationID != nil {
-		existing.IntegrationID = req.IntegrationID
-	}
 	if req.Enabled != nil {
 		existing.Enabled = *req.Enabled
 	}
@@ -295,15 +280,13 @@ func (h *ChecksHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// Re-validate only when core fields were part of the request — a
 	// pause/resume or flag-only update should not be rejected because the
 	// stored target happens to be an unresolved template placeholder.
-	coreFieldsChanged := req.Name != "" || req.Type != "" || req.Target != "" ||
-		req.IntervalSecs != 0 || req.SSLSource != nil
+	coreFieldsChanged := req.Name != "" || req.Type != "" || req.Target != "" || req.IntervalSecs != 0
 	if coreFieldsChanged {
 		merged := checkRequest{
 			Name:         existing.Name,
 			Type:         existing.Type,
 			Target:       existing.Target,
 			IntervalSecs: existing.IntervalSecs,
-			SSLSource:    existing.SSLSource,
 		}
 		if msg := validateCheck(merged); msg != "" {
 			writeError(w, http.StatusBadRequest, msg)

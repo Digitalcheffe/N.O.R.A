@@ -9,14 +9,9 @@ type Store struct {
 	Resources            ResourceReadingRepo
 	ResourceRollups      ResourceRollupRepo
 	InfraComponents      InfraComponentRepo
-	DockerEngines        DockerEngineRepo
-	Infra                InfraRepo
 	Settings             SettingsRepo
 	Metrics              MetricsRepo
 	Users                UserRepo
-	TraefikComponents    TraefikComponentRepo
-	TraefikOverview      TraefikOverviewRepo
-	TraefikServices      TraefikServiceRepo
 	DiscoveredContainers DiscoveredContainerRepo
 	DiscoveredRoutes     DiscoveredRouteRepo
 	WebPushSubscriptions WebPushSubscriptionRepo
@@ -36,14 +31,9 @@ func NewStore(
 	resources ResourceReadingRepo,
 	resourceRollups ResourceRollupRepo,
 	infraComponents InfraComponentRepo,
-	dockerEngines DockerEngineRepo,
-	infra InfraRepo,
 	settings SettingsRepo,
 	metrics MetricsRepo,
 	users UserRepo,
-	traefikComponents TraefikComponentRepo,
-	traefikOverview TraefikOverviewRepo,
-	traefikServices TraefikServiceRepo,
 	discoveredContainers DiscoveredContainerRepo,
 	discoveredRoutes DiscoveredRouteRepo,
 	webPushSubscriptions WebPushSubscriptionRepo,
@@ -61,14 +51,9 @@ func NewStore(
 		Resources:            resources,
 		ResourceRollups:      resourceRollups,
 		InfraComponents:      infraComponents,
-		DockerEngines:        dockerEngines,
-		Infra:                infra,
 		Settings:             settings,
 		Metrics:              metrics,
 		Users:                users,
-		TraefikComponents:    traefikComponents,
-		TraefikOverview:      traefikOverview,
-		TraefikServices:      traefikServices,
 		DiscoveredContainers: discoveredContainers,
 		DiscoveredRoutes:     discoveredRoutes,
 		WebPushSubscriptions: webPushSubscriptions,

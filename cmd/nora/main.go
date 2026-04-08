@@ -81,14 +81,9 @@ func main() {
 	resourceRepo := repo.NewResourceReadingRepo(db)
 	resourceRollupRepo := repo.NewResourceRollupRepo(db)
 	infraComponentRepo := repo.NewInfraComponentRepo(db)
-	dockerEngineRepo := repo.NewDockerEngineRepo(db)
-	infraRepo := repo.NewInfraRepo(db)
 	settingsRepo := repo.NewSettingsRepo(db)
 	metricsRepo := repo.NewMetricsRepo(db)
 	userRepo := repo.NewUserRepo(db)
-	traefikComponentRepo := repo.NewTraefikComponentRepo(db)
-	traefikOverviewRepo := repo.NewTraefikOverviewRepo(db)
-	traefikServiceRepo := repo.NewTraefikServiceRepo(db)
 	discoveredContainerRepo := repo.NewDiscoveredContainerRepo(db)
 	discoveredRouteRepo := repo.NewDiscoveredRouteRepo(db)
 	webPushSubscriptionRepo := repo.NewWebPushSubscriptionRepo(db)
@@ -100,9 +95,8 @@ func main() {
 	store := repo.NewStore(
 		appRepo, eventRepo, checkRepo,
 		rollupRepo, resourceRepo, resourceRollupRepo,
-		infraComponentRepo, dockerEngineRepo,
-		infraRepo, settingsRepo, metricsRepo, userRepo,
-		traefikComponentRepo, traefikOverviewRepo, traefikServiceRepo,
+		infraComponentRepo,
+		settingsRepo, metricsRepo, userRepo,
 		discoveredContainerRepo, discoveredRouteRepo,
 		webPushSubscriptionRepo,
 		snapshotRepo,
@@ -273,9 +267,6 @@ func main() {
 	defer digestCancel()
 	go jobs.StartDigestJob(digestCtx, digestJob)
 
-	// Sync worker — kept for InfraHandler manual-sync endpoint; background polling removed.
-	syncWorker := infra.NewSyncWorker(store)
-
 	// Portainer enrichment worker — container discovery and image-update detection.
 	// Runs as a GlobalSnapshotJob on the 30-minute snapshot interval rather than
 	// a standalone ticker.
@@ -435,10 +426,9 @@ func main() {
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo, monitorScheduler).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
-		api.NewTopologyHandler(infraComponentRepo, dockerEngineRepo, appRepo, resourceRollupRepo, componentLinkRepo).Routes(r)
+		api.NewTopologyHandler(infraComponentRepo, appRepo, componentLinkRepo).Routes(r)
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, eventRepo, store).Routes(r)
 		api.NewProfilesHandler(registry, customDir).Routes(r)
-		api.NewInfraHandler(infraRepo, syncWorker).Routes(r)
 		api.NewDockerDiscoveryHandler(store, registry).Routes(r)
 			api.NewDockerSummaryHandler(store).Routes(r)
 		api.NewDigestHandler(store, digestJob).Routes(r)

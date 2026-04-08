@@ -150,17 +150,17 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 
 // discoveredRouteResponse is the per-route shape returned by the routes API.
 type discoveredRouteResponse struct {
-	ID             string     `json:"id"`
-	RouterName     string     `json:"router_name"`
-	Rule           string     `json:"rule"`
-	Domain         *string    `json:"domain"`
-	BackendService *string    `json:"backend_service"`
-	ContainerID    *string    `json:"container_id"`
-	ContainerName  *string    `json:"container_name"`
-	AppID          *string    `json:"app_id"`
-	SSLExpiry      *time.Time `json:"ssl_expiry"`
-	SSLIssuer      *string    `json:"ssl_issuer"`
-	LastSeenAt     time.Time  `json:"last_seen_at"`
+	ID          string     `json:"id"`
+	RouterName  string     `json:"router_name"`
+	Rule        string     `json:"rule"`
+	Domain      *string    `json:"domain"`
+	ServiceName *string    `json:"service_name"`
+	ContainerID *string    `json:"container_id"`
+	ContainerName *string  `json:"container_name"`
+	AppID       *string    `json:"app_id"`
+	SSLExpiry   *time.Time `json:"ssl_expiry"`
+	SSLIssuer   *string    `json:"ssl_issuer"`
+	LastSeenAt  time.Time  `json:"last_seen_at"`
 }
 
 type listDiscoveredRoutesResponse struct {
@@ -174,16 +174,16 @@ func buildRouteResponses(routes []*models.DiscoveredRoute, containersByID map[st
 	out := make([]discoveredRouteResponse, len(routes))
 	for i, ro := range routes {
 		item := discoveredRouteResponse{
-			ID:             ro.ID,
-			RouterName:     ro.RouterName,
-			Rule:           ro.Rule,
-			Domain:         ro.Domain,
-			BackendService: ro.BackendService,
-			ContainerID:    ro.ContainerID,
-			AppID:          ro.AppID,
-			SSLExpiry:      ro.SSLExpiry,
-			SSLIssuer:      ro.SSLIssuer,
-			LastSeenAt:     ro.LastSeenAt,
+			ID:          ro.ID,
+			RouterName:  ro.RouterName,
+			Rule:        ro.Rule,
+			Domain:      ro.Domain,
+			ServiceName: ro.ServiceName,
+			ContainerID: ro.ContainerID,
+			AppID:       ro.AppID,
+			SSLExpiry:   ro.SSLExpiry,
+			SSLIssuer:   ro.SSLIssuer,
+			LastSeenAt:  ro.LastSeenAt,
 		}
 		if ro.ContainerID != nil {
 			if name, ok := containersByID[*ro.ContainerID]; ok {

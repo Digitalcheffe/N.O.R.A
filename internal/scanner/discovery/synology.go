@@ -36,9 +36,9 @@ func (s *SynologyDiscoveryScanner) Discover(ctx context.Context, entityID string
 
 	// Read previous meta before polling so we can detect first-run vs changes.
 	var prevVolumes, prevDisks int
-	if c.SynologyMeta != nil && *c.SynologyMeta != "" {
+	if c.Meta != nil && *c.Meta != "" {
 		var prev infra.SynologyMeta
-		if err := json.Unmarshal([]byte(*c.SynologyMeta), &prev); err == nil {
+		if err := json.Unmarshal([]byte(*c.Meta), &prev); err == nil {
 			prevVolumes = len(prev.Volumes)
 			prevDisks = len(prev.Disks)
 		}
@@ -62,14 +62,14 @@ func (s *SynologyDiscoveryScanner) Discover(ctx context.Context, entityID string
 		return &scanner.DiscoveryResult{EntityID: entityID, EntityType: entityType}, nil
 	}
 
-	if updated.SynologyMeta == nil || *updated.SynologyMeta == "" {
+	if updated.Meta == nil || *updated.Meta == "" {
 		writeDiscoveryEvent(ctx, s.store, entityID, c.Name, "physical_host", "debug",
 			fmt.Sprintf("[discovery] %s discovery completed — no changes", c.Name))
 		return &scanner.DiscoveryResult{EntityID: entityID, EntityType: entityType}, nil
 	}
 
 	var meta infra.SynologyMeta
-	if err := json.Unmarshal([]byte(*updated.SynologyMeta), &meta); err != nil {
+	if err := json.Unmarshal([]byte(*updated.Meta), &meta); err != nil {
 		return nil, fmt.Errorf("parse synology meta: %w", err)
 	}
 

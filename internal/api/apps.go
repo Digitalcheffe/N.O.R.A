@@ -77,10 +77,11 @@ type chainTraefikRoute struct {
 	Service     string `json:"service"`
 	Status      string `json:"status"`
 	// Service health from traefik_services (populated when the service is known).
-	ServiceStatus string `json:"service_status,omitempty"`
-	ServersUp     int    `json:"servers_up,omitempty"`
-	ServersDown   int    `json:"servers_down,omitempty"`
-	ServerCount   int    `json:"server_count,omitempty"`
+	ServiceStatus string  `json:"service_status,omitempty"`
+	ServersUp     int     `json:"servers_up,omitempty"`
+	ServersDown   int     `json:"servers_down,omitempty"`
+	ServerCount   int     `json:"server_count,omitempty"`
+	ServersJSON   *string `json:"servers_json,omitempty"` // JSON map: URL → "UP"|"DOWN"
 	// ManualLink is true when this entry represents a manually-linked Traefik
 	// component rather than a discovered route. The frontend renders it
 	// differently (no rule/service, just the component name + status).
@@ -163,13 +164,14 @@ func (h *AppsHandler) GetChain(w http.ResponseWriter, r *http.Request) {
 			svc = *ro.ServiceName
 		}
 		entry := chainTraefikRoute{
-			Router:        ro.RouterName,
-			Rule:          ro.Rule,
-			Service:       svc,
-			Status:        ro.RouterStatus,
-			ServersUp:     ro.ServersUp,
-			ServersDown:   ro.ServersDown,
-			ServerCount:   ro.ServersTotal,
+			Router:      ro.RouterName,
+			Rule:        ro.Rule,
+			Service:     svc,
+			Status:      ro.RouterStatus,
+			ServersUp:   ro.ServersUp,
+			ServersDown: ro.ServersDown,
+			ServerCount: ro.ServersTotal,
+			ServersJSON: ro.ServersJSON,
 		}
 		if ro.ServiceStatus != nil {
 			entry.ServiceStatus = *ro.ServiceStatus

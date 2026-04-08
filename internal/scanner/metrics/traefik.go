@@ -2,13 +2,13 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/digitalcheffe/nora/internal/infra"
-	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/internal/scanner"
 )
@@ -51,20 +51,19 @@ func (s *TraefikMetricsScanner) CollectMetrics(ctx context.Context, entityID, en
 
 	now := time.Now().UTC()
 
-	// Persist overview row.
-	ov := &models.TraefikOverview{
-		ComponentID:      entityID,
-		Version:          raw.Version,
-		RoutersTotal:     raw.HTTP.Routers.Total,
-		RoutersErrors:    raw.HTTP.Routers.Errors,
-		RoutersWarnings:  raw.HTTP.Routers.Warnings,
-		ServicesTotal:    raw.HTTP.Services.Total,
-		ServicesErrors:   raw.HTTP.Services.Errors,
-		MiddlewaresTotal: raw.HTTP.Middlewares.Total,
-		UpdatedAt:        now,
-	}
-	if err := s.store.TraefikOverview.Upsert(ctx, ov); err != nil {
-		log.Printf("traefik metrics: upsert overview for %s: %v", c.Name, err)
+	// Persist overview as JSON into traefik_meta on infrastructure_components.
+	metaBytes, _ := json.Marshal(map[string]interface{}{
+		"version":           raw.Version,
+		"routers_total":     raw.HTTP.Routers.Total,
+		"routers_errors":    raw.HTTP.Routers.Errors,
+		"routers_warnings":  raw.HTTP.Routers.Warnings,
+		"services_total":    raw.HTTP.Services.Total,
+		"services_errors":   raw.HTTP.Services.Errors,
+		"middlewares_total": raw.HTTP.Middlewares.Total,
+		"updated_at":        now.Format(time.RFC3339),
+	})
+	if err := s.store.InfraComponents.UpdateMeta(ctx, entityID, string(metaBytes)); err != nil {
+		log.Printf("traefik metrics: update meta for %s: %v", c.Name, err)
 	}
 
 	// Router error count transitions — fire events only on 0→N and N→0.

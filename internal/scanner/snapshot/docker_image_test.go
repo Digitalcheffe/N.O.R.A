@@ -85,10 +85,7 @@ func (r *mockImageInfraComponentRepo) Delete(_ context.Context, _ string) error 
 func (r *mockImageInfraComponentRepo) UpdateStatus(_ context.Context, _, _, _ string) error {
 	return nil
 }
-func (r *mockImageInfraComponentRepo) UpdateSNMPMeta(_ context.Context, _, _ string) error {
-	return nil
-}
-func (r *mockImageInfraComponentRepo) UpdateSynologyMeta(_ context.Context, _, _ string) error {
+func (r *mockImageInfraComponentRepo) UpdateMeta(_ context.Context, _, _ string) error {
 	return nil
 }
 func (r *mockImageInfraComponentRepo) UpdateIP(_ context.Context, _, _ string) error { return nil }
@@ -155,7 +152,7 @@ func makePollerStore(infraComponents []models.InfrastructureComponent, container
 	store := repo.NewStore(
 		nil, nil, nil, nil, nil, nil,
 		&mockImageInfraComponentRepo{components: infraComponents},
-		nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil,
 		dc, nil, nil, nil, nil, nil, nil, nil,
 	)
 	return store, dc

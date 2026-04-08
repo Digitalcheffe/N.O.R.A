@@ -147,6 +147,30 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 			// The unique key is (infra_component_id, container_name) so rebuilding
 			// a container refreshes container_id in place.  UpsertDiscoveredContainer
 			// populates rec.ID with the stable NORA UUID via RETURNING id.
+			encJSON := func(v any) *string {
+				b, err := json.Marshal(v)
+				if err != nil || string(b) == "null" {
+					return nil
+				}
+				s := string(b)
+				return &s
+			}
+
+			type networkEntry struct {
+				Name string `json:"name"`
+				IP   string `json:"ip,omitempty"`
+			}
+			var networks []networkEntry
+			if pc.NetworkSettings != nil {
+				for netName, ep := range pc.NetworkSettings.Networks {
+					entry := networkEntry{Name: netName}
+					if ep != nil && ep.IPAddress != "" {
+						entry.IP = ep.IPAddress
+					}
+					networks = append(networks, entry)
+				}
+			}
+
 			rec := &models.DiscoveredContainer{
 				InfraComponentID: comp.ID,
 				SourceType:       "portainer",
@@ -156,6 +180,8 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 				Status:           pc.State,
 				LastSeenAt:       now,
 				CreatedAt:        now,
+				Ports:            encJSON(pc.Ports),
+				Networks:         encJSON(networks),
 			}
 			if err := w.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, rec); err != nil {
 				log.Printf("portainer enrichment: upsert container %q: %v", name, err)
