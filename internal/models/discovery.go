@@ -43,7 +43,6 @@ type DiscoveredRoute struct {
 	RouterName       string     `db:"router_name"       json:"router_name"`
 	Rule             string     `db:"rule"              json:"rule"`
 	Domain           *string    `db:"domain"            json:"domain,omitempty"`
-	BackendService   *string    `db:"backend_service"   json:"backend_service,omitempty"`
 	ContainerID      *string    `db:"container_id"      json:"container_id,omitempty"`
 	AppID            *string    `db:"app_id"            json:"app_id,omitempty"`
 	SSLExpiry        *time.Time `db:"ssl_expiry"        json:"ssl_expiry,omitempty"`

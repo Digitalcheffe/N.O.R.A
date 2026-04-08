@@ -15,6 +15,7 @@ type TopologyHandler struct {
 	infraComponents repo.InfraComponentRepo
 	apps            repo.AppRepo
 	links           repo.ComponentLinkRepo
+	containers      repo.DiscoveredContainerRepo
 }
 
 // NewTopologyHandler creates a TopologyHandler.
@@ -22,11 +23,13 @@ func NewTopologyHandler(
 	infraComponents repo.InfraComponentRepo,
 	apps repo.AppRepo,
 	links repo.ComponentLinkRepo,
+	containers repo.DiscoveredContainerRepo,
 ) *TopologyHandler {
 	return &TopologyHandler{
 		infraComponents: infraComponents,
 		apps:            apps,
 		links:           links,
+		containers:      containers,
 	}
 }
 
@@ -38,23 +41,30 @@ func (h *TopologyHandler) Routes(r chi.Router) {
 // ---- response types ---------------------------------------------------------
 
 type topologyApp struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	IconURL string `json:"icon_url,omitempty"`
 }
 
 type topologyComponent struct {
 	ID       string              `json:"id"`
 	Name     string              `json:"name"`
 	Type     string              `json:"type"`
+	Status   string              `json:"status,omitempty"`
+	IP       string              `json:"ip,omitempty"`
+	Notes    string              `json:"notes,omitempty"`
+	Meta     string              `json:"meta,omitempty"`
+	AppID      string              `json:"app_id,omitempty"`
+	AppName    string              `json:"app_name,omitempty"`
+	AppIconURL string              `json:"app_icon_url,omitempty"`
 	Children []topologyComponent `json:"children"`
 	Apps     []topologyApp       `json:"apps"`
 }
 
 // ---- GET /topology ----------------------------------------------------------
 
-// GetTopology returns the infrastructure component tree with nested apps,
-// built from component_links relationships. All component types (including
-// docker_engine) appear as nodes in the children array.
+// GetTopology returns the infrastructure component tree with nested apps and
+// discovered containers, built from component_links relationships.
 // GET /api/v1/topology
 func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 	allComponents, err := h.infraComponents.List(r.Context())
@@ -72,6 +82,11 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	allContainers, err := h.containers.ListAllDiscoveredContainers(r.Context())
+	if err != nil {
+		// Non-fatal — return tree without containers rather than erroring.
+		allContainers = nil
+	}
 
 	// Build lookup maps.
 	appByID := make(map[string]models.App, len(allApps))
@@ -83,12 +98,22 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 		compByID[c.ID] = c
 	}
 
+	// Group containers by their infra_component_id.
+	containersByEngine := make(map[string][]*models.DiscoveredContainer)
+	for _, c := range allContainers {
+		containersByEngine[c.InfraComponentID] = append(containersByEngine[c.InfraComponentID], c)
+	}
+
 	// Pass 1: apps grouped by parent component ID.
 	appsByParent := make(map[string][]topologyApp)
 	for _, link := range allLinks {
 		if link.ChildType == "app" {
 			if a, ok := appByID[link.ChildID]; ok {
-				appsByParent[link.ParentID] = append(appsByParent[link.ParentID], topologyApp{ID: a.ID, Name: a.Name})
+				appsByParent[link.ParentID] = append(appsByParent[link.ParentID], topologyApp{
+					ID:      a.ID,
+					Name:    a.Name,
+					IconURL: "/api/v1/icons/" + a.ProfileID,
+				})
 			}
 		}
 	}
@@ -96,7 +121,7 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 	// Pass 2: infra component children grouped by parent ID.
 	childrenByParent := make(map[string][]models.InfrastructureComponent)
 	for _, link := range allLinks {
-		if link.ChildType != "app" {
+		if link.ChildType != "app" && link.ChildType != "container" {
 			if c, ok := compByID[link.ChildID]; ok {
 				childrenByParent[link.ParentID] = append(childrenByParent[link.ParentID], c)
 			}
@@ -106,7 +131,7 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 	// Roots = components not appearing as a non-app child.
 	childIDs := make(map[string]bool)
 	for _, link := range allLinks {
-		if link.ChildType != "app" {
+		if link.ChildType != "app" && link.ChildType != "container" {
 			childIDs[link.ChildID] = true
 		}
 	}
@@ -117,14 +142,45 @@ func (h *TopologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 		if apps == nil {
 			apps = []topologyApp{}
 		}
+
+		// Infra component children.
 		childNodes := []topologyComponent{}
 		for _, child := range childrenByParent[c.ID] {
 			childNodes = append(childNodes, buildNode(child))
+		}
+
+		// Discovered containers as leaf children (docker_engine / portainer).
+		// App linkage comes from component_links (parent_type=container, child_type=app),
+		// already resolved into appsByParent keyed by the container's ID.
+		for _, ct := range containersByEngine[c.ID] {
+			node := topologyComponent{
+				ID:       ct.ID,
+				Name:     ct.ContainerName,
+				Type:     "container",
+				Status:   ct.Status,
+				Children: []topologyComponent{},
+				Apps:     []topologyApp{},
+			}
+			if linked := appsByParent[ct.ID]; len(linked) > 0 {
+				node.AppID      = linked[0].ID
+				node.AppName    = linked[0].Name
+				node.AppIconURL = linked[0].IconURL
+			}
+			childNodes = append(childNodes, node)
+		}
+
+		meta := ""
+		if c.Meta != nil {
+			meta = *c.Meta
 		}
 		return topologyComponent{
 			ID:       c.ID,
 			Name:     c.Name,
 			Type:     c.Type,
+			Status:   c.LastStatus,
+			IP:       c.IP,
+			Notes:    c.Notes,
+			Meta:     meta,
 			Children: childNodes,
 			Apps:     apps,
 		}

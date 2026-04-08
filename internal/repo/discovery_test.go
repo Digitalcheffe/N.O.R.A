@@ -326,7 +326,6 @@ func TestDiscoveredRouteRepo_UpsertAndGet(t *testing.T) {
 		RouterName:       "sonarr-router",
 		Rule:             "Host(`sonarr.example.com`)",
 		Domain:           &domain,
-		BackendService:   &svc,
 		LastSeenAt:       now,
 		CreatedAt:        now,
 	}

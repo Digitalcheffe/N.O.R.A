@@ -329,7 +329,7 @@ func NewDiscoveredRouteRepo(db *sqlx.DB) DiscoveredRouteRepo {
 
 // routeSelectCols is the shared column list for discovered_routes SELECT queries.
 const routeSelectCols = `id, infrastructure_id, router_name, rule,
-	domain, backend_service, container_id, app_id, ssl_expiry, ssl_issuer,
+	domain, container_id, app_id, ssl_expiry, ssl_issuer,
 	last_seen_at, created_at,
 	COALESCE(router_status,'enabled') AS router_status,
 	provider, entry_points, COALESCE(has_tls_resolver,0) AS has_tls_resolver,

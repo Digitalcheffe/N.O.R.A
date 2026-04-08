@@ -426,7 +426,7 @@ func main() {
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo, monitorScheduler).Routes(r)
 		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
-		api.NewTopologyHandler(infraComponentRepo, appRepo, componentLinkRepo).Routes(r)
+		api.NewTopologyHandler(infraComponentRepo, appRepo, componentLinkRepo, store.DiscoveredContainers).Routes(r)
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, eventRepo, store).Routes(r)
 		api.NewProfilesHandler(registry, customDir).Routes(r)
 		api.NewDockerDiscoveryHandler(store, registry).Routes(r)
