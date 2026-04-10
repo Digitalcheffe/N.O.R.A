@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { DetailPageLayout } from '../components/DetailPageLayout'
-import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi } from '../api/client'
+import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
 import type { App, AppChainResponse, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck } from '../api/types'
 import { AppChain } from '../components/AppChain'
 import { AppMetricCard, AppMetricCardSkeleton } from '../components/AppMetricCard'
@@ -20,25 +20,6 @@ import './AppDetail.css'
 
 type TimeFilter = 'day' | 'week' | 'month'
 
-// ── Sparkline ─────────────────────────────────────────────────────────────────
-
-function Sparkline({ data, color = 'var(--accent)' }: { data: number[]; color?: string }) {
-  if (!data || data.length < 2) return null
-  const w = 80, h = 20
-  const max = Math.max(...data, 1)
-  const pts = data.map((v, i) => {
-    const x = ((i / (data.length - 1)) * w).toFixed(1)
-    const y = (h - 2 - (v / max) * (h - 4)).toFixed(1)
-    return `${x},${y}`
-  }).join(' ')
-  const closed = `${pts} ${w},${h} 0,${h}`
-  return (
-    <svg className="detail-sparkline" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" opacity="0.8" />
-      <polyline points={closed} fill={color} stroke="none" opacity="0.08" />
-    </svg>
-  )
-}
 
 // ── App Settings Modal ────────────────────────────────────────────────────────
 
@@ -311,6 +292,18 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function formatIngestTime(dateStr: string): string {
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return ''
+  const diff = Date.now() - d.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'updated just now'
+  if (mins < 60) return `updated ${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `updated ${hrs}h ago`
+  return `updated ${Math.floor(hrs / 24)}d ago`
+}
+
 function statusColor(s: string | null) {
   if (s === 'up')   return 'var(--green)'
   if (s === 'warn') return 'var(--yellow)'
@@ -325,7 +318,7 @@ export function AppDetail() {
   const navigate = useNavigate()
   const { tick } = useAutoRefresh()
 
-  const timeFilter: TimeFilter = 'week'
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
 
   const [app, setApp] = useState<App | null>(null)
   const [appSummary, setAppSummary] = useState<AppSummary | null>(null)
@@ -344,6 +337,7 @@ export function AppDetail() {
   const [polling, setPolling] = useState(false)
   const [pollError, setPollError] = useState<string | null>(null)
   const [appChain, setAppChain] = useState<AppChainResponse | null>(null)
+  const [eventCounts, setEventCounts] = useState<Record<string, number>>({})
 
   const appId = id ?? ''
 
@@ -392,6 +386,21 @@ export function AppDetail() {
   }, [appId, tick])
 
   useEffect(() => {
+    if (!appId) return
+    const ms = timeFilter === 'day' ? 86400000 : timeFilter === 'month' ? 30 * 86400000 : 7 * 86400000
+    const since = new Date(Date.now() - ms).toISOString()
+    Promise.all(
+      (['info', 'warn', 'error', 'critical'] as const).map(level =>
+        eventsApi.list({ source_id: appId, source_type: 'app', level, from: since, limit: 1 })
+          .then(res => [level, res.total] as const)
+          .catch(() => [level, 0] as const)
+      )
+    ).then(results => {
+      setEventCounts(Object.fromEntries(results))
+    })
+  }, [appId, timeFilter, tick])
+
+  useEffect(() => {
     if (!id) navigate('/apps')
   }, [id, navigate])
 
@@ -422,12 +431,45 @@ export function AppDetail() {
     setPolling(true)
     setPollError(null)
     try {
-      await appsApi.pollNow(appId)
+      const tasks: Promise<unknown>[] = []
+
+      // 1. API polling — skip gracefully if the profile has no api_polling config
+      tasks.push(
+        appsApi.pollNow(appId).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : ''
+          if (msg.includes('no api_polling') || msg.includes('no profile')) return
+          throw err
+        })
+      )
+
+      // 2. Scan each infra node in the chain (skip app node itself)
+      const infraTypes = new Set([
+        'portainer', 'docker_engine', 'vm_linux', 'vm_windows', 'vm_other',
+        'proxmox_node', 'synology', 'linux_host', 'windows_host', 'generic_host', 'traefik',
+      ])
+      for (const node of appChain?.chain ?? []) {
+        if (infraTypes.has(node.type)) {
+          tasks.push(infraApi.scan(node.id).catch(() => {}))
+        }
+      }
+
+      // 3. Run all linked monitor checks
+      for (const check of appChecks) {
+        tasks.push(checksApi.run(check.id).catch(() => {}))
+      }
+
+      await Promise.all(tasks)
+
+      // Refresh metrics and checks after
       setMetricsLoading(true)
-      const res = await appsApi.metrics(appId)
-      setAppMetrics(res.data)
+      const [metricsRes, checksRes] = await Promise.all([
+        appsApi.metrics(appId).catch(() => ({ data: [] as typeof appMetrics })),
+        checksApi.list().catch(() => ({ data: [] as MonitorCheck[] })),
+      ])
+      setAppMetrics(metricsRes.data)
+      setAppChecks(checksRes.data.filter(c => c.app_id === appId))
     } catch (err: unknown) {
-      setPollError(err instanceof Error ? err.message : 'Poll failed')
+      setPollError(err instanceof Error ? err.message : 'Discover failed')
     } finally {
       setPolling(false)
       setMetricsLoading(false)
@@ -489,6 +531,8 @@ export function AppDetail() {
         keyDataPoints={keyDataPoints}
         icon={appIcon}
         headerExtra={AppExtraHeader}
+        timeFilter={timeFilter}
+        onTimeFilter={setTimeFilter}
         actions={
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -525,72 +569,109 @@ export function AppDetail() {
             )}
           </div>
         }
-        sourceType="app"
-        sourceId={appId}
       >
-        {/* ── Live metrics + stats ── */}
-        {(metricsLoading || appMetrics.length > 0 || (appSummary?.stats ?? []).length > 0) && (
-          <div className="amg-section">
-            {!metricsLoading && <div className="amg-label">Live Metrics</div>}
-            <div className="amg-grid">
-              {metricsLoading ? (
-                [0, 1, 2].map(i => <AppMetricCardSkeleton key={i} />)
+        {/* ── Top row: events + metrics (left) | monitor checks (right) ── */}
+        <div className="appdetail-two-col">
+
+          <div className="appdetail-col-left">
+
+            {/* Live metrics */}
+            {(metricsLoading || appMetrics.length > 0 || (appSummary?.stats ?? []).length > 0) && (
+              <div className="amg-section">
+                {!metricsLoading && <div className="amg-label">Live Metrics</div>}
+                <div className="amg-grid">
+                  {metricsLoading ? (
+                    [0, 1, 2].map(i => <AppMetricCardSkeleton key={i} />)
+                  ) : (
+                    <>
+                      {appMetrics.map(m => <AppMetricCard key={m.id} metric={m} />)}
+                      {(appSummary?.stats ?? []).map(stat => (
+                        <div key={`stat-${stat.label}`} className="amc-card">
+                          <div className={`amc-value${stat.color ? ` color-${stat.color}` : ''}`}>{stat.value}</div>
+                          <div className="amc-label">{stat.label}</div>
+                          {appSummary?.last_event_at && (
+                            <div className="amc-timestamp">{formatIngestTime(appSummary.last_event_at)}</div>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Event summary */}
+            <div className="amg-section">
+              <div className="amg-label">Events ({timeFilter === 'day' ? 'last 24h' : timeFilter === 'month' ? 'last month' : 'last week'})</div>
+              <div className="appdetail-check-list">
+                {([
+                  { level: 'info',     label: 'Info',     colorVar: 'var(--accent)',
+                    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 7h.01"/></svg> },
+                  { level: 'warn',     label: 'Warnings', colorVar: 'var(--yellow)',
+                    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3L18.5 17H1.5L10 3z"/><path d="M10 9v4M10 15h.01"/></svg> },
+                  { level: 'error',    label: 'Errors',   colorVar: 'var(--red)',
+                    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="10" cy="10" r="8"/><path d="M7 7l6 6M13 7l-6 6"/></svg> },
+                  { level: 'critical', label: 'Critical', colorVar: 'var(--red)',
+                    icon: <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2c0 4-4 5-4 9a4 4 0 0 0 8 0c0-4-4-5-4-9z"/><path d="M8 17.5a2 2 0 0 0 4 0"/></svg> },
+                ] as const).map(({ level, label, colorVar, icon }) => (
+                  <div
+                    key={level}
+                    className="appdetail-event-row"
+                    onClick={() => navigate(`/events?source_type=app&source_id=${appId}&level=${level}`)}
+                  >
+                    <span className="appdetail-event-icon" style={{ color: colorVar }}>{icon}</span>
+                    <span className="appdetail-event-level" style={{ color: colorVar }}>{label}</span>
+                    <span className="appdetail-event-count" style={{ color: colorVar }}>
+                      {eventCounts[level] ?? '—'}
+                    </span>
+                    <span className="appdetail-event-link">View →</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Monitor checks as cards */}
+            <div className="amg-section">
+              <div className="appdetail-section-header">
+                <span className="amg-label" style={{ marginBottom: 0 }}>Monitor Checks</span>
+                <button className="service-add-check-btn" onClick={openAddCheck}>+ Add check</button>
+              </div>
+              {appChecks.length === 0 ? (
+                <div className="service-checks-empty" style={{ background: 'none', border: 'none', padding: '8px 0', textAlign: 'left' }}>
+                  No monitor checks linked to this app yet.
+                </div>
               ) : (
-                <>
-                  {appMetrics.map(m => <AppMetricCard key={m.id} metric={m} />)}
-                  {(appSummary?.stats ?? []).map(stat => (
-                    <div key={`stat-${stat.label}`} className="amc-card">
-                      <div className={`amc-value${stat.color ? ` color-${stat.color}` : ''}`}>{stat.value}</div>
-                      <div className="amc-label">{stat.label}</div>
+                <div className="appdetail-check-list">
+                  {appChecks.map(c => (
+                    <div key={c.id} className="appdetail-check-row" onClick={() => navigate(`/checks/${c.id}`)}>
+                      <CheckTypeIcon type={c.type} size={14} />
+                      <span className="appdetail-check-name" title={c.name}>{c.name}</span>
+                      <span className="appdetail-check-target" title={c.target}>{c.target}</span>
+                      <span className="appdetail-check-status" style={{ color: statusColor(c.last_status) }}>
+                        {c.last_status?.toUpperCase() ?? '—'}
+                      </span>
                     </div>
                   ))}
-                  {appSummary?.sparkline.some(v => v > 0) && (
-                    <div className="amc-card">
-                      <div className="amc-label">Activity</div>
-                      <Sparkline data={Array.from(appSummary.sparkline)} />
-                    </div>
-                  )}
-                </>
+                </div>
               )}
             </div>
-          </div>
-        )}
 
-        {/* ── Infrastructure chain ── */}
-        {appChain && appChain.chain.length > 0 && (
-          <AppChain
-            chain={appChain.chain}
-            appStatus={appSummary?.status}
-            traefik={appChain.traefik ?? []}
-          />
-        )}
-
-        {/* ── Monitor checks — shown for all apps ── */}
-        <div className="service-checks-section">
-          <div className="service-checks-header">
-            <span className="service-checks-title">Monitor Checks</span>
-            <button className="service-add-check-btn" onClick={openAddCheck}>+ Add check</button>
           </div>
-          {appChecks.length === 0 ? (
-            <div className="service-checks-empty">
-              No monitor checks linked to this app yet.
-            </div>
-          ) : (
-            <div className="service-checks-list">
-              {appChecks.map(c => (
-                <div key={c.id} className="service-check-row" onClick={() => navigate(`/checks/${c.id}`)}>
-                  <CheckTypeIcon type={c.type} size={14} />
-                  <span className="service-check-type">{c.type.toUpperCase()}</span>
-                  <span className="service-check-target">{c.target}</span>
-                  <span className="service-check-name">{c.name !== c.target ? c.name : ''}</span>
-                  <span className="service-check-status" style={{ color: statusColor(c.last_status) }}>
-                    {c.last_status?.toUpperCase() ?? '—'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+
+          {/* Right column: infra chain (vertical) only */}
+          <div className="appdetail-col-right">
+            {appChain && appChain.chain.length > 0 && (
+              <AppChain
+                chain={appChain.chain}
+                appStatus={appSummary?.status}
+                traefik={appChain.traefik ?? []}
+                vertical
+              />
+            )}
+          </div>
+
         </div>
+
       </DetailPageLayout>
 
       {app && (

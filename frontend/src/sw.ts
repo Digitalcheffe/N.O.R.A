@@ -1,8 +1,13 @@
-import { precacheAndRoute } from 'workbox-precaching'
+import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching'
+import { NavigationRoute, registerRoute } from 'workbox-routing'
 
 declare let self: ServiceWorkerGlobalScope
 
 precacheAndRoute(self.__WB_MANIFEST)
+
+// SPA navigation fallback — any navigation request (clicking a link, typing a URL)
+// that isn't a precached asset gets served index.html so React Router handles it.
+registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')))
 
 self.addEventListener('push', (event) => {
   const data = event.data?.json() as Record<string, string> ?? {}

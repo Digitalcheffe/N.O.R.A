@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/digitalcheffe/nora/internal/infra"
 	"github.com/digitalcheffe/nora/internal/models"
 	"github.com/digitalcheffe/nora/internal/repo"
 	"github.com/digitalcheffe/nora/internal/scanner"
@@ -21,6 +22,19 @@ import (
 func DiscoverOneComponent(ctx context.Context, store *repo.Store, c *models.InfrastructureComponent) (*scanner.DiscoveryResult, error) {
 	if !c.Enabled {
 		return nil, fmt.Errorf("component is disabled")
+	}
+
+	// Portainer: route through PortainerEnrichmentWorker rather than
+	// PortainerDiscoveryScanner.  The enrichment worker correctly sets
+	// source_type="portainer", calls MarkStoppedIfNotRunning, performs digest
+	// extraction, and emits image-update events — the discovery scanner does
+	// none of those things.
+	if c.Type == "portainer" {
+		worker := infra.NewPortainerEnrichmentWorker(store)
+		if err := worker.Run(ctx); err != nil {
+			return nil, err
+		}
+		return &scanner.DiscoveryResult{EntityID: c.ID, EntityType: c.Type}, nil
 	}
 
 	sc := discoveryScanner(store, c)

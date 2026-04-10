@@ -115,9 +115,22 @@ func parseFilter(r *http.Request) (repo.ListFilter, error) {
 		Offset:     0,
 	}
 
-	// Accept source_type directly.
+	// Map logical source_type filter values to the actual stored source_type strings.
 	if st := q.Get("source_type"); st != "" {
-		f.SourceType = st
+		switch st {
+		case "infra":
+			f.SourceTypes = []string{
+				"physical_host", "proxmox_node",
+				"vm_linux", "vm_windows", "vm_other",
+				"linux_host", "windows_host", "generic_host",
+				"synology", "docker_engine", "traefik",
+				"portainer", "container",
+			}
+		case "check":
+			f.SourceType = "monitor_check"
+		default:
+			f.SourceType = st
+		}
 	}
 
 	if s := q.Get("search"); s != "" {

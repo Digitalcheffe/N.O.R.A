@@ -9,6 +9,16 @@ import (
 	"sync"
 )
 
+// upidObjectID extracts the object/VM ID from a Proxmox UPID string.
+// UPID format: UPID:<node>:<pid>:<pstart>:<starttime>:<type>:<id>:<user>:
+func upidObjectID(upid string) string {
+	parts := strings.Split(upid, ":")
+	if len(parts) >= 7 {
+		return parts[6]
+	}
+	return ""
+}
+
 // ── Raw Proxmox API shapes ────────────────────────────────────────────────────
 
 type proxmoxStorageRaw struct {
@@ -58,6 +68,16 @@ type proxmoxTaskRaw struct {
 	EndTime    int64  `json:"endtime"`
 	User       string `json:"user"`
 	Node       string `json:"node"`
+}
+
+type proxmoxStorageContentRaw struct {
+	VolID   string `json:"volid"`
+	Content string `json:"content"`
+	VMID    int    `json:"vmid"`
+	CTime   int64  `json:"ctime"`
+	Size    int64  `json:"size"`
+	Format  string `json:"format"`
+	Notes   string `json:"notes"`
 }
 
 // ── Result types returned to the API handler ─────────────────────────────────
@@ -111,6 +131,27 @@ type ProxmoxTaskFailure struct {
 	EndTime    int64  `json:"end_time,omitempty"`
 	User       string `json:"user"`
 	Node       string `json:"node"`
+}
+
+// ProxmoxBackupJob is one vzdump backup task entry (success or failure).
+type ProxmoxBackupJob struct {
+	UPID       string `json:"upid"`
+	ObjectID   string `json:"object_id,omitempty"`
+	ExitStatus string `json:"exit_status"`
+	StartTime  int64  `json:"start_time"`
+	EndTime    int64  `json:"end_time,omitempty"`
+	Node       string `json:"node"`
+}
+
+// ProxmoxBackupFile is one backup file entry from storage content.
+type ProxmoxBackupFile struct {
+	VolID  string `json:"volid"`
+	VMID   int    `json:"vmid"`
+	CTime  int64  `json:"ctime"`
+	Size   int64  `json:"size"`
+	Format string `json:"format"`
+	Node   string `json:"node"`
+	Store  string `json:"store"`
 }
 
 // ── Methods on ProxmoxPoller ──────────────────────────────────────────────────
@@ -302,6 +343,50 @@ func (p *ProxmoxPoller) FetchNodeStatus(ctx context.Context) ([]ProxmoxNodeStatu
 	return statuses, nil
 }
 
+// FetchBackupJobs returns recent vzdump backup tasks (all statuses) across all nodes.
+func (p *ProxmoxPoller) FetchBackupJobs(ctx context.Context) ([]ProxmoxBackupJob, error) {
+	var nodes []proxmoxNode
+	if err := p.get(ctx, "/api2/json/nodes", &nodes); err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	var jobs []ProxmoxBackupJob
+	for _, node := range nodes {
+		var tasks []proxmoxTaskRaw
+		path := fmt.Sprintf("/api2/json/nodes/%s/tasks?typefilter=vzdump&limit=50", node.Node)
+		if err := p.get(ctx, path, &tasks); err != nil {
+			log.Printf("proxmox detail: backup tasks node %s: %v", node.Node, err)
+			continue
+		}
+		for _, t := range tasks {
+			// Only include completed tasks (EndTime > 0)
+			if t.EndTime == 0 {
+				continue
+			}
+			// Proxmox puts the exit status in Status for completed tasks ("OK",
+			// "error: ...", etc.); ExitStatus is only populated on some PVE versions.
+			exitStatus := t.ExitStatus
+			if exitStatus == "" {
+				exitStatus = t.Status
+			}
+			// Object ID: prefer the id field, fall back to parsing the UPID.
+			objectID := t.ID
+			if objectID == "" {
+				objectID = upidObjectID(t.UPID)
+			}
+			jobs = append(jobs, ProxmoxBackupJob{
+				UPID:       t.UPID,
+				ObjectID:   objectID,
+				ExitStatus: exitStatus,
+				StartTime:  t.StartTime,
+				EndTime:    t.EndTime,
+				Node:       t.Node,
+			})
+		}
+	}
+	return jobs, nil
+}
+
 // FetchTaskFailures returns failed tasks from the last 7 days across all nodes.
 func (p *ProxmoxPoller) FetchTaskFailures(ctx context.Context) ([]ProxmoxTaskFailure, error) {
 	var nodes []proxmoxNode
@@ -337,4 +422,48 @@ func (p *ProxmoxPoller) FetchTaskFailures(ctx context.Context) ([]ProxmoxTaskFai
 		}
 	}
 	return failures, nil
+}
+
+// FetchBackupFiles returns backup files found in storage across all nodes.
+// It queries each backup-capable storage's content endpoint to get per-VM file entries.
+func (p *ProxmoxPoller) FetchBackupFiles(ctx context.Context) ([]ProxmoxBackupFile, error) {
+	var nodes []proxmoxNode
+	if err := p.get(ctx, "/api2/json/nodes", &nodes); err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+
+	var files []ProxmoxBackupFile
+	for _, node := range nodes {
+		var storages []proxmoxStorageRaw
+		if err := p.get(ctx, fmt.Sprintf("/api2/json/nodes/%s/storage", node.Node), &storages); err != nil {
+			log.Printf("proxmox backup files: list storage node %s: %v", node.Node, err)
+			continue
+		}
+		for _, s := range storages {
+			if s.Active != 1 {
+				continue
+			}
+			var content []proxmoxStorageContentRaw
+			path := fmt.Sprintf("/api2/json/nodes/%s/storage/%s/content?content=backup", node.Node, s.Storage)
+			if err := p.get(ctx, path, &content); err != nil {
+				log.Printf("proxmox backup files: content %s/%s: %v", node.Node, s.Storage, err)
+				continue
+			}
+			for _, c := range content {
+				if c.VMID == 0 {
+					continue
+				}
+				files = append(files, ProxmoxBackupFile{
+					VolID:  c.VolID,
+					VMID:   c.VMID,
+					CTime:  c.CTime,
+					Size:   c.Size,
+					Format: c.Format,
+					Node:   node.Node,
+					Store:  s.Storage,
+				})
+			}
+		}
+	}
+	return files, nil
 }

@@ -19,6 +19,9 @@ type ListFilter struct {
 	// SourceType filters by the source_type column: "app", "physical_host",
 	// "virtual_host", "docker_engine", "monitor_check", "system".
 	SourceType string
+	// SourceTypes filters by multiple source_type values (IN clause). Takes
+	// precedence over SourceType when non-empty.
+	SourceTypes []string
 	// SourceName filters events whose source_name contains this substring (case-insensitive).
 	SourceName string
 	// Search filters events whose title contains the given substring (case-insensitive).
@@ -134,7 +137,14 @@ func buildWhere(f ListFilter) (clause string, args []interface{}) {
 		args = append(args, f.SourceID)
 	}
 
-	if f.SourceType != "" {
+	if len(f.SourceTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(f.SourceTypes))
+		placeholders = placeholders[:len(placeholders)-1]
+		parts = append(parts, "e.source_type IN ("+placeholders+")")
+		for _, st := range f.SourceTypes {
+			args = append(args, st)
+		}
+	} else if f.SourceType != "" {
 		parts = append(parts, "e.source_type = ?")
 		args = append(args, f.SourceType)
 	}

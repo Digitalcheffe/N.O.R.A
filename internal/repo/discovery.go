@@ -31,12 +31,20 @@ type DiscoveredContainerRepo interface {
 	MarkStoppedIfNotRunning(ctx context.Context, infraComponentID string, runningIDs []string) error
 	// DeleteDiscoveredContainer hard-deletes a discovered container record by UUID.
 	DeleteDiscoveredContainer(ctx context.Context, id string) error
+	// UpdateContainerLocalDigest stores the locally running image manifest digest.
+	// Called by Portainer/Docker Engine enrichment after inspecting the container.
+	// Does not touch registry_digest or image_update_available.
+	UpdateContainerLocalDigest(ctx context.Context, id string, imageDigest string) error
 	// UpdateContainerImageCheck writes the latest image and registry digests and
 	// sets image_update_available.  Called by the ImageUpdatePoller after each poll.
 	UpdateContainerImageCheck(ctx context.Context, id string, imageDigest string, registryDigest string, updateAvailable bool) error
 	// UpdateContainerRestartPolicy persists the container restart policy.
 	// Called by the ImageUpdatePoller which already performs a ContainerInspect.
 	UpdateContainerRestartPolicy(ctx context.Context, id string, policy string) error
+	// UpdateContainerEnvVars persists the JSON-encoded environment variable list.
+	// Called by the Portainer enrichment worker after InspectContainer.
+	// Does not touch any other fields.
+	UpdateContainerEnvVars(ctx context.Context, id string, envVars string) error
 }
 
 // DiscoveredRouteRepo manages the discovered_routes table.
@@ -68,7 +76,7 @@ type DiscoveredRouteRepo interface {
 const containerSelectCols = `id, infra_component_id, source_type, container_id, container_name, image, status,
 	app_id, profile_suggestion, suggestion_confidence, last_seen_at, created_at,
 	image_digest, registry_digest, COALESCE(image_update_available,0) AS image_update_available, image_last_checked_at,
-	ports, labels, volumes, networks, restart_policy, docker_created_at`
+	ports, labels, volumes, networks, restart_policy, docker_created_at, env_vars`
 
 type sqliteDiscoveredContainerRepo struct{ db *sqlx.DB }
 
@@ -275,6 +283,19 @@ func (r *sqliteDiscoveredContainerRepo) FindByName(ctx context.Context, infraCom
 	return &c, nil
 }
 
+func (r *sqliteDiscoveredContainerRepo) UpdateContainerLocalDigest(ctx context.Context, id string, imageDigest string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE discovered_containers SET image_digest = ? WHERE id = ?`, imageDigest, id)
+	if err != nil {
+		return fmt.Errorf("update local digest on container %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
+	}
+	return nil
+}
+
 func (r *sqliteDiscoveredContainerRepo) UpdateContainerImageCheck(ctx context.Context, id string, imageDigest string, registryDigest string, updateAvailable bool) error {
 	updateAvailableInt := 0
 	if updateAvailable {
@@ -301,6 +322,15 @@ func (r *sqliteDiscoveredContainerRepo) UpdateContainerRestartPolicy(ctx context
 		`UPDATE discovered_containers SET restart_policy = ? WHERE id = ?`, policy, id)
 	if err != nil {
 		return fmt.Errorf("update restart policy on container %s: %w", id, err)
+	}
+	return nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) UpdateContainerEnvVars(ctx context.Context, id string, envVars string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE discovered_containers SET env_vars = ? WHERE id = ?`, envVars, id)
+	if err != nil {
+		return fmt.Errorf("update env vars on container %s: %w", id, err)
 	}
 	return nil
 }

@@ -142,6 +142,37 @@
 .modal-input-sm   { width: 120px; }
 .modal-input-mono { font-family: var(--mono); font-size: 11px; flex: 1; }
 
+.modal-check-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.modal-check-pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.modal-check-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.modal-check-pill.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .modal-field-row {
   display: flex;
   gap: 8px;

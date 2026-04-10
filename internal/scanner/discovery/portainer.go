@@ -53,6 +53,7 @@ func (s *PortainerDiscoveryScanner) Discover(ctx context.Context, entityID strin
 	totalContainers := 0
 	upserted := 0
 	now := time.Now().UTC()
+	var seenContainerIDs []string
 
 	for _, ep := range endpoints {
 		containers, err := client.ListContainers(ctx, ep.ID)
@@ -70,6 +71,7 @@ func (s *PortainerDiscoveryScanner) Discover(ctx context.Context, entityID strin
 			}
 			rec := &models.DiscoveredContainer{
 				InfraComponentID: entityID,
+				SourceType:       "portainer",
 				ContainerID:      pc.ID,
 				ContainerName:    name,
 				Image:            pc.Image,
@@ -81,8 +83,14 @@ func (s *PortainerDiscoveryScanner) Discover(ctx context.Context, entityID strin
 				log.Printf("portainer discovery: upsert container %q: %v", name, err)
 				continue
 			}
+			seenContainerIDs = append(seenContainerIDs, pc.ID)
 			upserted++
 		}
+	}
+
+	// Mark containers that no longer appear in any endpoint as stopped.
+	if err := s.store.DiscoveredContainers.MarkStoppedIfNotRunning(ctx, entityID, seenContainerIDs); err != nil {
+		log.Printf("portainer discovery: mark stopped %s: %v", entityID, err)
 	}
 
 	_ = s.store.InfraComponents.UpdateStatus(ctx, entityID, "online", time.Now().UTC().Format(time.RFC3339Nano))

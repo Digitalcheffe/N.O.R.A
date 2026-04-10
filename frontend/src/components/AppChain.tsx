@@ -108,18 +108,19 @@ interface AppChainProps {
   chain: ChainNode[]
   appStatus?: string
   traefik: ChainTraefikRoute[]
+  vertical?: boolean
 }
 
-export function AppChain({ chain, appStatus, traefik }: AppChainProps) {
+export function AppChain({ chain, appStatus, traefik, vertical }: AppChainProps) {
   const navigate = useNavigate()
 
   if (chain.length === 0) return null
 
   return (
-    <div className="app-chain-wrap">
+    <div className={`app-chain-wrap${vertical ? ' app-chain-wrap--vertical' : ''}`}>
       <div className="app-chain-label">Infrastructure</div>
 
-      <div className="app-chain-row">
+      <div className={`app-chain-row${vertical ? ' app-chain-row--vertical' : ''}`}>
         {chain.map((node, i) => {
           const href = nodeHref(node)
           const status = node.type === 'app' ? (appStatus ?? '') : node.status
@@ -156,9 +157,9 @@ export function AppChain({ chain, appStatus, traefik }: AppChainProps) {
               </div>
 
               {i < chain.length - 1 && (
-                <div className="chain-connector" aria-hidden>
+                <div className={`chain-connector${vertical ? ' chain-connector--vertical' : ''}`} aria-hidden>
                   <span className="chain-connector-line" />
-                  <span className="chain-connector-arrow">›</span>
+                  <span className="chain-connector-arrow">{vertical ? '↓' : '›'}</span>
                 </div>
               )}
             </div>
@@ -189,20 +190,16 @@ export function AppChain({ chain, appStatus, traefik }: AppChainProps) {
                 </div>
               ) : (
                 <div key={i} className="chain-traefik-row">
-                  {/* Router status + rule */}
-                  <div className="chain-status-row">
+                  {/* Rule line: status dot + rule text */}
+                  <div className="chain-traefik-rule-line">
                     <span className={`chain-dot ${statusClass(r.status)}`} title={`Router: ${statusLabel(r.status)}`} />
+                    <span className="chain-traefik-rule" title={r.rule}>{r.rule}</span>
                   </div>
-                  <span className="chain-traefik-rule" title={r.rule}>{r.rule}</span>
 
-                  {/* Arrow to service */}
+                  {/* Service line: connector + service + health + backend */}
                   {(r.service || r.router) && (
-                    <>
-                      <div className="chain-connector chain-connector--sm" aria-hidden>
-                        <span className="chain-connector-line" />
-                        <span className="chain-connector-arrow">›</span>
-                      </div>
-                      {/* Service name + its own health */}
+                    <div className="chain-traefik-svc-line">
+                      <span className="chain-traefik-arrow">›</span>
                       <span className="chain-traefik-service">{r.service || r.router}</span>
                       {r.service_status && (
                         <div className="chain-status-row chain-traefik-svc-status">
@@ -214,7 +211,6 @@ export function AppChain({ chain, appStatus, traefik }: AppChainProps) {
                           )}
                         </div>
                       )}
-                      {/* First backend host from servers_json */}
                       {(() => {
                         if (!r.servers_json) return null
                         try {
@@ -229,7 +225,7 @@ export function AppChain({ chain, appStatus, traefik }: AppChainProps) {
                           )
                         } catch { return null }
                       })()}
-                    </>
+                    </div>
                   )}
                 </div>
               )

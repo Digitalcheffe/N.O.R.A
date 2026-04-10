@@ -33,6 +33,7 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 	r.Get("/discovery/all", h.ListAll)
 	r.Get("/containers", h.ListAllContainers)
 	r.Get("/routes", h.ListAllRoutes)
+	r.Get("/discovered-containers/{id}", h.GetContainer)
 	r.Delete("/discovered-containers/{id}", h.DeleteContainer)
 	r.Post("/discovered-containers/{id}/link-app", h.LinkContainerApp)
 	r.Delete("/discovered-containers/{id}/link-app", h.UnlinkContainerApp)
@@ -40,7 +41,7 @@ func (h *DockerDiscoveryHandler) Routes(r chi.Router) {
 	r.Delete("/discovered-routes/{id}/link-app", h.UnlinkRouteApp)
 }
 
-// discoveredContainerResponse is the per-container shape returned by the API.
+// discoveredContainerResponse is the per-container shape returned by the list API.
 type discoveredContainerResponse struct {
 	ID                   string     `json:"id"`
 	InfraComponentID     string     `json:"infra_component_id"`
@@ -57,13 +58,32 @@ type discoveredContainerResponse struct {
 	// Image update fields (DD-9): populated by the ImageUpdatePoller.
 	ImageUpdateAvailable bool       `json:"image_update_available"`
 	ImageLastCheckedAt   *time.Time `json:"image_last_checked_at,omitempty"`
-	// Enrichment fields (AP-04 / migration 037).
-	Ports           *string    `json:"ports,omitempty"`
-	Labels          *string    `json:"labels,omitempty"`
-	Volumes         *string    `json:"volumes,omitempty"`
-	Networks        *string    `json:"networks,omitempty"`
-	RestartPolicy   *string    `json:"restart_policy,omitempty"`
-	DockerCreatedAt *time.Time `json:"docker_created_at,omitempty"`
+}
+
+// containerDetailResponse is the full shape returned by GET /discovered-containers/{id}.
+type containerDetailResponse struct {
+	ID                   string     `json:"id"`
+	InfraComponentID     string     `json:"infra_component_id"`
+	SourceType           string     `json:"source_type"`
+	ContainerID          string     `json:"container_id"`
+	ContainerName        string     `json:"container_name"`
+	Image                string     `json:"image"`
+	Status               string     `json:"status"`
+	AppID                *string    `json:"app_id"`
+	LastSeenAt           time.Time  `json:"last_seen_at"`
+	DockerCreatedAt      *time.Time `json:"docker_created_at,omitempty"`
+	// Image update fields.
+	ImageDigest          *string    `json:"image_digest,omitempty"`
+	RegistryDigest       *string    `json:"registry_digest,omitempty"`
+	ImageUpdateAvailable bool       `json:"image_update_available"`
+	ImageLastCheckedAt   *time.Time `json:"image_last_checked_at,omitempty"`
+	// Runtime fields.
+	Ports         *string `json:"ports,omitempty"`
+	Networks      *string `json:"networks,omitempty"`
+	Volumes       *string `json:"volumes,omitempty"`
+	RestartPolicy *string `json:"restart_policy,omitempty"`
+	Labels        *string `json:"labels,omitempty"`
+	EnvVars       *string `json:"env_vars,omitempty"`
 }
 
 type listDiscoveredContainersResponse struct {
@@ -126,12 +146,6 @@ func (h *DockerDiscoveryHandler) ListContainers(w http.ResponseWriter, r *http.R
 			LastSeenAt:           c.LastSeenAt,
 			ImageUpdateAvailable: c.ImageUpdateAvailable != 0,
 			ImageLastCheckedAt:   c.ImageLastCheckedAt,
-			Ports:                c.Ports,
-			Labels:               c.Labels,
-			Volumes:              c.Volumes,
-			Networks:             c.Networks,
-			RestartPolicy:        c.RestartPolicy,
-			DockerCreatedAt:      c.DockerCreatedAt,
 		}
 
 		// Walk lookup priority until we find a source ID that has metrics.
@@ -445,6 +459,43 @@ func (h *DockerDiscoveryHandler) LinkContainerApp(w http.ResponseWriter, r *http
 	default:
 		writeError(w, http.StatusUnprocessableEntity, "mode must be 'existing' or 'create'")
 	}
+}
+
+// GetContainer returns the full detail record for a single discovered container.
+// GET /api/v1/discovered-containers/{id}
+func (h *DockerDiscoveryHandler) GetContainer(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, err := h.store.DiscoveredContainers.GetDiscoveredContainer(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "discovered container not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, containerDetailResponse{
+		ID:                   c.ID,
+		InfraComponentID:     c.InfraComponentID,
+		SourceType:           c.SourceType,
+		ContainerID:          c.ContainerID,
+		ContainerName:        c.ContainerName,
+		Image:                c.Image,
+		Status:               c.Status,
+		AppID:                c.AppID,
+		LastSeenAt:           c.LastSeenAt,
+		DockerCreatedAt:      c.DockerCreatedAt,
+		ImageDigest:          c.ImageDigest,
+		RegistryDigest:       c.RegistryDigest,
+		ImageUpdateAvailable: c.ImageUpdateAvailable != 0,
+		ImageLastCheckedAt:   c.ImageLastCheckedAt,
+		Ports:                c.Ports,
+		Networks:             c.Networks,
+		Volumes:              c.Volumes,
+		RestartPolicy:        c.RestartPolicy,
+		Labels:               c.Labels,
+		EnvVars:              c.EnvVars,
+	})
 }
 
 // DeleteContainer hard-deletes a discovered container record.

@@ -15,8 +15,9 @@ import (
 
 // PortainerEnrichmentWorker polls all enabled Portainer infrastructure components
 // every 15 minutes. For each Portainer endpoint, it lists containers, upserts them
-// into discovered_containers (keyed by the Portainer component ID), checks image
-// update availability, and emits an event on false→true transitions.
+// into discovered_containers (keyed by the Portainer component ID), stores the
+// locally running image manifest digest, and emits an event when the registry
+// poller later marks image_update_available as true.
 //
 // Gate: if no infrastructure components with type="portainer" are configured,
 // each Run call returns early. Docker Engine components are NOT required.
@@ -182,6 +183,7 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 				CreatedAt:        now,
 				Ports:            encJSON(pc.Ports),
 				Networks:         encJSON(networks),
+				Labels:           encJSON(pc.Labels),
 			}
 			if err := w.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, rec); err != nil {
 				log.Printf("portainer enrichment: upsert container %q: %v", name, err)
@@ -195,23 +197,22 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 
 			seenContainerIDs = append(seenContainerIDs, pc.ID)
 
-			// Re-fetch the full row so determineImageUpdate has the current
-			// registry_digest (set by DD-9) — the upsert only returns the id.
+			// Inspect the container to capture env vars and the local image digest.
+			// Both are written in a single inspect call to avoid extra round-trips.
+			if localDigest := w.extractInspectData(ctx, client, ep.ID, pc, rec.ID); localDigest != "" {
+				if err := w.store.DiscoveredContainers.UpdateContainerLocalDigest(ctx, rec.ID, localDigest); err != nil {
+					log.Printf("portainer enrichment: update local digest %q: %v", name, err)
+				}
+			}
+
+			// Re-fetch the full row so we can read image_update_available as set by
+			// the registry poller (the upsert only returns the id).
 			if full, fetchErr := w.store.DiscoveredContainers.GetDiscoveredContainer(ctx, rec.ID); fetchErr == nil {
 				rec = full
 			}
 
-			// Check image update availability via Portainer's Docker gateway.
-			updateAvailable := w.determineImageUpdate(ctx, client, ep.ID, pc, rec)
-
-			if err := w.store.DiscoveredContainers.UpdateContainerImageCheck(
-				ctx, rec.ID, pc.ID, "", updateAvailable,
-			); err != nil {
-				log.Printf("portainer enrichment: update image check %q: %v", name, err)
-				continue
-			}
-
-			// Emit event on false→true transition only.
+			// Emit event if registry poller already flagged an update (false→true).
+			updateAvailable := rec.ImageUpdateAvailable != 0
 			if updateAvailable {
 				prev, _ := w.lastUpdateAvailable.Load(rec.ID)
 				prevBool, _ := prev.(bool)
@@ -233,60 +234,43 @@ func (w *PortainerEnrichmentWorker) enrichComponent(
 	return upserted, len(endpoints), nil
 }
 
-// determineImageUpdate inspects the running container's image via the Portainer
-// Docker gateway and returns true when a newer image is available.
-//
-// Detection method:
-//  1. Call GET /api/endpoints/{id}/docker/containers/{id}/json to get the
-//     running image's config hash (Image field, always sha256:...).
-//  2. Call GET /api/endpoints/{id}/docker/images/{imageId}/json to retrieve
-//     the locally stored RepoDigests (manifest digests in "img@sha256:..." form).
-//  3. Extract the manifest digest matching the container's image name:tag.
-//  4. Compare against the registry_digest stored by DD-9's image poller.
-//     If they differ and both are non-empty → update available.
-//
-// If the Portainer inspect fails or RepoDigests is empty, falls back to the
-// existing image_update_available value from NORA's DB (no change).
-func (w *PortainerEnrichmentWorker) determineImageUpdate(
+// extractInspectData calls InspectContainer once to capture env vars and the
+// local image manifest digest. Env vars are persisted immediately; the digest
+// is returned so the caller can write it via UpdateContainerLocalDigest.
+// Returns "" if the inspect fails or no manifest digest is available.
+func (w *PortainerEnrichmentWorker) extractInspectData(
 	ctx context.Context,
 	client *PortainerClient,
 	endpointID int,
 	pc PortainerContainer,
-	nora *models.DiscoveredContainer,
-) bool {
-	// Inspect the container to get the running image ID.
+	containerID string, // NORA UUID — used for the env vars DB write
+) string {
 	inspect, err := client.InspectContainer(ctx, endpointID, pc.ID)
 	if err != nil {
 		log.Printf("portainer enrichment: inspect container %s: %v (debug)", pc.FirstName(), err)
-		return nora.ImageUpdateAvailable != 0
+		return ""
 	}
 
-	// Inspect the image to get manifest digests stored locally.
+	// Persist environment variables.
+	if len(inspect.Config.Env) > 0 {
+		if b, jsonErr := json.Marshal(inspect.Config.Env); jsonErr == nil {
+			s := string(b)
+			if err := w.store.DiscoveredContainers.UpdateContainerEnvVars(ctx, containerID, s); err != nil {
+				log.Printf("portainer enrichment: update env vars %q: %v", pc.FirstName(), err)
+			}
+		}
+	}
+
 	imgDetail, err := client.InspectImage(ctx, endpointID, inspect.Image)
 	if err != nil {
 		log.Printf("portainer enrichment: inspect image %s: %v (debug)", inspect.Image, err)
-		return nora.ImageUpdateAvailable != 0
+		return ""
 	}
-
-	// Extract the manifest digest for this image's name:tag.
 	imageName := inspect.Config.Image
 	if imageName == "" {
 		imageName = pc.Image
 	}
-	runningManifest := ExtractManifestDigest(imgDetail.RepoDigests, imageName)
-
-	// If we couldn't get a manifest digest locally, fall back to stored value.
-	if runningManifest == "" {
-		return nora.ImageUpdateAvailable != 0
-	}
-
-	// If DD-9 hasn't checked the registry yet, we can't determine update status.
-	if nora.RegistryDigest == nil || *nora.RegistryDigest == "" {
-		return nora.ImageUpdateAvailable != 0
-	}
-
-	// Update available when locally running manifest ≠ latest registry manifest.
-	return runningManifest != *nora.RegistryDigest
+	return ExtractManifestDigest(imgDetail.RepoDigests, imageName)
 }
 
 // emitImageUpdateEvent fires an "image update available" event through the

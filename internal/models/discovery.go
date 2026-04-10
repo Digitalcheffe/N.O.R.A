@@ -32,6 +32,8 @@ type DiscoveredContainer struct {
 	Networks        *string    `db:"networks"          json:"networks,omitempty"`          // JSON array of network names
 	RestartPolicy   *string    `db:"restart_policy"    json:"restart_policy,omitempty"`   // e.g. "always", "no"
 	DockerCreatedAt *time.Time `db:"docker_created_at" json:"docker_created_at,omitempty"` // when Docker created the container
+	// Fields added in migration 051 (AP-05).
+	EnvVars *string `db:"env_vars" json:"env_vars,omitempty"` // JSON array of "KEY=VALUE" strings from container inspect
 }
 
 // DiscoveredRoute is an HTTP router entry found via a Traefik infrastructure component.

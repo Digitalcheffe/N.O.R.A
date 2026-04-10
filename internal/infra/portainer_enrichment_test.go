@@ -16,6 +16,18 @@ import (
 	"github.com/digitalcheffe/nora/migrations"
 )
 
+// mockRegistryDigester is a simple registry stub for tests.
+type mockRegistryDigester struct {
+	digests map[string]string // image → digest
+}
+
+func (m *mockRegistryDigester) GetLatestDigest(_ context.Context, image string) (string, error) {
+	if d, ok := m.digests[image]; ok {
+		return d, nil
+	}
+	return "", fmt.Errorf("no mock digest for %q", image)
+}
+
 // ── test helpers ──────────────────────────────────────────────────────────────
 
 func newPortainerTestStore(t *testing.T) *repo.Store {
@@ -242,7 +254,10 @@ func TestPortainerContainerNameNormalization(t *testing.T) {
 	}
 	fakeServer.inspects["abc123"] = &PortainerContainerInspect{
 		Image:  "sha256:aaabbb",
-		Config: struct{ Image string `json:"Image"` }{Image: "linuxserver/sonarr:latest"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "linuxserver/sonarr:latest"},
 	}
 	fakeServer.images["sha256:aaabbb"] = &PortainerImageInspect{
 		RepoDigests: []string{},
@@ -286,7 +301,10 @@ func TestPortainerWinsOverDD9ForImageUpdateAvailable(t *testing.T) {
 	}
 	fakeServer.inspects["ctr1"] = &PortainerContainerInspect{
 		Image:  "sha256:running",
-		Config: struct{ Image string `json:"Image"` }{Image: "myrepo/myapp:latest"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "myrepo/myapp:latest"},
 	}
 	// RepoDigests contains the manifest digest of the locally running image.
 	fakeServer.images["sha256:running"] = &PortainerImageInspect{
@@ -315,26 +333,22 @@ func TestPortainerWinsOverDD9ForImageUpdateAvailable(t *testing.T) {
 		t.Fatalf("find pre-seeded container: %v", err)
 	}
 
-	// Manually store DD-9 registry_digest (different from running manifest → update available).
-	registryDigest := "sha256:newermanifest"
-	if err := store.DiscoveredContainers.UpdateContainerImageCheck(
-		context.Background(), seeded.ID, "ctr1", registryDigest, false,
-	); err != nil {
-		t.Fatalf("seed DD-9 data: %v", err)
-	}
-
 	worker := NewPortainerEnrichmentWorker(store)
 	if err := worker.Run(context.Background()); err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
 
-	// Reload and verify Portainer detected the update (running manifest ≠ registry digest).
+	// Reload and verify Portainer stored the local manifest digest (registry poller does the comparison).
 	updated, err := store.DiscoveredContainers.GetDiscoveredContainer(context.Background(), seeded.ID)
 	if err != nil {
 		t.Fatalf("get container: %v", err)
 	}
-	if updated.ImageUpdateAvailable != 1 {
-		t.Errorf("expected image_update_available=1, got %d", updated.ImageUpdateAvailable)
+	if updated.ImageDigest == nil || *updated.ImageDigest != "sha256:localmanifest" {
+		got := "<nil>"
+		if updated.ImageDigest != nil {
+			got = *updated.ImageDigest
+		}
+		t.Errorf("expected image_digest=sha256:localmanifest, got %q", got)
 	}
 }
 
@@ -354,7 +368,10 @@ func TestPortainerEventEmittedOnFalseToTrueTransition(t *testing.T) {
 	}
 	fakeServer.inspects["ctr2"] = &PortainerContainerInspect{
 		Image:  "sha256:old",
-		Config: struct{ Image string `json:"Image"` }{Image: "myrepo/webapp:1.0"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "myrepo/webapp:1.0"},
 	}
 	fakeServer.images["sha256:old"] = &PortainerImageInspect{
 		RepoDigests: []string{"myrepo/webapp@sha256:oldmanifest"},
@@ -381,9 +398,9 @@ func TestPortainerEventEmittedOnFalseToTrueTransition(t *testing.T) {
 		t.Fatalf("find pre-seeded container: %v", err)
 	}
 
-	// Seed: DD-9 says there's a newer image.
+	// Seed: registry poller already found a newer image (image_update_available=true).
 	if err := store.DiscoveredContainers.UpdateContainerImageCheck(
-		context.Background(), dc.ID, "sha256:oldmanifest", "sha256:newermanifest", false,
+		context.Background(), dc.ID, "sha256:oldmanifest", "sha256:newermanifest", true,
 	); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -432,7 +449,10 @@ func TestPortainerNoEventWhenValueUnchanged(t *testing.T) {
 	}
 	fakeServer.inspects["ctr3"] = &PortainerContainerInspect{
 		Image:  "sha256:old2",
-		Config: struct{ Image string `json:"Image"` }{Image: "myrepo/svc:1.0"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "myrepo/svc:1.0"},
 	}
 	fakeServer.images["sha256:old2"] = &PortainerImageInspect{
 		RepoDigests: []string{"myrepo/svc@sha256:oldmanifest2"},

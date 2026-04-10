@@ -20,6 +20,7 @@ import type {
   DigestRegistryListResponse,
   DigestSchedule,
   DiscoverResult,
+  ContainerDetail,
   DiscoveredContainer,
   DiscoveredRoute,
   Event,
@@ -46,6 +47,8 @@ import type {
   ProxmoxNodeStatusDetail,
   ProxmoxStoragePool,
   ProxmoxTaskFailure,
+  ProxmoxBackupJob,
+  ProxmoxBackupFile,
   ResourceHistory,
   ResourceSummary,
   Rule,
@@ -86,8 +89,13 @@ async function request<T>(
     if (res.status === 401 && !path.startsWith('/auth/')) {
       window.dispatchEvent(new CustomEvent('nora:session-expired'))
     }
-    const payload = await res.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(payload.error ?? `HTTP ${res.status}`)
+    let errMsg = `HTTP ${res.status}`
+    const text = await res.text().catch(() => '')
+    if (text.trim()) {
+      try { errMsg = (JSON.parse(text) as { error?: string }).error ?? text.trim() }
+      catch { errMsg = text.trim() }
+    }
+    throw new Error(errMsg)
   }
 
   if (res.status === 204) return undefined as T
@@ -467,6 +475,12 @@ export const proxmox = {
 
   taskFailures: (id: string) =>
     request<ListResponse<ProxmoxTaskFailure>>('GET', `/infrastructure/proxmox/${id}/tasks`),
+
+  backupJobs: (id: string) =>
+    request<ListResponse<ProxmoxBackupJob>>('GET', `/infrastructure/proxmox/${id}/backups`),
+
+  backupFiles: (id: string) =>
+    request<ListResponse<ProxmoxBackupFile>>('GET', `/infrastructure/proxmox/${id}/backup-files`),
 }
 
 // ── Docker Discovery ──────────────────────────────────────────────────────────
@@ -477,6 +491,9 @@ export const discovery = {
 
   allContainers: () =>
     request<ListResponse<DiscoveredContainer>>('GET', `/containers`),
+
+  getContainer: (id: string) =>
+    request<ContainerDetail>('GET', `/discovered-containers/${id}`),
 
   deleteContainer: (containerId: string) =>
     request<void>('DELETE', `/discovered-containers/${containerId}`),
