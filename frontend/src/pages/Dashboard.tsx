@@ -4,7 +4,6 @@ import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { SummaryCard } from '../components/SummaryCard'
 import { AppWidget } from '../components/AppWidget'
-import { BookmarkWidget } from '../components/BookmarkWidget'
 import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
 import type { DashboardSummaryResponse, InfrastructureComponent, ResourceSummary } from '../api/types'
 import { InfraTypeIcon, CheckTypeIcon } from '../components/CheckTypeIcon'
@@ -300,175 +299,93 @@ export function Dashboard() {
           </div>
         )}
 
-        {/* Apps — split into full widgets (webhook/digest capable) and service cards */}
-        {(() => {
-          const SERVICE_CAPS = new Set(['monitor_only', 'docker_only'])
-          const fullApps = data.apps.filter(a => !SERVICE_CAPS.has(a.capability ?? ''))
-          const serviceApps = data.apps.filter(a => SERVICE_CAPS.has(a.capability ?? ''))
+        {/* Events + Monitor Checks — side by side, each 2×2 */}
+        <div className="dash-signals-row">
 
-          return (
-            <>
-              {fullApps.length > 0 && (
-                <div>
-                  <div className="section-header">
-                    <div className="section-title">Apps</div>
-                    <button className="section-action" onClick={() => navigate('/apps')}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Add app
-                    </button>
+          {eventCounts !== null && (
+            <div className="dash-signals-col">
+              <div className="section-header">
+                <div className="section-title">
+                  Events ({timeFilter === 'day' ? '24h' : timeFilter === 'week' ? '7d' : '30d'})
+                </div>
+              </div>
+              <div className="event-counts-row">
+                <div className="event-count-card info" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=info')}>
+                  <div className="event-count-type">INFO</div>
+                  <div className="event-count-value">{eventCounts.info}</div>
+                  <div className="event-count-meta">{eventCounts.info === 1 ? '1 event' : `${eventCounts.info} events`}</div>
+                </div>
+                <div className="event-count-card warn" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=warn')}>
+                  <div className="event-count-type">WARN</div>
+                  <div className="event-count-value">{eventCounts.warn}</div>
+                  <div className="event-count-meta">{eventCounts.warn === 1 ? '1 event' : `${eventCounts.warn} events`}</div>
+                </div>
+                <div className="event-count-card error" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=error')}>
+                  <div className="event-count-type">ERROR</div>
+                  <div className="event-count-value">{eventCounts.error}</div>
+                  <div className="event-count-meta">{eventCounts.error === 1 ? '1 event' : `${eventCounts.error} events`}</div>
+                </div>
+                <div className="event-count-card critical" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=critical')}>
+                  <div className="event-count-type">CRITICAL</div>
+                  <div className="event-count-value">{eventCounts.critical}</div>
+                  <div className="event-count-meta">{eventCounts.critical === 1 ? '1 event' : `${eventCounts.critical} events`}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="dash-signals-col">
+            <div className="section-header">
+              <div className="section-title">Monitor Checks</div>
+            </div>
+            <div className="check-rollup-grid">
+              {checkRollup.map(r => (
+                <div
+                  key={r.type}
+                  className={`check-rollup-card ${r.status}`}
+                  onClick={() => navigate('/checks')}
+                >
+                  <div className="check-rollup-type">
+                    <CheckTypeIcon type={r.type} size={14} />
+                    {r.type.toUpperCase()}
                   </div>
-                  <div className="widget-grid">
-                    {fullApps.map(app => (
-                      <AppWidget
-                        key={app.id}
-                        app={app}
-                        onClick={() => navigate(`/apps/${app.id}`)}
-                      />
-                    ))}
+                  <div className="check-rollup-uptime">
+                    {r.status === 'empty' ? '—' : `${r.avgUptime.toFixed(1)}%`}
+                  </div>
+                  <div className="check-rollup-meta">
+                    {r.total} check{r.total !== 1 ? 's' : ''}
+                    {r.notUp > 0 && <span className="check-rollup-not-up"> · {r.notUp} not up</span>}
                   </div>
                 </div>
-              )}
+              ))}
+            </div>
+          </div>
 
-              {serviceApps.length > 0 && (
-                <div>
-                  <div className="section-header">
-                    <div className="section-title">Services</div>
-                    {fullApps.length === 0 && (
-                      <button className="section-action" onClick={() => navigate('/apps')}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="12" y1="5" x2="12" y2="19" />
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                        Add app
-                      </button>
-                    )}
-                  </div>
-                  <div className="services-grid">
-                    {serviceApps.map(app => (
-                      <BookmarkWidget
-                        key={app.id}
-                        app={app}
-                        onClick={() => navigate(`/apps/${app.id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
+        </div>
 
-              {data.apps.length > 0 && fullApps.length === 0 && serviceApps.length === 0 && (
-                <div>
-                  <div className="section-header">
-                    <div className="section-title">Apps</div>
-                  </div>
-                  <div className="widget-grid">
-                    {data.apps.map(app => (
-                      <AppWidget
-                        key={app.id}
-                        app={app}
-                        onClick={() => navigate(`/apps/${app.id}`)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )
-        })()}
-
-        {/* Events — severity counts */}
-        {eventCounts !== null && (
+        {/* Apps — unified list (all types) */}
+        {data.apps.length > 0 && (
           <div>
             <div className="section-header">
-              <div className="section-title">
-                Events ({timeFilter === 'day' ? '24h' : timeFilter === 'week' ? '7d' : '30d'})
-              </div>
-              <button className="section-action" onClick={() => navigate('/events')}>
-                View all →
-              </button>
+              <div className="section-title">Apps</div>
             </div>
-            <div className="event-counts-row">
-              <div className="event-count-card info" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=info')}>
-                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="10" cy="10" r="8" />
-                  <path d="M10 9v5M10 7h.01" />
-                </svg>
-                <div className="event-count-value">{eventCounts.info}</div>
-                <div className="event-count-label">Info</div>
-              </div>
-              <div className="event-count-card warn" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=warn')}>
-                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10 3L18.5 17H1.5L10 3z" />
-                  <path d="M10 9v4M10 15h.01" />
-                </svg>
-                <div className="event-count-value">{eventCounts.warn}</div>
-                <div className="event-count-label">Warn</div>
-              </div>
-              <div className="event-count-card error" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=error')}>
-                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="10" cy="10" r="8" />
-                  <path d="M7 7l6 6M13 7l-6 6" />
-                </svg>
-                <div className="event-count-value">{eventCounts.error}</div>
-                <div className="event-count-label">Error</div>
-              </div>
-              <div className="event-count-card critical" style={{ cursor: 'pointer' }} onClick={() => navigate('/events?level=critical')}>
-                <svg className="event-count-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10 2c0 4-4 5-4 9a4 4 0 0 0 8 0c0-4-4-5-4-9z" />
-                  <path d="M8 17.5a2 2 0 0 0 4 0" />
-                </svg>
-                <div className="event-count-value">{eventCounts.critical}</div>
-                <div className="event-count-label">Critical</div>
-              </div>
+            <div className="widget-grid">
+              {data.apps.map(app => (
+                <AppWidget
+                  key={app.id}
+                  app={app}
+                  onClick={() => navigate(`/apps/${app.id}`)}
+                />
+              ))}
             </div>
           </div>
         )}
-
-        {/* Monitor Checks — always show all 4 types */}
-        <div>
-          <div className="section-header">
-            <div className="section-title">Monitor Checks</div>
-            <button className="section-action" onClick={() => navigate('/checks')}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add check
-            </button>
-          </div>
-          <div className="check-rollup-grid">
-            {checkRollup.map(r => (
-              <div
-                key={r.type}
-                className={`check-rollup-card ${r.status}`}
-                onClick={() => navigate('/checks')}
-              >
-                <div className="check-rollup-type">
-                  <CheckTypeIcon type={r.type} size={14} />
-                  {r.type.toUpperCase()}
-                </div>
-                <div className="check-rollup-uptime">
-                  {r.status === 'empty' ? '—' : `${r.avgUptime.toFixed(1)}%`}
-                </div>
-                <div className="check-rollup-meta">
-                  {r.total} check{r.total !== 1 ? 's' : ''}
-                  {r.notUp > 0 && <span className="check-rollup-not-up"> · {r.notUp} not up</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
 
         {/* ── INFRASTRUCTURE — full-width below two-col ── */}
         {infraComponents.length > 0 && (
           <div>
             <div className="section-header">
               <div className="section-title">Infrastructure</div>
-              <button className="section-action" onClick={() => navigate('/infrastructure')}>
-                View all →
-              </button>
             </div>
             <div className="dash-infra-grid">
               {infraComponents.map(host => renderInfraCard(host))}

@@ -32,21 +32,11 @@ interface Props {
 }
 
 export function SummaryCard({ item }: Props) {
-  const color = sparklineColor(item.label)
-  const pts = sparklinePoints(item.sparkline, 120, 24)
-  const closedPts = pts ? `${pts} 120,24 0,24` : ''
-
   return (
     <div className="summary-card">
       <div className="summary-label">{item.label}</div>
       <div className={valueColorClass(item.label)}>{item.count}</div>
       <div className="summary-sub">{item.sub}</div>
-      {pts && (
-        <svg className="sparkline" viewBox="0 0 120 24" preserveAspectRatio="none">
-          <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" opacity="0.8" />
-          <polyline points={closedPts} fill={color} stroke="none" opacity="0.08" />
-        </svg>
-      )}
     </div>
   )
 }

@@ -95,6 +95,41 @@ type DigestAppSection struct {
 	Categories  []DigestCategoryRow
 	TotalEvents int
 	HasIssues   bool
+	// Per-app enrichment (full detail)
+	Checks     []DigestAppCheck
+	Routes     []DigestAppRoute
+	Containers []DigestAppContainer
+	// Pre-computed summary counts (used by compact table row)
+	ChecksTotal int
+	ChecksDown  int
+	ChecksWarn  int
+	CtrTotal    int
+	CtrRunning  int
+	CtrUpdates  int
+	SSLMinDays  int // minimum SSL days across all routes; -1 = no SSL data
+}
+
+// DigestAppCheck is a single monitor check associated with an app.
+type DigestAppCheck struct {
+	Name   string
+	Type   string // url / ssl / dns / ping
+	Status string // up / down / warn / "" (not yet run)
+	Target string
+}
+
+// DigestAppRoute is a Traefik-discovered endpoint linked to an app.
+type DigestAppRoute struct {
+	Domain  string
+	HasTLS  bool
+	Status  string // RouterStatus: "enabled" | "disabled" | other
+	SSLDays int    // days until SSL expiry; -1 = no SSL data
+}
+
+// DigestAppContainer is a discovered container linked to an app.
+type DigestAppContainer struct {
+	Name      string
+	Status    string
+	HasUpdate bool
 }
 
 // DigestCategoryRow is one category (e.g. "Downloads", "Errors") for an app.
@@ -355,6 +390,30 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 		data.CheckGroups = append(data.CheckGroups, g)
 	}
 
+	// ── Pre-3. Build per-app lookup maps ──────────────────────────────────
+	// Fetch all containers now so we can group by app_id here AND reuse
+	// the slice in section 5 without a second DB round-trip.
+	var containers []*models.DiscoveredContainer
+	if d.store.DiscoveredContainers != nil {
+		if cs, cerr := d.store.DiscoveredContainers.ListAllDiscoveredContainers(ctx); cerr == nil {
+			containers = cs
+		} else {
+			log.Printf("digest: list containers (early): %v", cerr)
+		}
+	}
+	checksByApp := make(map[string][]models.MonitorCheck)
+	for _, c := range checks {
+		if c.AppID != "" && c.Enabled {
+			checksByApp[c.AppID] = append(checksByApp[c.AppID], c)
+		}
+	}
+	containersByApp := make(map[string][]*models.DiscoveredContainer)
+	for _, c := range containers {
+		if c.AppID != nil && *c.AppID != "" {
+			containersByApp[*c.AppID] = append(containersByApp[*c.AppID], c)
+		}
+	}
+
 	// ── 3. App activity — per-app category breakdown ───────────────────────
 	// monitor_only apps have no webhook/digest categories — route
 	// them to ServiceSections so the email can render a separate Services block.
@@ -374,10 +433,12 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 
 			// Service apps: no digest categories — list them in ServiceSections.
 			if isServiceCapability(apptemplate.InferCapability(profile)) {
-				data.ServiceSections = append(data.ServiceSections, DigestAppSection{
+				svcSection := DigestAppSection{
 					AppName:     app.Name,
 					ProfileName: profile.Meta.Name,
-				})
+				}
+				svcSection = enrichAppSection(ctx, d.store, app.ID, svcSection, checksByApp, containersByApp)
+				data.ServiceSections = append(data.ServiceSections, svcSection)
 				continue
 			}
 
@@ -414,6 +475,7 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 					section.HasIssues = true
 				}
 			}
+			section = enrichAppSection(ctx, d.store, app.ID, section, checksByApp, containersByApp)
 			data.AppSections = append(data.AppSections, section)
 		}
 	} else {
@@ -469,13 +531,7 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 	}
 
 	// ── 5. Container signals ───────────────────────────────────────────────
-	var containers []*models.DiscoveredContainer
-	if d.store.DiscoveredContainers != nil {
-		containers, err = d.store.DiscoveredContainers.ListAllDiscoveredContainers(ctx)
-		if err != nil {
-			log.Printf("digest: list containers: %v", err)
-		}
-	}
+	// containers was fetched early (before section 3) for per-app grouping — reuse it.
 	for _, c := range containers {
 		data.ContainersTotal++
 		if c.Status == "running" {
@@ -813,6 +869,96 @@ func isAre(n int) string {
 	return "are"
 }
 
+// enrichAppSection populates Checks, Routes, and Containers on a DigestAppSection
+// using pre-built lookup maps (checks, containers) and a live route query.
+func enrichAppSection(
+	ctx context.Context,
+	store *repo.Store,
+	appID string,
+	section DigestAppSection,
+	checksByApp map[string][]models.MonitorCheck,
+	containersByApp map[string][]*models.DiscoveredContainer,
+) DigestAppSection {
+	// Checks
+	for _, mc := range checksByApp[appID] {
+		section.Checks = append(section.Checks, DigestAppCheck{
+			Name:   mc.Name,
+			Type:   mc.Type,
+			Status: mc.LastStatus,
+			Target: mc.Target,
+		})
+	}
+	// Routes (Traefik-discovered endpoints)
+	if store.DiscoveredRoutes != nil {
+		if routes, rErr := store.DiscoveredRoutes.ListByAppID(ctx, appID); rErr == nil {
+			for _, r := range routes {
+				daysLeft := -1
+				if r.SSLExpiry != nil {
+					daysLeft = int(time.Until(*r.SSLExpiry).Hours() / 24)
+				}
+				section.Routes = append(section.Routes, DigestAppRoute{
+					Domain:  routeDomain(r),
+					HasTLS:  r.HasTLSResolver == 1,
+					Status:  r.RouterStatus,
+					SSLDays: daysLeft,
+				})
+			}
+		}
+	}
+	// Containers
+	for _, c := range containersByApp[appID] {
+		section.Containers = append(section.Containers, DigestAppContainer{
+			Name:      trimContainerName(c.ContainerName),
+			Status:    c.Status,
+			HasUpdate: c.ImageUpdateAvailable == 1,
+		})
+	}
+
+	// Pre-compute summary counts for compact display
+	section.ChecksTotal = len(section.Checks)
+	for _, c := range section.Checks {
+		if c.Status == "down" {
+			section.ChecksDown++
+		} else if c.Status == "warn" {
+			section.ChecksWarn++
+		}
+	}
+	section.CtrTotal = len(section.Containers)
+	section.SSLMinDays = -1
+	for _, r := range section.Routes {
+		if r.SSLDays >= 0 {
+			if section.SSLMinDays == -1 || r.SSLDays < section.SSLMinDays {
+				section.SSLMinDays = r.SSLDays
+			}
+		}
+	}
+	for _, c := range section.Containers {
+		if c.Status == "running" {
+			section.CtrRunning++
+		}
+		if c.HasUpdate {
+			section.CtrUpdates++
+		}
+	}
+	return section
+}
+
+// routeDomain extracts a human-readable domain from a DiscoveredRoute.
+// Prefers the stored Domain field; falls back to parsing Host(`) from the Traefik rule.
+func routeDomain(r *models.DiscoveredRoute) string {
+	if r.Domain != nil && *r.Domain != "" {
+		return *r.Domain
+	}
+	rule := r.Rule
+	if i := strings.Index(rule, "Host(`"); i >= 0 {
+		rest := rule[i+6:]
+		if j := strings.Index(rest, "`"); j >= 0 {
+			return rest[:j]
+		}
+	}
+	return r.RouterName
+}
+
 func trimContainerName(name string) string {
 	name = strings.TrimPrefix(name, "/")
 	if len(name) > 32 {
@@ -1148,65 +1294,40 @@ var digestHTMLTemplate = `<!DOCTYPE html>
       </table>
     </td></tr>
 
-    <!-- App activity -->
-    {{if .AppSections}}
+    <!-- App activity — compact table -->
+    {{if or .AppSections .ServiceSections}}
     <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
-      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">App Activity</p>
-      {{range .AppSections}}
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
-        <tr>
-          <td colspan="2" style="padding:6px 0 4px;border-bottom:1px solid #1e2530;">
-            <span style="font-size:13px;font-weight:600;color:#c8d4e0;">{{.AppName}}</span>
-            {{if .ProfileName}}<span style="font-size:11px;color:#445566;margin-left:6px;font-family:monospace;">{{.ProfileName}}</span>{{end}}
-          </td>
-        </tr>
-        {{range .Categories}}
-        <tr>
-          <td style="padding:5px 0 5px 12px;font-size:13px;color:#7a8fa8;">{{.Label}}</td>
-          <td align="right" style="padding:5px 0;font-size:14px;font-weight:600;font-family:monospace;{{if and .IsError (gt .Count 0)}}color:#ef4444;{{else if gt .Count 0}}color:#3b82f6;{{else}}color:#445566;{{end}}">{{.Count}}</td>
-        </tr>
-        {{end}}
-        {{if eq .TotalEvents 0}}
-        <tr><td colspan="2" style="padding:5px 0 5px 12px;font-size:12px;color:#445566;font-style:italic;">No activity this period</td></tr>
-        {{end}}
-      </table>
-      {{end}}
-    </td></tr>
-    {{end}}
-
-    <!-- Services (monitor_only / docker_only — no digest data) -->
-    {{if .ServiceSections}}
-    <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
-      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Services</p>
+      <p style="margin:0 0 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Apps</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-        {{range .ServiceSections}}
-        <tr>
-          <td style="padding:5px 0;font-size:13px;color:#c8d4e0;">{{.AppName}}</td>
-          <td style="padding:5px 0;font-size:11px;color:#445566;font-family:monospace;">{{.ProfileName}}</td>
-          <td align="right" style="padding:5px 0;font-size:11px;font-family:monospace;color:#445566;">monitor only</td>
+        <!-- header -->
+        <tr style="border-bottom:1px solid #1e2530;">
+          <td style="padding:4px 0;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">App</td>
+          <td align="right" style="padding:4px 6px;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">Events</td>
+          <td align="right" style="padding:4px 6px;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">Endpoints</td>
+          <td align="right" style="padding:4px 6px;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">Monitors</td>
+          <td align="right" style="padding:4px 0;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">Containers</td>
         </tr>
-        {{end}}
+        {{range .AppSections}}{{template "emailAppRow" .}}{{end}}
+        {{range .ServiceSections}}{{template "emailAppRow" .}}{{end}}
       </table>
-      <p style="margin:10px 0 0;font-size:11px;color:#445566;font-style:italic;">These services are monitored for uptime but do not emit webhook events.</p>
     </td></tr>
     {{end}}
 
     <!-- Infrastructure -->
     {{if .InfraRows}}
     <tr><td style="background:#0f1215;border:1px solid #1e2530;border-top:none;border-bottom:none;padding:16px 28px;">
-      <p style="margin:0 0 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Infrastructure
-        <span style="font-weight:400;color:#22c55e;margin-left:8px;">{{.InfraOnline}} online</span>
-        {{if gt .InfraOffline 0}}<span style="font-weight:400;color:#ef4444;margin-left:8px;">{{.InfraOffline}} offline</span>{{end}}
-      </p>
+      <p style="margin:0 0 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;">Infrastructure <span style="font-weight:400;color:#22c55e;">{{.InfraOnline}} online</span>{{if gt .InfraOffline 0}} <span style="font-weight:400;color:#ef4444;">{{.InfraOffline}} offline</span>{{end}}</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr style="border-bottom:1px solid #1e2530;">
+          <td style="padding:3px 0;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">Component</td>
+          <td style="padding:3px 6px;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">Type</td>
+          <td align="right" style="padding:3px 0;font-size:10px;color:#2a3a4a;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;">Status</td>
+        </tr>
         {{range .InfraRows}}
-        <tr>
-          <td style="padding:5px 0;font-size:13px;color:#c8d4e0;">{{.Name}}</td>
-          <td style="padding:5px 0;font-size:11px;color:#445566;font-family:monospace;">{{.Type}}</td>
-          <td align="right" style="padding:5px 0;font-size:12px;font-family:monospace;
-            {{if eq .Status "online"}}color:#22c55e;
-            {{else if eq .Status "degraded"}}color:#eab308;
-            {{else}}color:#ef4444;{{end}}">{{.Status}}</td>
+        <tr style="border-bottom:1px solid #1e2530;">
+          <td style="padding:7px 0;font-size:13px;color:#c8d4e0;font-weight:500;">{{.Name}}</td>
+          <td style="padding:7px 6px;font-size:11px;color:#445566;font-family:monospace;">{{.Type}}</td>
+          <td align="right" style="padding:7px 0;font-size:12px;font-family:monospace;{{if eq .Status "online"}}color:#22c55e;{{else if eq .Status "degraded"}}color:#eab308;{{else}}color:#ef4444;{{end}}">● {{.Status}}</td>
         </tr>
         {{end}}
       </table>
@@ -1261,6 +1382,37 @@ var digestHTMLTemplate = `<!DOCTYPE html>
   </table>
   </td></tr>
 </table>
+
+{{define "emailAppRow"}}
+<tr style="border-bottom:1px solid #1e2530;">
+  <td style="padding:7px 0;font-size:13px;{{if .HasIssues}}color:#ef4444;font-weight:600;{{else}}color:#c8d4e0;{{end}}">
+    {{.AppName}}{{if .ProfileName}} <span style="font-size:10px;color:#445566;font-family:monospace;">{{.ProfileName}}</span>{{end}}
+  </td>
+  <td align="right" style="padding:7px 6px;font-size:13px;font-weight:600;font-family:monospace;{{if .HasIssues}}color:#ef4444;{{else if gt .TotalEvents 0}}color:#3b82f6;{{else}}color:#445566;{{end}}">
+    {{if gt .TotalEvents 0}}{{.TotalEvents}}{{else}}—{{end}}
+  </td>
+  <td align="right" style="padding:7px 6px;font-size:11px;font-family:monospace;">
+    {{if .Routes}}
+      {{len .Routes}}
+      {{if ge .SSLMinDays 0}}{{if le .SSLMinDays 7}}<span style="color:#ef4444;">SSL {{.SSLMinDays}}d</span>{{else if le .SSLMinDays 30}}<span style="color:#eab308;">SSL {{.SSLMinDays}}d</span>{{end}}{{end}}
+    {{else}}<span style="color:#445566;">—</span>{{end}}
+  </td>
+  <td align="right" style="padding:7px 6px;font-size:12px;font-family:monospace;">
+    {{if gt .ChecksTotal 0}}
+      {{if gt .ChecksDown 0}}<span style="color:#ef4444;">{{.ChecksDown}} ✗</span> {{end}}
+      {{if gt .ChecksWarn 0}}<span style="color:#eab308;">{{.ChecksWarn}} ▲</span> {{end}}
+      {{if and (eq .ChecksDown 0) (eq .ChecksWarn 0)}}<span style="color:#22c55e;">{{.ChecksTotal}} ●</span>{{end}}
+    {{else}}<span style="color:#445566;">—</span>{{end}}
+  </td>
+  <td align="right" style="padding:7px 0;font-size:12px;font-family:monospace;">
+    {{if gt .CtrTotal 0}}
+      <span style="{{if lt .CtrRunning .CtrTotal}}color:#eab308;{{else}}color:#22c55e;{{end}}">{{.CtrRunning}}/{{.CtrTotal}}</span>
+      {{if gt .CtrUpdates 0}}<span style="color:#f59e0b;font-size:10px;"> +{{.CtrUpdates}}upd</span>{{end}}
+    {{else}}<span style="color:#445566;">—</span>{{end}}
+  </td>
+</tr>
+{{end}}
+
 </body>
 </html>`
 
@@ -1315,29 +1467,37 @@ var reportHTMLTemplate = `<!DOCTYPE html>
   .check-card-meta{font-size:11px;color:#445566;font-family:monospace;line-height:1.4;}
   .check-card-notup{color:#ef4444;}
   .check-card.warning .check-card-notup{color:#eab308;}
-  /* ── App widgets ── */
-  .app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
-  .app-widget{background:#0f1215;border:1px solid #1e2530;border-radius:8px;overflow:hidden;}
-  .app-widget-header{padding:10px 14px;border-bottom:1px solid #1e2530;display:flex;align-items:center;justify-content:space-between;gap:8px;}
-  .app-widget-name{font-weight:600;font-size:13px;color:#c8d4e0;}
-  .app-widget-badge{font-size:10px;font-family:monospace;color:#445566;background:#141820;border:1px solid #1e2530;border-radius:4px;padding:1px 5px;}
-  .cat-row{display:flex;justify-content:space-between;align-items:center;padding:7px 14px;border-bottom:1px solid #1e2530;}
-  .cat-row:last-child{border-bottom:none;}
-  .cat-label{font-size:12px;color:#7a8fa8;}
-  .cat-count{font-family:monospace;font-size:13px;font-weight:600;}
-  .cat-count.has-errors{color:#ef4444;}
-  .cat-count.has-activity{color:#3b82f6;}
-  .cat-count.none{color:#445566;}
-  /* ── Infra cards ── */
-  .infra-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;}
-  .infra-card{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
-  .infra-card-left{}
-  .infra-card-name{font-size:13px;font-weight:600;color:#c8d4e0;margin-bottom:3px;}
-  .infra-card-type{font-size:11px;font-family:monospace;color:#445566;}
-  .infra-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-  .infra-dot.online{background:#22c55e;}
-  .infra-dot.degraded{background:#eab308;}
-  .infra-dot.offline,.infra-dot.unknown{background:#ef4444;}
+  /* ── App table (compact one-row-per-app) ── */
+  .app-table{width:100%;border-collapse:collapse;}
+  .app-table th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:#445566;font-family:monospace;padding:4px 8px 6px;border-bottom:1px solid #1e2530;text-align:right;}
+  .app-table th:first-child{text-align:left;padding-left:0;}
+  .app-table th:last-child{padding-right:0;}
+  .app-table td{padding:8px 8px;border-bottom:1px solid #1e2530;vertical-align:middle;font-size:13px;}
+  .app-table td:first-child{padding-left:0;}
+  .app-table td:last-child{padding-right:0;text-align:right;}
+  .app-table tr:last-child td{border-bottom:none;}
+  .app-name{font-weight:500;color:#c8d4e0;}
+  .app-name.has-issues{color:#ef4444;}
+  .app-badge{font-size:10px;font-family:monospace;color:#445566;background:#141820;border:1px solid #1e2530;border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
+  .app-num{font-family:monospace;font-weight:600;text-align:right;}
+  .app-num.events-err{color:#ef4444;}
+  .app-num.events-act{color:#3b82f6;}
+  .app-num.dim{color:#445566;}
+  .app-ep{font-family:monospace;font-size:11px;text-align:right;}
+  .app-mon{font-family:monospace;font-size:11px;text-align:right;white-space:nowrap;}
+  .app-ctr{font-family:monospace;font-size:12px;text-align:right;white-space:nowrap;}
+  .ssl-crit{color:#ef4444;font-size:10px;}
+  .ssl-warn{color:#eab308;font-size:10px;}
+  .c-green{color:#22c55e;}
+  .c-red{color:#ef4444;}
+  .c-amber{color:#eab308;}
+  .c-dim{color:#445566;}
+  .update-pill{font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;text-transform:uppercase;}
+  /* ── Infra table (reuses .app-table styles) ── */
+  .infra-status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+  .infra-status-dot.online{background:#22c55e;}
+  .infra-status-dot.degraded{background:#eab308;}
+  .infra-status-dot.offline,.infra-status-dot.unknown{background:#ef4444;}
   /* ── Containers ── */
   .container-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .container-cell{background:#0f1215;border:1px solid #1e2530;border-radius:8px;padding:14px;}
@@ -1359,10 +1519,14 @@ var reportHTMLTemplate = `<!DOCTYPE html>
     .banner.healthy .banner-headline{color:#16a34a;}
     .banner.warning .banner-headline{color:#ca8a04;}
     .banner.critical .banner-headline{color:#dc2626;}
-    .check-card,.app-widget,.infra-card,.container-cell,.event-cell{border-color:#ddd;background:#fff;}
-    .section-label,.check-card-meta,.infra-card-type,.container-label,.app-widget-badge{color:#666;}
-    .summary-text,.cat-label,.infra-card-name{color:#333;}
-    .cat-count.none,.check-card.none .check-card-uptime{color:#999;}
+    .check-card,.container-cell,.event-cell{border-color:#ddd;background:#fff;}
+    .section-label,.check-card-meta,.container-label,.app-badge,.c-dim{color:#666;}
+    .summary-text,.app-name{color:#333;}
+    .infra-status-dot.online{background:#16a34a;}
+    .infra-status-dot.degraded{background:#ca8a04;}
+    .infra-status-dot.offline,.infra-status-dot.unknown{background:#dc2626;}
+    .check-card.none .check-card-uptime{color:#999;}
+    .app-table th,.app-table td{border-bottom-color:#ddd;}
   }
 </style>
 </head>
@@ -1442,67 +1606,53 @@ var reportHTMLTemplate = `<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- App activity — widget grid -->
-  {{if .AppSections}}
+  <!-- Apps — compact table -->
+  {{if or .AppSections .ServiceSections}}
   <div class="section">
-    <div class="section-label">App Activity</div>
-    <div class="app-grid">
-      {{range .AppSections}}
-      <div class="app-widget">
-        <div class="app-widget-header">
-          <span class="app-widget-name">{{.AppName}}</span>
-          {{if .ProfileName}}<span class="app-widget-badge">{{.ProfileName}}</span>{{end}}
-        </div>
-        {{range .Categories}}
-        <div class="cat-row">
-          <span class="cat-label">{{.Label}}</span>
-          <span class="cat-count {{if and .IsError (gt .Count 0)}}has-errors{{else if gt .Count 0}}has-activity{{else}}none{{end}}">{{.Count}}</span>
-        </div>
-        {{end}}
-        {{if eq .TotalEvents 0}}
-        <div class="cat-row"><span class="cat-label" style="font-style:italic;font-size:11px;">No activity this period</span></div>
-        {{end}}
-      </div>
-      {{end}}
-    </div>
+    <div class="section-label">Apps</div>
+    <table class="app-table">
+      <thead>
+        <tr>
+          <th style="text-align:left;">App</th>
+          <th>Events</th>
+          <th>Endpoints</th>
+          <th>Monitors</th>
+          <th>Containers</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .AppSections}}{{template "reportAppRow" .}}{{end}}
+        {{range .ServiceSections}}{{template "reportAppRow" .}}{{end}}
+      </tbody>
+    </table>
   </div>
   {{end}}
 
-  <!-- Services — monitor_only / docker_only -->
-  {{if .ServiceSections}}
-  <div class="section">
-    <div class="section-label">Services</div>
-    <div class="app-grid">
-      {{range .ServiceSections}}
-      <div class="app-widget">
-        <div class="app-widget-header">
-          <span class="app-widget-name">{{.AppName}}</span>
-          {{if .ProfileName}}<span class="app-widget-badge">{{.ProfileName}}</span>{{end}}
-        </div>
-        <div class="cat-row">
-          <span class="cat-label" style="font-style:italic;">Monitor only — no event data</span>
-        </div>
-      </div>
-      {{end}}
-    </div>
-  </div>
-  {{end}}
-
-  <!-- Infrastructure — card grid -->
+  <!-- Infrastructure -->
   {{if .InfraRows}}
   <div class="section">
-    <div class="section-label">Infrastructure — {{.InfraOnline}} online{{if gt .InfraOffline 0}}, {{.InfraOffline}} offline{{end}}</div>
-    <div class="infra-grid">
-      {{range .InfraRows}}
-      <div class="infra-card">
-        <div class="infra-card-left">
-          <div class="infra-card-name">{{.Name}}</div>
-          <div class="infra-card-type">{{.Type}}</div>
-        </div>
-        <div class="infra-dot {{.Status}}"></div>
-      </div>
-      {{end}}
-    </div>
+    <div class="section-label">Infrastructure — <span class="c-green">{{.InfraOnline}} online</span>{{if gt .InfraOffline 0}} <span class="c-red">{{.InfraOffline}} offline</span>{{end}}</div>
+    <table class="app-table">
+      <thead>
+        <tr>
+          <th style="text-align:left;">Component</th>
+          <th style="text-align:left;">Type</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .InfraRows}}
+        <tr>
+          <td style="font-weight:500;color:#c8d4e0;">{{.Name}}</td>
+          <td style="font-family:monospace;font-size:11px;color:#445566;">{{.Type}}</td>
+          <td style="text-align:right;font-family:monospace;font-size:12px;">
+            <span class="infra-status-dot {{.Status}}"></span>
+            <span class="{{if eq .Status "online"}}c-green{{else if eq .Status "degraded"}}c-amber{{else}}c-red{{end}}">{{.Status}}</span>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
   </div>
   {{end}}
 
@@ -1510,17 +1660,23 @@ var reportHTMLTemplate = `<!DOCTYPE html>
   {{if gt .ContainersTotal 0}}
   <div class="section">
     <div class="section-label">Containers</div>
-    <div class="container-grid">
-      <div class="container-cell">
-        <div class="container-value" style="color:#22c55e;">{{.ContainersRunning}}<span style="font-size:14px;color:#445566;"> / {{.ContainersTotal}}</span></div>
-        <div class="container-label">Running</div>
-      </div>
-      <div class="container-cell">
-        <div class="container-value" style="{{if gt .UpdatesAvailable 0}}color:#eab308;{{else}}color:#445566;{{end}}">{{.UpdatesAvailable}}</div>
-        <div class="container-label">Updates Available</div>
-        {{if .NewContainers}}<div class="container-sub">New: {{range $i,$n := .NewContainers}}{{if $i}}, {{end}}{{$n}}{{end}}</div>{{end}}
-      </div>
-    </div>
+    <table class="app-table">
+      <tbody>
+        <tr>
+          <td style="color:#7a8fa8;">Running</td>
+          <td style="text-align:right;font-family:monospace;font-weight:600;" class="{{if lt .ContainersRunning .ContainersTotal}}c-amber{{else}}c-green{{end}}">{{.ContainersRunning}} / {{.ContainersTotal}}</td>
+        </tr>
+        <tr>
+          <td style="color:#7a8fa8;">Image updates available</td>
+          <td style="text-align:right;font-family:monospace;font-weight:600;" class="{{if gt .UpdatesAvailable 0}}c-amber{{else}}c-dim{{end}}">{{.UpdatesAvailable}}</td>
+        </tr>
+        {{if .NewContainers}}
+        <tr>
+          <td colspan="2" style="font-family:monospace;font-size:11px;color:#445566;">New this period: {{range $i,$n := .NewContainers}}{{if $i}}, {{end}}{{$n}}{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
   </div>
   {{end}}
 
@@ -1541,5 +1697,41 @@ var reportHTMLTemplate = `<!DOCTYPE html>
   {{end}}
 
 </div>
+
+{{define "reportAppRow"}}
+<tr>
+  <td>
+    <span class="app-name{{if .HasIssues}} has-issues{{end}}">{{.AppName}}</span>
+    {{if .ProfileName}}<span class="app-badge">{{.ProfileName}}</span>{{end}}
+  </td>
+  <td class="app-num {{if .HasIssues}}events-err{{else if gt .TotalEvents 0}}events-act{{else}}dim{{end}}">
+    {{if gt .TotalEvents 0}}{{.TotalEvents}}{{else}}—{{end}}
+  </td>
+  <td class="app-ep">
+    {{if .Routes}}
+      <span class="{{if gt (len .Routes) 0}}c-green{{else}}c-dim{{end}}">{{len .Routes}}</span>
+      {{if ge .SSLMinDays 0}}
+        {{if le .SSLMinDays 7}}<span class="ssl-crit"> SSL {{.SSLMinDays}}d</span>
+        {{else if le .SSLMinDays 30}}<span class="ssl-warn"> SSL {{.SSLMinDays}}d</span>
+        {{end}}
+      {{end}}
+    {{else}}<span class="c-dim">—</span>{{end}}
+  </td>
+  <td class="app-mon">
+    {{if gt .ChecksTotal 0}}
+      {{if gt .ChecksDown 0}}<span class="c-red">{{.ChecksDown}} ✗</span> {{end}}
+      {{if gt .ChecksWarn 0}}<span class="c-amber">{{.ChecksWarn}} ▲</span> {{end}}
+      {{if and (eq .ChecksDown 0) (eq .ChecksWarn 0)}}<span class="c-green">{{.ChecksTotal}} ●</span>{{end}}
+    {{else}}<span class="c-dim">—</span>{{end}}
+  </td>
+  <td class="app-ctr">
+    {{if gt .CtrTotal 0}}
+      <span class="{{if lt .CtrRunning .CtrTotal}}c-amber{{else}}c-green{{end}}">{{.CtrRunning}}/{{.CtrTotal}}</span>
+      {{if gt .CtrUpdates 0}}<span class="update-pill"> +{{.CtrUpdates}}</span>{{end}}
+    {{else}}<span class="c-dim">—</span>{{end}}
+  </td>
+</tr>
+{{end}}
+
 </body>
 </html>`

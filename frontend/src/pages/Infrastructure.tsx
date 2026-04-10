@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
-import { SlidePanel } from '../components/SlidePanel'
 import { infrastructure as infraApi, discovery, apps as appsApi } from '../api/client'
 import type {
   InfrastructureComponent,
@@ -96,12 +95,6 @@ export function Infrastructure() {
   const [containers,      setContainers]      = useState<DiscoveredContainer[]>([])
   const [containersLoading, setContainersLoading] = useState(false)
   const [allApps,         setAllApps]         = useState<App[]>([])
-  const [ctrPanelOpen,    setCtrPanelOpen]    = useState(false)
-  const [selectedCtr,     setSelectedCtr]     = useState<DiscoveredContainer | null>(null)
-  const [ctrLinkAppId,    setCtrLinkAppId]    = useState('')
-  const [ctrLinkBusy,     setCtrLinkBusy]     = useState(false)
-  const [ctrLinkError,    setCtrLinkError]    = useState('')
-
   // Panel state
   const [modalOpen,             setModalOpen]             = useState(false)
   const [openKey,               setOpenKey]               = useState(0)
@@ -156,10 +149,10 @@ export function Infrastructure() {
     return () => clearInterval(id)
   }, [])
 
-  // Load containers + apps when Containers tab is active
+  // Load containers + apps (always, so container count is available on components tab too)
   useEffect(() => {
-    if (view !== 'containers') return
-    setContainersLoading(true)
+    // Only show the loading spinner on the initial load (no data yet).
+    if (view === 'containers' && containers.length === 0) setContainersLoading(true)
     Promise.all([
       discovery.allContainers(),
       appsApi.list(),
@@ -167,6 +160,7 @@ export function Infrastructure() {
       .then(([cRes, aRes]) => { setContainers(cRes.data); setAllApps(aRes.data) })
       .catch(console.error)
       .finally(() => setContainersLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, refreshTick])
 
   // Suppress unused variable warning for tick
@@ -203,9 +197,15 @@ export function Infrastructure() {
     try {
       const result = await infraApi.discover(id)
       setScanResults(prev => ({ ...prev, [id]: result }))
-      // Refresh the component list so last_status updates immediately.
-      const res = await infraApi.list()
+      // Refresh the component list and containers so everything reflects the new state.
+      const [res, cRes, aRes] = await Promise.all([
+        infraApi.list(),
+        discovery.allContainers(),
+        appsApi.list(),
+      ])
       setComponents(res.data)
+      setContainers(cRes.data)
+      setAllApps(aRes.data)
       void pollAll(res.data)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Discover failed'
@@ -495,60 +495,6 @@ export function Infrastructure() {
     return profileId ? `/api/v1/icons/${profileId}` : null
   }
 
-  function openCtrPanel(c: DiscoveredContainer) {
-    setSelectedCtr(c)
-    setCtrLinkAppId(c.app_id ?? '')
-    setCtrLinkError('')
-    setCtrPanelOpen(true)
-  }
-
-  async function handleCtrLink() {
-    if (!selectedCtr || !ctrLinkAppId) return
-    setCtrLinkBusy(true)
-    setCtrLinkError('')
-    try {
-      await discovery.linkContainerApp(selectedCtr.id, { mode: 'existing', app_id: ctrLinkAppId })
-      setContainers(prev => prev.map(c => c.id === selectedCtr.id ? { ...c, app_id: ctrLinkAppId } : c))
-      setSelectedCtr(prev => prev ? { ...prev, app_id: ctrLinkAppId } : prev)
-    } catch (e) {
-      setCtrLinkError(String(e))
-    } finally {
-      setCtrLinkBusy(false)
-    }
-  }
-
-  async function handleCtrUnlink() {
-    if (!selectedCtr) return
-    setCtrLinkBusy(true)
-    setCtrLinkError('')
-    try {
-      await discovery.unlinkContainerApp(selectedCtr.id)
-      setContainers(prev => prev.map(c => c.id === selectedCtr.id ? { ...c, app_id: null } : c))
-      setSelectedCtr(prev => prev ? { ...prev, app_id: null } : prev)
-      setCtrLinkAppId('')
-    } catch (e) {
-      setCtrLinkError(String(e))
-    } finally {
-      setCtrLinkBusy(false)
-    }
-  }
-
-  function formatImage(image: string): { name: string; tag: string } {
-    if (image.startsWith('sha256:')) {
-      return { name: 'sha256:' + image.slice(7, 19), tag: '…' }
-    }
-    const colonIdx = image.lastIndexOf(':')
-    if (colonIdx === -1) {
-      return { name: image.length > 45 ? image.slice(0, 44) + '…' : image, tag: '' }
-    }
-    const name = image.slice(0, colonIdx)
-    const tag  = image.slice(colonIdx + 1)
-    return {
-      name: name.length > 45 ? name.slice(0, 44) + '…' : name,
-      tag,
-    }
-  }
-
   function sourceLabel(s: string) {
     if (s === 'docker_engine') return 'Docker'
     if (s === 'portainer')     return 'Portainer'
@@ -582,83 +528,71 @@ export function Infrastructure() {
     }
 
     return (
-      <div className="rel-table-wrap">
-        <table className="rel-table ctr-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Source</th>
-              <th>Image</th>
-              <th>Status</th>
-              <th>Image Update</th>
-              <th>Last Seen</th>
-              <th>App</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {containers.map(c => {
-              const img = formatImage(c.image)
-              return (
-                <tr key={c.id} className="rel-row">
-                  <td className="ctr-name">{c.container_name}</td>
-                  <td>
-                    <span className={`ctr-source-badge ctr-source-${c.source_type}`}>
-                      {sourceLabel(c.source_type)}
-                    </span>
-                  </td>
-                  <td className="rel-mono ctr-image" title={c.image}>
-                    {img.name}
-                    {img.tag && <span className="rel-dim">:{img.tag}</span>}
-                  </td>
-                  <td>
-                    <span className={`infra-status-dot ${containerStatusClass(c.status)}`} style={{ marginRight: 6 }} />
-                    <span className="ctr-status-label">{c.status}</span>
-                  </td>
-                  <td>
-                    {c.image_last_checked_at === null
-                      ? <span className="rel-dim">Not checked</span>
-                      : c.image_update_available
-                        ? <span className="de-update-badge">Update available</span>
-                        : <span className="de-uptodate-badge">Up to date</span>
-                    }
-                  </td>
-                  <td className="rel-dim ctr-last-seen">
-                    {new Date(c.last_seen_at).toLocaleString()}
-                  </td>
-                  <td className="ctr-app-cell">
-                    {(() => {
-                      const app = allApps.find(a => a.id === c.app_id)
-                      if (!app) return <span className="rel-dim">—</span>
-                      const iconUrl = appIconUrl(app.profile_id)
-                      return (
-                        <span className="ctr-app-linked">
-                          {iconUrl && (
-                            <img
-                              src={iconUrl}
-                              alt=""
-                              className="ctr-app-icon"
-                              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                            />
-                          )}
-                          {app.name}
-                        </span>
-                      )
-                    })()}
-                  </td>
-                  <td className="ctr-settings-cell">
-                    <button className="ctr-settings-btn" onClick={() => openCtrPanel(c)} title="Settings">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <div className="ctr-table">
+        {/* Column headers */}
+        <div className="ctr-table-header">
+          <span>Container</span>
+          <span>Status</span>
+          <span>App</span>
+          <span />
+        </div>
+
+        <div className="ctr-cards">
+        {containers.map(c => {
+          const app = allApps.find(a => a.id === c.app_id)
+          const iconUrl = app ? appIconUrl(app.profile_id) : null
+          const cardStatusClass = c.status === 'running' ? 'ctr-card-running'
+            : (c.status === 'stopped' || c.status === 'exited') ? 'ctr-card-stopped'
+            : ''
+          return (
+            <div key={c.id} className={`ctr-card ${cardStatusClass}`}>
+
+              {/* Name + image */}
+              <div className="ctr-card-identity">
+                <div className="ctr-card-name">{c.container_name}</div>
+                <div className="ctr-card-image">{c.image}</div>
+              </div>
+
+              {/* Status + update */}
+              <div className="ctr-card-badges">
+                <span className={`ctr-card-status-dot ${containerStatusClass(c.status)}`} />
+                <span className="ctr-card-status-label">{c.status}</span>
+                {c.image_update_available && (
+                  <span className="ctr-card-update-pill">Update</span>
+                )}
+              </div>
+
+              {/* Linked app */}
+              <div className="ctr-card-app-col">
+                {app ? (
+                  <span className="ctr-app-linked">
+                    {iconUrl && (
+                      <img
+                        src={iconUrl}
+                        alt=""
+                        className="ctr-app-icon"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    )}
+                    <span className="ctr-card-app-name">{app.name}</span>
+                  </span>
+                ) : (
+                  <span className="ctr-card-no-app">—</span>
+                )}
+              </div>
+
+              {/* Navigate */}
+              <button
+                className="ctr-card-open"
+                onClick={() => navigate(`/containers/${c.id}`)}
+                title={`Open ${c.container_name}`}
+              >
+                →
+              </button>
+            </div>
+          )
+        })}
+        </div>
       </div>
     )
   }
@@ -691,6 +625,48 @@ export function Infrastructure() {
           )}
         </div>
 
+        {/* ── Stats strip ── */}
+        {!loading && (() => {
+          if (view === 'components' && components.length > 0) {
+            const online   = components.filter(c => c.last_status === 'online').length
+            const offline  = components.filter(c => c.last_status === 'offline').length
+            const degraded = components.filter(c => c.last_status === 'degraded').length
+            const typeCounts = [
+              { label: 'VM',        n: components.filter(c => c.type === 'vm_linux' || c.type === 'vm_windows').length },
+              { label: 'Proxmox',   n: components.filter(c => c.type === 'proxmox_node').length },
+              { label: 'Docker',    n: components.filter(c => c.type === 'docker_engine').length },
+              { label: 'Portainer', n: components.filter(c => c.type === 'portainer').length },
+              { label: 'Traefik',   n: components.filter(c => c.type === 'traefik').length },
+              { label: 'Synology',  n: components.filter(c => c.type === 'synology').length },
+            ].filter(x => x.n > 0)
+            const ctrCount = containers.length
+            return (
+              <div className="infra-stats-strip">
+                <span className="infra-stats-pill" style={{ color: 'var(--green)' }}>{online} online</span>
+                {degraded > 0 && <span className="infra-stats-pill" style={{ color: 'var(--yellow)' }}>{degraded} degraded</span>}
+                {offline  > 0 && <span className="infra-stats-pill" style={{ color: 'var(--red)' }}>{offline} offline</span>}
+                {typeCounts.length > 0 && <span className="infra-stats-sep" />}
+                {typeCounts.map(({ label, n }) => <span key={label} className="infra-stats-pill">{n} {label}</span>)}
+                {ctrCount > 0 && <><span className="infra-stats-sep" /><span className="infra-stats-pill">{ctrCount} container{ctrCount !== 1 ? 's' : ''}</span></>}
+              </div>
+            )
+          }
+          if (view === 'containers' && containers.length > 0) {
+            const running = containers.filter(c => c.status === 'running').length
+            const stopped = containers.filter(c => c.status !== 'running').length
+            const linked  = containers.filter(c => c.app_id).length
+            return (
+              <div className="infra-stats-strip">
+                <span className="infra-stats-pill" style={{ color: 'var(--green)' }}>{running} running</span>
+                {stopped > 0 && <span className="infra-stats-pill" style={{ color: 'var(--text3)' }}>{stopped} stopped</span>}
+                <span className="infra-stats-sep" />
+                <span className="infra-stats-pill">{linked} linked to app{linked !== 1 ? 's' : ''}</span>
+              </div>
+            )
+          }
+          return null
+        })()}
+
         {view === 'containers' ? renderContainersTable() : loading ? (
           <div className="infra-empty">Loading…</div>
         ) : components.length === 0 ? (
@@ -704,70 +680,6 @@ export function Infrastructure() {
         )}
 
       </div>
-
-      {/* ── Container settings panel ── */}
-      <SlidePanel
-        open={ctrPanelOpen}
-        onClose={() => setCtrPanelOpen(false)}
-        title={selectedCtr?.container_name ?? ''}
-        subtitle={selectedCtr ? `${sourceLabel(selectedCtr.source_type)} · ${formatImage(selectedCtr.image).name}` : ''}
-        width={400}
-      >
-        {selectedCtr && (
-          <div className="ctr-panel-body">
-            <div className="ctr-panel-section-title">Linked Application</div>
-            {selectedCtr.app_id ? (
-              <div className="ctr-panel-linked">
-                <span className="ctr-app-linked">
-                  {allApps.find(a => a.id === selectedCtr.app_id)?.name ?? selectedCtr.app_id}
-                </span>
-                <button
-                  className="ctr-panel-unlink-btn"
-                  onClick={() => void handleCtrUnlink()}
-                  disabled={ctrLinkBusy}
-                >
-                  {ctrLinkBusy ? 'Unlinking…' : 'Unlink'}
-                </button>
-              </div>
-            ) : (
-              <div className="ctr-panel-link-form">
-                <select
-                  className="ctr-panel-select"
-                  value={ctrLinkAppId}
-                  onChange={e => setCtrLinkAppId(e.target.value)}
-                >
-                  <option value="">— select app —</option>
-                  {allApps.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-                <button
-                  className="ctr-panel-link-btn"
-                  onClick={() => void handleCtrLink()}
-                  disabled={!ctrLinkAppId || ctrLinkBusy}
-                >
-                  {ctrLinkBusy ? 'Linking…' : 'Link App'}
-                </button>
-              </div>
-            )}
-            {ctrLinkError && <div className="ctr-panel-error">{ctrLinkError}</div>}
-
-            <div className="ctr-panel-section-title" style={{ marginTop: 24 }}>Container Info</div>
-            <div className="ctr-panel-info-grid">
-              <span className="ctr-panel-info-label">Image</span>
-              <span className="ctr-panel-info-value" title={selectedCtr.image}>
-                {(() => { const i = formatImage(selectedCtr.image); return i.name + (i.tag ? ':' + i.tag : '') })()}
-              </span>
-              <span className="ctr-panel-info-label">Status</span>
-              <span className="ctr-panel-info-value">{selectedCtr.status}</span>
-              <span className="ctr-panel-info-label">Source</span>
-              <span className="ctr-panel-info-value">{sourceLabel(selectedCtr.source_type)}</span>
-              <span className="ctr-panel-info-label">Last seen</span>
-              <span className="ctr-panel-info-value">{new Date(selectedCtr.last_seen_at).toLocaleString()}</span>
-            </div>
-          </div>
-        )}
-      </SlidePanel>
 
       {/* ── Slide panel ── */}
       <InfraEditModal
