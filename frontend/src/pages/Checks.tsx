@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
-import { SSLRow } from '../components/SSLRow'
 import { checks as checksApi, apps as appsApi, appTemplates as appTemplatesApi } from '../api/client'
-import type { App, MonitorCheck, SSLCert } from '../api/types'
+import type { App, MonitorCheck } from '../api/types'
 import { CheckForm } from '../components/CheckForm'
 import { SlidePanel } from '../components/SlidePanel'
 import {
@@ -47,107 +46,10 @@ function statusClass(status: string | null): string {
   return 'monitor-status-block unknown'
 }
 
-function extractSSLCerts(checkList: MonitorCheck[]): SSLCert[] {
-  return checkList
-    .filter(c => c.type === 'ssl' && c.last_result)
-    .flatMap(c => {
-      try {
-        const result = JSON.parse(c.last_result!) as { days_remaining?: number; expires_at?: string }
-        if (result.days_remaining == null) return []
-        const domain = c.target.replace(/^https?:\/\//, '').split('/')[0]
-        const expiresAt = result.expires_at
-          ? new Date(result.expires_at).toISOString().split('T')[0]
-          : ''
-        return [{
-          domain,
-          days_remaining: result.days_remaining,
-          expires_at: expiresAt,
-          status: c.last_status ?? 'unknown',
-        } as SSLCert]
-      } catch {
-        return []
-      }
-    })
-    .sort((a, b) => a.days_remaining - b.days_remaining)
-}
-
-import { CheckTypeIcon } from '../components/CheckTypeIcon'
-
-// ── Check card ────────────────────────────────────────────────────────────────
-
-interface CheckCardProps {
-  check: MonitorCheck
-  runningIds: Set<string>
-  onToggleEnabled: () => void
-  onRun: () => void
-  onClick: () => void
-  onSettings: () => void
-}
-
-function CheckCard({ check, runningIds, onToggleEnabled, onRun, onClick, onSettings }: CheckCardProps) {
-  const disabled = !check.enabled
-
-  return (
-    <div className={`check-card${disabled ? ' disabled' : ''}`} onClick={onClick}>
-
-      {/* Top row: type icon + name */}
-      <div className="check-card-top">
-        <CheckTypeIcon type={check.type} />
-        <span className="check-card-name">{check.name}</span>
-        {disabled && <span className="check-paused-badge">PAUSED</span>}
-      </div>
-
-      {/* Target */}
-      <div className="check-card-target" title={check.target}>
-        {check.target}
-        {check.source_component_id && <span className="check-card-target-tag traefik">Traefik</span>}
-        {check.skip_tls_verify && <span className="check-card-target-tag warn">self-signed</span>}
-      </div>
-
-      {/* Status + type row (between target and buttons) */}
-      <div className="check-card-status-row">
-        <div className={statusClass(check.last_status)}>
-          {statusLabel(check)}
-        </div>
-        <span className={`check-type-badge check-type-${check.type}`}>
-          {check.type.toUpperCase()}
-        </span>
-      </div>
-
-      {/* Footer: interval · last checked · run · pause · settings */}
-      <div className="check-card-footer">
-        <span className="check-card-interval">every {check.interval_secs}s</span>
-        <span className="check-card-last">{formatEventTime(check.last_checked_at)}</span>
-        <div className="check-card-footer-actions">
-          <button
-            className={`check-run-btn${runningIds.has(check.id) ? ' running' : ''}`}
-            title="Run now"
-            onClick={e => { e.stopPropagation(); onRun() }}
-            disabled={runningIds.has(check.id)}
-          >
-            {runningIds.has(check.id) ? <span className="check-spinner" /> : '▶'}
-          </button>
-          <button
-            className={`check-toggle-btn${check.enabled ? ' enabled' : ' paused'}`}
-            title={check.enabled ? 'Pause check' : 'Resume check'}
-            onClick={e => { e.stopPropagation(); onToggleEnabled() }}
-          >
-            {check.enabled ? '⏸' : '▶'}
-          </button>
-          <button
-            className="check-settings-btn"
-            title="Settings"
-            onClick={e => { e.stopPropagation(); onSettings() }}
-          >
-            ⚙
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+
+type StatusFilter = 'all' | 'up' | 'down' | 'paused'
 
 export function Checks() {
   const navigate = useNavigate()
@@ -156,6 +58,11 @@ export function Checks() {
   const [loading, setLoading] = useState(true)
 
   const [appList, setAppList] = useState<App[]>([])
+
+  // Filter state
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
 
   // Add form
   const [showAddForm, setShowAddForm] = useState(false)
@@ -184,8 +91,6 @@ export function Checks() {
       .then(res => setAppList(res.data))
       .catch(() => {})
   }, [tick])
-
-  const sslCerts = extractSSLCerts(checkList)
 
   // ── Add form ──
 
@@ -262,43 +167,114 @@ export function Checks() {
 
         <div className="section-header">
           <span className="section-title">Active Checks</span>
+          {!loading && checkList.length > 0 && (() => {
+            const up     = checkList.filter(c => c.last_status === 'up').length
+            const down   = checkList.filter(c => c.last_status === 'down' || c.last_status === 'warn').length
+            const paused = checkList.filter(c => !c.enabled).length
+            const byType = (['url','ssl','dns','ping'] as const).map(t => ({ t, n: checkList.filter(c => c.type === t).length })).filter(x => x.n > 0)
+            return (
+              <span className="checks-header-stats">
+                <span style={{ color: 'var(--green)' }}>{up} up</span>
+                {down > 0 && <><span className="checks-header-dot" /><span style={{ color: 'var(--red)' }}>{down} down</span></>}
+                {paused > 0 && <><span className="checks-header-dot" /><span style={{ color: 'var(--text3)' }}>{paused} paused</span></>}
+                <span className="checks-header-sep" />
+                {byType.map(({ t, n }) => <span key={t}>{n} {t.toUpperCase()}</span>)}
+              </span>
+            )
+          })()}
           <button className="section-action" onClick={() => setShowAddForm(prev => !prev)}>
             + Add check
           </button>
         </div>
 
+        {/* ── Filter bar ── */}
+        {!loading && checkList.length > 0 && (
+          <div className="checks-filter-bar">
+            <input
+              className="checks-search"
+              placeholder="Search name or target…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            <div className="checks-filter-pills">
+              {(['all', 'up', 'down', 'paused'] as const).map(s => (
+                <button key={s} className={`checks-filter-pill${statusFilter === s ? ' active' : ''}`}
+                  onClick={() => setStatusFilter(s)}>
+                  {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+              <span style={{ width: 1, background: 'var(--border)', alignSelf: 'stretch', margin: '0 4px' }} />
+              {(['url', 'ssl', 'dns', 'ping'] as const).map(t => (
+                <button key={t} className={`checks-filter-pill${typeFilter === t ? ' active' : ''}`}
+                  onClick={() => setTypeFilter(cur => cur === t ? 'all' : t)}>
+                  {t.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="checks-empty"><span>Loading…</span></div>
         ) : checkList.length === 0 ? (
           <div className="checks-empty"><span>No monitor checks configured yet.</span></div>
-        ) : (
-          <div className="checks-grid">
-            {checkList.map(check => (
-              <CheckCard
-                key={check.id}
-                check={check}
-                runningIds={runningIds}
-                onToggleEnabled={() => void handleToggleEnabled(check)}
-                onRun={() => void handleRun(check.id)}
-                onClick={() => navigate(`/checks/${check.id}`)}
-                onSettings={() => navigate(`/checks/${check.id}`)}
-              />
-            ))}
-          </div>
-        )}
+        ) : (() => {
+          const q = search.toLowerCase()
+          const filtered = checkList.filter(c => {
+            if (typeFilter !== 'all' && c.type !== typeFilter) return false
+            if (statusFilter === 'up' && c.last_status !== 'up') return false
+            if (statusFilter === 'down' && c.last_status !== 'down' && c.last_status !== 'warn') return false
+            if (statusFilter === 'paused' && c.enabled) return false
+            if (q && !c.name.toLowerCase().includes(q) && !c.target.toLowerCase().includes(q)) return false
+            return true
+          })
+          if (filtered.length === 0) return (
+            <div className="checks-empty"><span>No checks match your filters.</span></div>
+          )
+          return (
+            <div className="checks-table-wrap">
+              <table className="checks-table">
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Name</th>
+                    <th>Target</th>
+                    <th>Type</th>
+                    <th>Interval</th>
+                    <th>Last Checked</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(check => (
+                    <tr key={check.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/checks/${check.id}`)}>
+                      <td><div className={statusClass(check.last_status)} style={{ display: 'inline-block' }}>{statusLabel(check)}</div></td>
+                      <td className="checks-table-name">{check.name}{!check.enabled && <span className="check-paused-badge" style={{ marginLeft: 6 }}>PAUSED</span>}</td>
+                      <td className="checks-table-target" title={check.target}>{check.target}</td>
+                      <td><span className={`check-type-badge check-type-${check.type}`}>{check.type.toUpperCase()}</span></td>
+                      <td>{check.interval_secs}s</td>
+                      <td>{formatEventTime(check.last_checked_at)}</td>
+                      <td>
+                        <div className="checks-table-actions" onClick={e => e.stopPropagation()}>
+                          <button className={`check-run-btn${runningIds.has(check.id) ? ' running' : ''}`} title="Run now"
+                            onClick={() => void handleRun(check.id)} disabled={runningIds.has(check.id)}>
+                            {runningIds.has(check.id) ? <span className="check-spinner" /> : '▶'}
+                          </button>
+                          <button className={`check-toggle-btn${check.enabled ? ' enabled' : ' paused'}`}
+                            title={check.enabled ? 'Pause' : 'Resume'}
+                            onClick={() => void handleToggleEnabled(check)}>
+                            {check.enabled ? '⏸' : '▶'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
 
-        {sslCerts.length > 0 && (
-          <>
-            <div className="section-header" style={{ marginTop: 24 }}>
-              <span className="section-title">SSL Certificates</span>
-            </div>
-            <div className="ssl-panel">
-              {sslCerts.map(cert => (
-                <SSLRow key={cert.domain} cert={cert} />
-              ))}
-            </div>
-          </>
-        )}
 
       </div>
 

@@ -38,7 +38,37 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
+}
+
+/* ── Inline stats strip ── */
+.infra-stats-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.infra-stats-pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.infra-stats-dot { display: none; }
+
+.infra-stats-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border2);
+  flex-shrink: 0;
+  margin: 0 2px;
 }
 
 .infra-tab-row .infra-tabs {
@@ -524,59 +554,191 @@
   color: var(--red);
 }
 
-/* ── CONTAINERS TABLE ────────────────────────────────────────────────────────── */
+/* ── CONTAINERS CARD LIST ────────────────────────────────────────────────────── */
 
-.rel-table.ctr-table thead tr {
-  background: var(--bg4);
+.ctr-table {
+  display: flex;
+  flex-direction: column;
 }
 
-.rel-table.ctr-table thead th {
-  color: #ffffff;
-  font-family: var(--sans, sans-serif);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--border2);
-}
-
-.rel-table.ctr-table thead th:first-child {
-  border-left: 3px solid var(--accent);
-  padding-left: 13px;
-}
-
-.ctr-table tbody tr:hover td {
-  background: var(--bg3);
-  cursor: default;
-}
-
-.ctr-name {
+/* Column header row — mirrors the card grid exactly */
+.ctr-table-header {
+  display: grid;
+  grid-template-columns: 1fr 130px 160px 36px;
+  gap: 0 16px;
+  padding: 0 14px 6px 17px; /* 17px = 3px border + 14px card padding */
   font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
 }
 
-.ctr-image {
-  font-size: 11px;
-  max-width: 300px;
+.ctr-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Desktop: 4-column grid — identity | status | app | button */
+.ctr-card {
+  display: grid;
+  grid-template-columns: 1fr 130px 160px 36px;
+  align-items: center;
+  gap: 0 16px;
+  padding: 10px 14px 10px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 6px;
+  transition: border-color 0.15s, background 0.15s;
+  min-width: 0;
+}
+
+.ctr-card:hover {
+  background: var(--bg3);
+  border-color: var(--border2);
+}
+
+.ctr-card.ctr-card-running  { border-left-color: var(--green, #4ade80); }
+.ctr-card.ctr-card-stopped  { border-left-color: var(--text3); }
+
+/* ── Identity: name + image ── */
+
+.ctr-card-identity {
+  min-width: 0;
+}
+
+.ctr-card-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text1);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.ctr-status-label {
+.ctr-card-image {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* ── Status column ── */
+
+.ctr-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ctr-card-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ctr-card-status-label {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text2);
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
-.ctr-last-seen {
+/* Amber pill shown only when an image update is available */
+.ctr-card-update-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #f59e0b;
   white-space: nowrap;
-  font-size: 11px;
+  flex-shrink: 0;
 }
+
+/* ── App column ── */
+
+.ctr-card-app-col {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ctr-card-app-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctr-card-no-app {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+/* ── Navigate button ── */
+
+.ctr-card-open {
+  width: 34px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent, rgba(139,92,246,0.6));
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+  padding: 0;
+}
+
+.ctr-card-open:hover {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(139,92,246,0.35);
+  transform: translateX(1px);
+}
+
+.ctr-card-open:active {
+  transform: translateX(2px);
+  box-shadow: none;
+}
+
+/* ── Mobile: stack into 2-row layout ── */
+
+@media (max-width: 640px) {
+  .ctr-table-header { display: none; }
+  .ctr-card {
+    grid-template-columns: 1fr 30px;
+    grid-template-rows: auto auto;
+    gap: 6px 10px;
+    padding: 10px 12px;
+  }
+  .ctr-card-identity { grid-column: 1; grid-row: 1; }
+  .ctr-card-open     { grid-column: 2; grid-row: 1; align-self: center; }
+  .ctr-card-badges   { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; }
+  .ctr-card-app-col  { display: none; } /* app shown in linked badge on detail page */
+}
+
+/* ── Kept source badge + app link (shared) ──────────────────────────────────── */
 
 .ctr-source-badge {
   font-family: var(--mono);
@@ -599,12 +761,6 @@
   background: #1a3a2a22;
   color: #4ade80;
   border-color: #16653044;
-}
-
-.ctr-app-cell {
-  font-family: var(--mono);
-  font-size: 11px;
-  white-space: nowrap;
 }
 
 .ctr-app-linked {

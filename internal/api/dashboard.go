@@ -91,6 +91,8 @@ type appSummary struct {
 	LastEventText *string   `json:"last_event_text"`
 	Stats         []appStat `json:"stats"`
 	Sparkline     [7]int    `json:"sparkline"`
+	ChecksUp      int       `json:"checks_up"`
+	ChecksTotal   int       `json:"checks_total"`
 }
 
 type checkSummary struct {
@@ -300,6 +302,21 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Build a map from appID → {up, total} for per-app check counts.
+	type checkCounts struct{ up, total int }
+	appCheckCounts := map[string]checkCounts{}
+	for _, c := range checks {
+		if c.AppID == "" || !c.Enabled {
+			continue
+		}
+		cc := appCheckCounts[c.AppID]
+		cc.total++
+		if c.LastStatus == "up" {
+			cc.up++
+		}
+		appCheckCounts[c.AppID] = cc
+	}
+
 	appSummaries := make([]appSummary, 0, len(apps))
 	for _, a := range apps {
 		status := "online"
@@ -355,6 +372,7 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			lastEventText = &ev.Title
 		}
 
+		cc := appCheckCounts[a.ID]
 		sum := appSummary{
 			ID:            a.ID,
 			Name:          a.Name,
@@ -364,6 +382,8 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			LastEventText: lastEventText,
 			Stats:         stats,
 			Sparkline:     appSparkline,
+			ChecksUp:      cc.up,
+			ChecksTotal:   cc.total,
 		}
 		if a.ProfileID != "" {
 			sum.IconURL = "/api/v1/icons/" + a.ProfileID

@@ -252,6 +252,8 @@ export interface AppSummary {
   last_event_text: string | null
   stats: AppStat[] | null
   sparkline: number[]
+  checks_up: number
+  checks_total: number
 }
 
 export interface CheckSummary {
@@ -497,6 +499,25 @@ export interface ProxmoxTaskFailure {
   node: string
 }
 
+export interface ProxmoxBackupJob {
+  upid: string
+  object_id?: string
+  exit_status: string
+  start_time: number
+  end_time?: number
+  node: string
+}
+
+export interface ProxmoxBackupFile {
+  volid: string
+  vmid: number
+  ctime: number
+  size: number
+  format: string
+  node: string
+  store: string
+}
+
 // ── Synology Detail ──────────────────────────────────────────────────────────
 
 export interface SynologyMemory {
@@ -565,6 +586,29 @@ export interface DiscoveredContainer {
   networks: string | null
   restart_policy: string | null
   docker_created_at: string | null
+}
+
+export interface ContainerDetail {
+  id: string
+  infra_component_id: string
+  source_type: string
+  container_id: string
+  container_name: string
+  image: string
+  status: string
+  app_id: string | null
+  last_seen_at: string
+  docker_created_at: string | null
+  image_digest: string | null
+  registry_digest: string | null
+  image_update_available: boolean
+  image_last_checked_at: string | null
+  ports: string | null
+  networks: string | null
+  volumes: string | null
+  restart_policy: string | null
+  labels: string | null
+  env_vars: string | null
 }
 
 export interface LinkAppInput {

@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
-import { apps as appsApi, appTemplates as templatesApi, dashboard as dashboardApi } from '../api/client'
-import type { App, AppTemplate } from '../api/types'
+import { apps as appsApi, appTemplates as templatesApi, dashboard as dashboardApi, checks as checksApi, events as eventsApi } from '../api/client'
+import type { App, AppTemplate, MonitorCheck, Event } from '../api/types'
 import { AppSettingsModal } from './AppDetail'
 import { SlidePanel } from '../components/SlidePanel'
 import './Apps.css'
@@ -69,7 +69,9 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
   const [baseUrl, setBaseUrl] = useState('')
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
-  const [rateLimit, setRateLimit] = useState('0')
+  const [rateLimit, setRateLimit] = useState('100')
+  const [addUrlCheck, setAddUrlCheck] = useState(false)
+  const [addSslCheck, setAddSslCheck] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
@@ -105,6 +107,34 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
         config: Object.keys(config).length > 0 ? config : undefined,
         rate_limit: parseInt(rateLimit, 10) || 0,
       })
+
+      // Auto-create monitor checks if pills selected
+      const url = baseUrl.trim()
+      if (url) {
+        const checkPromises = []
+        if (addUrlCheck) {
+          checkPromises.push(checksApi.create({
+            app_id: app.id,
+            name: `${appName.trim()} — uptime`,
+            type: 'url',
+            target: url,
+            interval_secs: 60,
+            enabled: true,
+          }))
+        }
+        if (addSslCheck && url.startsWith('https')) {
+          checkPromises.push(checksApi.create({
+            app_id: app.id,
+            name: `SSL — ${new URL(url).hostname}`,
+            type: 'ssl',
+            target: url,
+            interval_secs: 60,
+            enabled: true,
+          }))
+        }
+        await Promise.all(checkPromises)
+      }
+
       setCreatedApp(app)
       onCreated(app)
       setStep('done')
@@ -129,7 +159,8 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
 
   function handleAddAnother() {
     setStep('setup'); setAppName(''); setSelectedTemplateId('')
-    setBaseUrl(''); setApiUrl(''); setApiKey(''); setRateLimit('0')
+    setBaseUrl(''); setApiUrl(''); setApiKey(''); setRateLimit('100')
+    setAddUrlCheck(false); setAddSslCheck(false)
     setCreatedApp(null); setCopied(false); setSubmitError('')
   }
 
@@ -243,7 +274,7 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
           <label className="modal-label" style={{ marginTop: 16 }}>
             API Key <span className="modal-hint">(optional — used for API polling widgets)</span>
           </label>
-          <input className="modal-input modal-input-mono" placeholder="your-api-key"
+          <input className="modal-input" placeholder="your-api-key"
             type="password" autoComplete="new-password"
             value={apiKey} onChange={e => setApiKey(e.target.value)} />
 
@@ -252,6 +283,32 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
           </label>
           <input className="modal-input modal-input-sm" type="number" min="0"
             value={rateLimit} onChange={e => setRateLimit(e.target.value)} />
+
+          {baseUrl.trim() && (
+            <>
+              <label className="modal-label" style={{ marginTop: 20 }}>
+                Monitor checks <span className="modal-hint">(auto-create based on App URL)</span>
+              </label>
+              <div className="modal-check-pills">
+                <button
+                  type="button"
+                  className={`modal-check-pill${addUrlCheck ? ' active' : ''}`}
+                  onClick={() => setAddUrlCheck(v => !v)}
+                >
+                  URL Check
+                </button>
+                {baseUrl.trim().startsWith('https') && (
+                  <button
+                    type="button"
+                    className={`modal-check-pill${addSslCheck ? ' active' : ''}`}
+                    onClick={() => setAddSslCheck(v => !v)}
+                  >
+                    SSL Check
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           {submitError && <div className="modal-error">{submitError}</div>}
         </>
@@ -279,10 +336,26 @@ function AddAppModal({ open, onClose, onCreated }: AddAppModalProps) {
 
 // ── Apps Page ─────────────────────────────────────────────────────────────────
 
+type TimeFilter = 'day' | 'week' | 'month'
+
+function formatRelative(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
 export function Apps() {
   const navigate = useNavigate()
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
   const [appList, setAppList] = useState<App[]>([])
   const [statusMap, setStatusMap] = useState<Record<string, 'online' | 'warn' | 'down'>>({})
+  const [allChecks, setAllChecks] = useState<MonitorCheck[]>([])
+  const [recentEvents, setRecentEvents] = useState<Event[]>([])
+  const [eventCounts, setEventCounts] = useState<Record<string, number> | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
 
@@ -297,24 +370,76 @@ export function Apps() {
       .then(res => setAppList(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
-    dashboardApi.summary()
+    const ms = timeFilter === 'day' ? 86400000 : timeFilter === 'month' ? 30 * 86400000 : 7 * 86400000
+    const since = new Date(Date.now() - ms).toISOString()
+
+    dashboardApi.summary(timeFilter)
       .then(res => {
         const map: Record<string, 'online' | 'warn' | 'down'> = {}
         for (const a of res.apps) map[a.id] = a.status
         setStatusMap(map)
       })
-      .catch(() => { /* status is best-effort */ })
-  }, [tick])
+      .catch(() => {})
+    checksApi.list()
+      .then(res => setAllChecks(res.data))
+      .catch(() => {})
+    eventsApi.list({ source_type: 'app', limit: 20, from: since })
+      .then(res => setRecentEvents(res.data))
+      .catch(() => {})
+    Promise.all(
+      (['info', 'warn', 'error', 'critical'] as const).map(level =>
+        eventsApi.list({ source_type: 'app', level, from: since, limit: 1 })
+          .then(res => [level, res.total] as const)
+          .catch(() => [level, 0] as const)
+      )
+    ).then(results => setEventCounts(Object.fromEntries(results)))
+  }, [tick, timeFilter])
 
   return (
     <>
-      <Topbar title="Apps" />
+      <Topbar title="Apps" timeFilter={timeFilter} onTimeFilter={setTimeFilter} />
       <div className="content">
         <div className="section-header">
           <span className="section-title">Configured Apps</span>
           <button className="section-action" onClick={() => { setAddKey(k => k + 1); setShowAdd(true) }}>+ Add app</button>
         </div>
 
+        {/* ── Summary strip ── */}
+        {!loading && appList.length > 0 && (() => {
+          const total    = appList.length
+          const healthy  = appList.filter(a => (statusMap[a.id] ?? 'online') === 'online').length
+          const warnApps = appList.filter(a => statusMap[a.id] === 'warn').length
+          const downApps = appList.filter(a => statusMap[a.id] === 'down').length
+          const checksUp   = allChecks.filter(c => c.last_status === 'up').length
+          const checksDown = allChecks.filter(c => c.last_status === 'down' || c.last_status === 'warn').length
+          const lastEvent  = recentEvents[0]
+          return (
+            <div className="apps-stats-strip">
+              <span className="apps-stats-pill">{total} apps</span>
+              <span className="apps-stats-pill" style={{ color: 'var(--green)' }}>{healthy} healthy</span>
+              {warnApps > 0 && <span className="apps-stats-pill" style={{ color: 'var(--yellow)' }}>{warnApps} warn</span>}
+              {downApps > 0 && <span className="apps-stats-pill" style={{ color: 'var(--red)' }}>{downApps} down</span>}
+              {allChecks.length > 0 && <span className="apps-stats-sep" />}
+              {allChecks.length > 0 && <span className="apps-stats-pill" style={{ color: 'var(--green)' }}>{checksUp} checks up</span>}
+              {checksDown > 0 && <span className="apps-stats-pill" style={{ color: 'var(--red)' }}>{checksDown} checks down</span>}
+              {eventCounts !== null && <span className="apps-stats-sep" />}
+              {eventCounts !== null && (['info', 'warn', 'error', 'critical'] as const).map(level => {
+                const count = eventCounts[level] ?? 0
+                const color = level === 'info' ? 'var(--accent)' : level === 'warn' ? 'var(--yellow)' : 'var(--red)'
+                const label = level === 'critical' ? 'crit' : level
+                return (
+                  <span key={level} className="apps-stats-pill" style={{ color, cursor: 'pointer' }}
+                    onClick={() => navigate(`/events?source_type=app&level=${level}`)}>
+                    {count} {label}
+                  </span>
+                )
+              })}
+              {lastEvent && <><span className="apps-stats-sep" /><span className="apps-stats-pill">{formatRelative(lastEvent.created_at)}</span></>}
+            </div>
+          )
+        })()}
+
+        <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '0 0 16px' }} />
         <div className="apps-page-grid widget-grid">
           {loading ? (
             [0, 1, 2].map(i => (
@@ -371,6 +496,8 @@ export function Apps() {
             })
           )}
         </div>
+
+
       </div>
 
       <AddAppModal
@@ -378,7 +505,7 @@ export function Apps() {
         open={showAdd}
         onClose={() => setShowAdd(false)}
         onCreated={app => {
-          setAppList(prev => [...prev, app])
+          setAppList(prev => prev.some(a => a.id === app.id) ? prev : [...prev, app])
           // Panel stays open to show the done step with webhook URL
         }}
       />
