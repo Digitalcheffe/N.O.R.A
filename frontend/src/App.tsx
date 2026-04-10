@@ -15,7 +15,6 @@ import { AppDetail } from './pages/AppDetail'
 import { Infrastructure } from './pages/Infrastructure'
 import { InfraComponentDetail } from './pages/InfraComponentDetail'
 import { ContainerDetail } from './pages/ContainerDetail'
-import { TopologyPage } from './pages/Topology'
 import { Relationships } from './pages/Relationships'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
@@ -50,8 +49,8 @@ export default function App() {
               <Route path="infrastructure" element={<Infrastructure />} />
               <Route path="infrastructure/:id" element={<InfraComponentDetail />} />
               <Route path="containers/:id" element={<ContainerDetail />} />
-              <Route path="topology" element={<TopologyPage />} />
-              <Route path="network-map" element={<Navigate to="/topology" replace />} />
+              <Route path="topology" element={<Navigate to="/infrastructure" replace />} />
+              <Route path="network-map" element={<Navigate to="/infrastructure" replace />} />
               <Route path="relationships" element={<Relationships />} />
               <Route path="settings" element={<Settings />} />
               <Route path="profile" element={<Profile />} />

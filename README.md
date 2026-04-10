@@ -9,11 +9,7 @@ NORA is a self-hosted monitoring, event capture, and notification platform built
 
 ## A Note on How This Is Built
 
-NORA is heavily developed with **[Claude Code](https://claude.ai/code)** by Anthropic. That comes with an honest disclaimer and an honest commitment.
-
-The sentiment around AI-generated code is fair — the ecosystem is full of projects that got spun up overnight and abandoned just as fast. This isn't that. Every significant piece of work goes through a tracked GitHub issue, every change is documented in PR notes, and nothing ships without being understood. The goal is a solid, maintainable project — not a demo.
-
-If you're evaluating NORA, read the issue history. Read the PRs. The process is the proof.
+NORA is built with **[Claude Code](https://claude.ai/code)**. Every feature goes through a tracked GitHub issue, every change is documented in PR notes, and nothing ships without being understood. Read the issue history and PRs — the process is the proof.
 
 NORA is built on the shoulders of great open-source work — [see the full list of projects credited below](#built-on).
 
@@ -68,7 +64,6 @@ More Screen Shots [Screenshots](https://github.com/Digitalcheffe/N.O.R.A/tree/ma
 | **Portainer** | Endpoints, container inventory, CPU/memory per container, image status |
 | **Traefik** | Routes, services, SSL certificates |
 | **Synology** | System status, storage, uptime |
-| **OPNsense** | CPU, memory, network throughput |
 | **SNMP** | Generic metrics and health from any SNMP-capable device |
 
 ### Notifications
@@ -95,11 +90,6 @@ More Screen Shots [Screenshots](https://github.com/Digitalcheffe/N.O.R.A/tree/ma
 - Combine conditions with AND / OR logic
 - Fire Web Push or email notifications when a rule matches
 - Enable, disable, or delete rules from the Settings → Notify Rules tab
-
-### Topology
-- Visual network map of your infrastructure, containers, apps, and routes
-- Clickable nodes drill into component detail
-- Automatically populated from Docker, Traefik, and infrastructure discovery
 
 ### App Library
 
@@ -175,17 +165,7 @@ All email configuration is managed in the app under Settings → Notifications �
 
 3-stage Docker build: frontend → Go binary → `alpine:3.19` final image. No node_modules, no Go toolchain, no source in the final image.
 
----
-
-## What's Next
-
-### In Progress
-- **Remote Docker nodes** — multi-host container monitoring via socket proxy; Portainer integration is live, native remote socket support coming
-
-### Considering
-- **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
-- **PostgreSQL support** — for larger installations that outgrow SQLite
-- **SSO / OAuth login** — federated authentication for team deployments
+For a detailed breakdown of the repository layout, data flow, database schema, API design, and deployment internals, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -205,7 +185,6 @@ NORA would not exist without these open-source projects:
 | [gosnmp/gosnmp](https://github.com/gosnmp/gosnmp) | SNMP polling |
 | [robfig/cron](https://github.com/robfig/cron) | Scheduled task execution |
 | [rs/zerolog](https://github.com/rs/zerolog) | Structured logging |
-| [D3.js](https://d3js.org/) | Topology graph visualisation |
 
 ---
 

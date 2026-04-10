@@ -60,22 +60,6 @@ const NAV_ITEMS = [
     ),
   },
   {
-    to: '/topology',
-    title: 'Topology',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-        <rect x="2" y="9" width="4" height="4" rx="1" />
-        <rect x="10" y="2" width="4" height="4" rx="1" />
-        <rect x="10" y="16" width="4" height="4" rx="1" />
-        <rect x="18" y="9" width="4" height="4" rx="1" />
-        <line x1="6" y1="11" x2="10" y2="4" />
-        <line x1="6" y1="11" x2="10" y2="18" />
-        <line x1="14" y1="4" x2="18" y2="11" />
-        <line x1="14" y1="18" x2="18" y2="11" />
-      </svg>
-    ),
-  },
-  {
     to: '/relationships',
     title: 'Relationships',
     icon: (
