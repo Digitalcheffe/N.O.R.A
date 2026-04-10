@@ -68,7 +68,6 @@ More Screen Shots [Screenshots](https://github.com/Digitalcheffe/N.O.R.A/tree/ma
 | **Portainer** | Endpoints, container inventory, CPU/memory per container, image status |
 | **Traefik** | Routes, services, SSL certificates |
 | **Synology** | System status, storage, uptime |
-| **OPNsense** | CPU, memory, network throughput |
 | **SNMP** | Generic metrics and health from any SNMP-capable device |
 
 ### Notifications
