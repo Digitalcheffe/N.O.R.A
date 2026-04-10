@@ -111,6 +111,9 @@ func (m *enrichMockContainerRepo) UpdateContainerImageCheck(_ context.Context, _
 func (m *enrichMockContainerRepo) UpdateContainerRestartPolicy(_ context.Context, _ string, _ string) error {
 	return nil
 }
+func (m *enrichMockContainerRepo) UpdateContainerEnvVars(_ context.Context, _ string, _ string) error {
+	return nil
+}
 
 type enrichMockRouteRepo struct {
 	routes map[string]*models.DiscoveredRoute

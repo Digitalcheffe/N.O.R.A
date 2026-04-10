@@ -254,7 +254,10 @@ func TestPortainerContainerNameNormalization(t *testing.T) {
 	}
 	fakeServer.inspects["abc123"] = &PortainerContainerInspect{
 		Image:  "sha256:aaabbb",
-		Config: struct{ Image string `json:"Image"` }{Image: "linuxserver/sonarr:latest"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "linuxserver/sonarr:latest"},
 	}
 	fakeServer.images["sha256:aaabbb"] = &PortainerImageInspect{
 		RepoDigests: []string{},
@@ -298,7 +301,10 @@ func TestPortainerWinsOverDD9ForImageUpdateAvailable(t *testing.T) {
 	}
 	fakeServer.inspects["ctr1"] = &PortainerContainerInspect{
 		Image:  "sha256:running",
-		Config: struct{ Image string `json:"Image"` }{Image: "myrepo/myapp:latest"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "myrepo/myapp:latest"},
 	}
 	// RepoDigests contains the manifest digest of the locally running image.
 	fakeServer.images["sha256:running"] = &PortainerImageInspect{
@@ -362,7 +368,10 @@ func TestPortainerEventEmittedOnFalseToTrueTransition(t *testing.T) {
 	}
 	fakeServer.inspects["ctr2"] = &PortainerContainerInspect{
 		Image:  "sha256:old",
-		Config: struct{ Image string `json:"Image"` }{Image: "myrepo/webapp:1.0"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "myrepo/webapp:1.0"},
 	}
 	fakeServer.images["sha256:old"] = &PortainerImageInspect{
 		RepoDigests: []string{"myrepo/webapp@sha256:oldmanifest"},
@@ -440,7 +449,10 @@ func TestPortainerNoEventWhenValueUnchanged(t *testing.T) {
 	}
 	fakeServer.inspects["ctr3"] = &PortainerContainerInspect{
 		Image:  "sha256:old2",
-		Config: struct{ Image string `json:"Image"` }{Image: "myrepo/svc:1.0"},
+		Config: struct {
+			Image string   `json:"Image"`
+			Env   []string `json:"Env"`
+		}{Image: "myrepo/svc:1.0"},
 	}
 	fakeServer.images["sha256:old2"] = &PortainerImageInspect{
 		RepoDigests: []string{"myrepo/svc@sha256:oldmanifest2"},

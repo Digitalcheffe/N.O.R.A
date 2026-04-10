@@ -119,6 +119,9 @@ func (r *mockDiscoveredContainerRepo) UpdateContainerImageCheck(_ context.Contex
 func (r *mockDiscoveredContainerRepo) UpdateContainerRestartPolicy(_ context.Context, _ string, _ string) error {
 	return nil
 }
+func (r *mockDiscoveredContainerRepo) UpdateContainerEnvVars(_ context.Context, _ string, _ string) error {
+	return nil
+}
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
