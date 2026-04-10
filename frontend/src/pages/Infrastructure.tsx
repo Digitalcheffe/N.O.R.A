@@ -495,13 +495,6 @@ export function Infrastructure() {
     return profileId ? `/api/v1/icons/${profileId}` : null
   }
 
-  function sourceLabel(s: string) {
-    if (s === 'docker_engine') return 'Docker'
-    if (s === 'portainer')     return 'Portainer'
-    return s || '—'
-  }
-
-
   function renderContainersTable() {
     if (containersLoading) return <div className="infra-empty">Loading…</div>
 

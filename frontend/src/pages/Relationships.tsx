@@ -469,8 +469,6 @@ export function Relationships() {
                           <tr
                             key={app.id}
                             className="rel-row"
-                            onClick={() => navigate(`/apps/${app.id}`)}
-                            title={`Open ${app.name}`}
                           >
                             <td><AppCell app={app} /></td>
 
@@ -512,9 +510,16 @@ export function Relationships() {
                               <button
                                 className="rel-gear-btn"
                                 title="Manage link"
-                                onClick={e => { e.stopPropagation(); openAppPanel(app) }}
+                                onClick={() => openAppPanel(app)}
                               >
                                 <GearIcon />
+                              </button>
+                              <button
+                                className="rel-nav-btn"
+                                title={`Open ${app.name}`}
+                                onClick={() => navigate(`/apps/${app.id}`)}
+                              >
+                                Open →
                               </button>
                             </td>
                           </tr>
@@ -594,7 +599,7 @@ export function Relationships() {
                         const linkedApp = allApps.find(a => a.id === m.app_id)
                         const iconUrl   = linkedApp ? appIconUrl(linkedApp.profile_id ?? null) : null
                         return (
-                          <tr key={m.id} className="rel-row" onClick={() => openMoniPanel(m)}>
+                          <tr key={m.id} className="rel-row">
                             <td style={{ color: 'var(--text)', fontWeight: 500 }}>{m.name}</td>
 
                             <td>
@@ -635,9 +640,16 @@ export function Relationships() {
                               <button
                                 className="rel-gear-btn"
                                 title="Manage link"
-                                onClick={e => { e.stopPropagation(); openMoniPanel(m) }}
+                                onClick={() => openMoniPanel(m)}
                               >
                                 <GearIcon />
+                              </button>
+                              <button
+                                className="rel-nav-btn"
+                                title={`Open ${m.name}`}
+                                onClick={() => openMoniPanel(m)}
+                              >
+                                Open →
                               </button>
                             </td>
                           </tr>
@@ -672,7 +684,7 @@ export function Relationships() {
                           const parent = infraParentByChildId.get(comp.id)
                           const ctrs   = allContainers.filter(c => c.infra_component_id === comp.id)
                           return (
-                            <tr key={comp.id} className="rel-row" onClick={() => navigate(`/infrastructure/${comp.id}`)}>
+                            <tr key={comp.id} className="rel-row">
                               <td style={{ color: 'var(--text)', fontWeight: 500 }}>{comp.name}</td>
                               <td className="rel-mono rel-type">{TYPE_LABEL[comp.type] ?? comp.type}</td>
                               <td>
@@ -695,11 +707,18 @@ export function Relationships() {
                                   <button
                                     className="rel-gear-btn"
                                     title="Manage relationship"
-                                    onClick={e => { e.stopPropagation(); openInfraPanel(comp) }}
+                                    onClick={() => openInfraPanel(comp)}
                                   >
                                     <GearIcon />
                                   </button>
                                 )}
+                                <button
+                                  className="rel-nav-btn"
+                                  title={`Open ${comp.name}`}
+                                  onClick={() => navigate(`/infrastructure/${comp.id}`)}
+                                >
+                                  Open →
+                                </button>
                               </td>
                             </tr>
                           )
