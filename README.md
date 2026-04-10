@@ -175,17 +175,7 @@ All email configuration is managed in the app under Settings → Notifications �
 
 3-stage Docker build: frontend → Go binary → `alpine:3.19` final image. No node_modules, no Go toolchain, no source in the final image.
 
----
-
-## What's Next
-
-### In Progress
-- **Remote Docker nodes** — multi-host container monitoring via socket proxy; Portainer integration is live, native remote socket support coming
-
-### Considering
-- **Visual profile builder** — point-and-click field mapping from live API responses, no JSONPath required
-- **PostgreSQL support** — for larger installations that outgrow SQLite
-- **SSO / OAuth login** — federated authentication for team deployments
+For a detailed breakdown of the repository layout, data flow, database schema, API design, and deployment internals, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
