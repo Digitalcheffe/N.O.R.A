@@ -251,7 +251,7 @@ NORA ships as a single Docker image built in three stages:
 
 The final image is ~50 MB. There is no Node, no Go toolchain, and no source code in the runtime image.
 
-The binary listens on `NORA_PORT` (default `8081`) and serves everything: static assets, API, and the ingest endpoint.
+The binary listens on `NORA_PORT` (default `8081`) and serves everything: static assets, API, and the ingest endpoint. In local development the Vite dev server runs on `8081` and proxies `/api` requests to the Go backend on `3000` — port `3000` is never exposed in the container.
 
 Data lives in a single directory (`/data` by default):
 - `nora.db` — SQLite database
