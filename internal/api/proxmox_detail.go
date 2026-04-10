@@ -28,6 +28,8 @@ func (h *ProxmoxDetailHandler) Routes(r chi.Router) {
 	r.Get("/infrastructure/proxmox/{id}/guests",  h.GetGuests)
 	r.Get("/infrastructure/proxmox/{id}/status",  h.GetNodeStatus)
 	r.Get("/infrastructure/proxmox/{id}/tasks",   h.GetTaskFailures)
+	r.Get("/infrastructure/proxmox/{id}/backups", h.GetBackupJobs)
+	r.Get("/infrastructure/proxmox/{id}/backup-files", h.GetBackupFiles)
 }
 
 // getPoller loads the component, validates it is a proxmox_node with credentials,
@@ -122,6 +124,56 @@ func (h *ProxmoxDetailHandler) GetNodeStatus(w http.ResponseWriter, r *http.Requ
 		statuses = []infra.ProxmoxNodeStatusDetail{}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"data": statuses, "total": len(statuses)})
+}
+
+// GetBackupJobs returns recent vzdump backup tasks (all statuses) from the Proxmox API.
+// GET /api/v1/infrastructure/proxmox/{id}/backups
+func (h *ProxmoxDetailHandler) GetBackupJobs(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	poller, err := h.getPoller(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	jobs, err := poller.FetchBackupJobs(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("proxmox api: %s", err.Error()))
+		return
+	}
+	if jobs == nil {
+		jobs = []infra.ProxmoxBackupJob{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"data": jobs, "total": len(jobs)})
+}
+
+// GetBackupFiles returns per-VM backup files from storage.
+// GET /api/v1/infrastructure/proxmox/{id}/backup-files
+func (h *ProxmoxDetailHandler) GetBackupFiles(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	poller, err := h.getPoller(r.Context(), id)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "component not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	files, err := poller.FetchBackupFiles(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("proxmox api: %s", err.Error()))
+		return
+	}
+	if files == nil {
+		files = []infra.ProxmoxBackupFile{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"data": files, "total": len(files)})
 }
 
 // GetTaskFailures returns recent failed tasks from the Proxmox API.

@@ -29,6 +29,7 @@ import (
 	"github.com/digitalcheffe/nora/internal/scanner"
 	"github.com/digitalcheffe/nora/internal/scanner/discovery"
 	noraMetrics "github.com/digitalcheffe/nora/internal/scanner/metrics"
+	noraDaily    "github.com/digitalcheffe/nora/internal/scanner/daily"
 	noraSnapshot "github.com/digitalcheffe/nora/internal/scanner/snapshot"
 	"github.com/digitalcheffe/nora/migrations"
 	"github.com/go-chi/chi/v5"
@@ -314,17 +315,16 @@ func main() {
 		go watcher.Start(dockerCtx)
 	}
 
-	// Image update poller — checks container registries for newer image versions.
-	// Runs as a GlobalSnapshotJob on the 30-minute snapshot interval.
-	// Skipped if the Docker socket is not available.
-	var imagePoller *noraSnapshot.ImageUpdatePoller
-	if p, err := noraSnapshot.NewImageUpdatePoller(store); err != nil {
+	// Image update poller — checks container registries once per day for newer
+	// image versions. Registered as a GlobalDailyJob so it runs on startup and
+	// every 24 hours. Rate-limited registries (Docker Hub etc.) are safe at this
+	// frequency. Skipped if the Docker socket is not available.
+	if p, err := noraDaily.NewImageUpdatePoller(store); err != nil {
 		log.Printf("image update poller: socket not available, skipping (%v)", err)
 	} else {
-		imagePoller = p
-		scanScheduler.RegisterGlobalSnapshot(scanner.GlobalSnapshotFunc(func(ctx context.Context) {
-			if err := imagePoller.Run(ctx); err != nil {
-				log.Printf("image update poller: snapshot run: %v", err)
+		scanScheduler.RegisterGlobalDaily(scanner.GlobalDailyFunc(func(ctx context.Context) {
+			if err := p.Run(ctx); err != nil {
+				log.Printf("image update poller: daily run: %v", err)
 			}
 		}))
 	}

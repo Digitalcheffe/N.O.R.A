@@ -112,6 +112,62 @@ func (s *ProxmoxSnapshotScanner) TakeSnapshot(ctx context.Context, entityID stri
 		}
 	}
 
+	// ── Backup files: detect new completions and stale VMs ───────────────────────
+	backupFiles, err := poller.FetchBackupFiles(ctx)
+	if err != nil {
+		log.Printf("proxmox snapshot: %s: fetch backup files: %v (non-fatal)", c.Name, err)
+	} else {
+		// Build per-VMID latest ctime map.
+		latestByVMID := make(map[int]int64)
+		for _, f := range backupFiles {
+			if f.VMID == 0 {
+				continue
+			}
+			if f.CTime > latestByVMID[f.VMID] {
+				latestByVMID[f.VMID] = f.CTime
+			}
+		}
+
+		staleThreshold := int64(48 * 60 * 60) // 48 hours
+		nowUnix := now.Unix()
+
+		for vmid, ctime := range latestByVMID {
+			ctimeStr := fmt.Sprintf("%d", ctime)
+			vmKey := fmt.Sprintf("%d", vmid)
+
+			// Track latest backup ctime — fires on new backup.
+			_, ch := captureSnapshot(ctx, s.store, "physical_host", entityID,
+				"backup_ctime_vm_"+vmKey, ctimeStr, now)
+			if ch {
+				changed = true
+				writeSnapshotEvent(ctx, s.store, entityID, c.Name, "physical_host", "info",
+					fmt.Sprintf("[backup] VM %d backed up successfully on %s",
+						vmid, c.Name))
+			}
+
+			// Track stale status — warn when no backup in 48 h.
+			isStale := "0"
+			if nowUnix-ctime > staleThreshold {
+				isStale = "1"
+			}
+			prevStale, staleChanged := captureSnapshot(ctx, s.store, "physical_host", entityID,
+				"backup_stale_vm_"+vmKey, isStale, now)
+			if staleChanged {
+				changed = true
+				if isStale == "1" && prevStale == "0" {
+					writeSnapshotEvent(ctx, s.store, entityID, c.Name, "physical_host", "warn",
+						fmt.Sprintf("[backup] VM %d has no recent backup on %s (>48h)",
+							vmid, c.Name))
+				} else if isStale == "0" && prevStale == "1" {
+					// Stale condition resolved (new backup appeared).
+					writeSnapshotEvent(ctx, s.store, entityID, c.Name, "physical_host", "info",
+						fmt.Sprintf("[backup] VM %d backup recovered on %s",
+							vmid, c.Name))
+				}
+			}
+		}
+	}
+
 	writeDebugEvent(ctx, s.store, entityID, c.Name, "physical_host")
 	log.Printf("proxmox snapshot: %s: done (changed=%v)", c.Name, changed)
 

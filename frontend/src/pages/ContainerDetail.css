@@ -1,0 +1,351 @@
+/* ── Container Detail Page ── */
+
+/* ── Field list ──────────────────────────────────────────────────────────────── */
+
+.ctr-det-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ctr-det-field {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.ctr-det-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.ctr-det-value {
+  font-size: 13px;
+  color: var(--text1);
+  word-break: break-all;
+}
+
+.ctr-det-mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.ctr-det-dim {
+  color: var(--text3);
+  font-size: 12px;
+}
+
+.ctr-det-digest {
+  font-size: 11px;
+  word-break: break-all;
+}
+
+/* ── Section title count badge ───────────────────────────────────────────────── */
+
+.ctr-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--bg4);
+  color: var(--text3);
+  margin-left: 8px;
+  letter-spacing: 0;
+  vertical-align: middle;
+}
+
+/* ── Key-value grid (ports, networks) ────────────────────────────────────────── */
+
+.ctr-kv-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ctr-kv-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 5px 10px;
+  background: var(--bg3);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.ctr-kv-key {
+  color: var(--text1);
+  flex-shrink: 0;
+}
+
+.ctr-kv-val {
+  color: var(--text3);
+  font-size: 11px;
+}
+
+/* ── Port pills ──────────────────────────────────────────────────────────────── */
+
+.ctr-port-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ctr-port-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text1);
+  white-space: nowrap;
+}
+
+.ctr-port-type {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg4);
+}
+
+.ctr-port-tcp .ctr-port-type {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.ctr-port-udp .ctr-port-type {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.1);
+}
+
+/* ── Mounts ──────────────────────────────────────────────────────────────────── */
+
+.ctr-mount-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ctr-mount-row {
+  padding: 8px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ctr-mount-dest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text1);
+}
+
+.ctr-mount-arrow {
+  color: var(--accent);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.ctr-mount-src {
+  font-size: 11px;
+  padding-left: 20px;
+  word-break: break-all;
+}
+
+.ctr-mount-badges {
+  display: flex;
+  gap: 4px;
+  padding-left: 20px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.ctr-mount-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg4);
+  color: var(--text3);
+  border: 1px solid var(--border);
+}
+
+.ctr-mount-ro {
+  color: var(--red, #f87171);
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.ctr-mount-rw {
+  color: var(--green, #4ade80);
+  border-color: rgba(74, 222, 128, 0.3);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+/* ── Environment variables ───────────────────────────────────────────────────── */
+
+.ctr-env-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.ctr-env-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 30%) 1fr;
+  align-items: baseline;
+  gap: 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.ctr-env-row:last-child {
+  border-bottom: none;
+}
+
+.ctr-env-row:hover {
+  background: var(--bg3);
+}
+
+.ctr-env-key {
+  color: var(--text2);
+  font-size: 11px;
+  word-break: break-all;
+  padding-right: 12px;
+}
+
+.ctr-env-val {
+  color: var(--text1);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.ctr-env-masked {
+  color: var(--text3);
+  letter-spacing: 0.1em;
+  user-select: none;
+}
+
+/* ── Show more button ────────────────────────────────────────────────────────── */
+
+.ctr-show-more {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 0 2px;
+  transition: color 0.15s;
+  text-align: left;
+}
+
+.ctr-show-more:hover {
+  color: var(--accent);
+}
+
+/* ── Linked app header extra ─────────────────────────────────────────────────── */
+
+.ctr-det-linked-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ctr-det-linked-row,
+.ctr-det-link-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ctr-det-linked-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-width: 70px;
+}
+
+.ctr-det-linked-name {
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ctr-det-select {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg2);
+  color: var(--text1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.ctr-det-link-btn,
+.ctr-det-unlink-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--bg2);
+  color: var(--text2);
+  transition: background 0.15s, color 0.15s;
+}
+
+.ctr-det-link-btn:hover:not(:disabled),
+.ctr-det-unlink-btn:hover:not(:disabled) {
+  background: var(--bg3);
+  color: var(--text1);
+}
+
+.ctr-det-link-btn:disabled,
+.ctr-det-unlink-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ctr-det-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+}

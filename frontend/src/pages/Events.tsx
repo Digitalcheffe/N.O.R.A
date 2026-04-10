@@ -3,22 +3,22 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { EventRow } from '../components/EventRow'
-import { events as eventsApi } from '../api/client'
-import type { Event, EventFilter, EventSort, Severity, TimeseriesBucket } from '../api/types'
+import { apps as appsApi, checks as checksApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
+import type { App, Event, EventFilter, EventSort, InfrastructureComponent, MonitorCheck, Severity, TimeseriesBucket } from '../api/types'
 import './Events.css'
 
-type TimeFilter = 'day' | 'week' | 'month'
 type ChartRange = 'day' | 'week' | 'month' | '3m'
 type SourceType = '' | 'app' | 'infra' | 'check'
 
 const SEVERITIES: Severity[] = ['debug', 'info', 'warn', 'error', 'critical']
 const PAGE_SIZES = [25, 50, 100, 500]
 
-function sinceFromTimeFilter(tf: TimeFilter): string {
+function sinceFromChartRange(range: ChartRange): string {
   const d = new Date()
-  if (tf === 'day') d.setDate(d.getDate() - 1)
-  else if (tf === 'week') d.setDate(d.getDate() - 7)
-  else d.setMonth(d.getMonth() - 1)
+  if (range === 'day') d.setDate(d.getDate() - 1)
+  else if (range === 'week') d.setDate(d.getDate() - 7)
+  else if (range === 'month') d.setMonth(d.getMonth() - 1)
+  else d.setMonth(d.getMonth() - 3)
   return d.toISOString()
 }
 
@@ -96,11 +96,24 @@ function EventsLineChart({
   buckets: TimeseriesBucket[]
   granularity: 'hour' | 'day'
 }) {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [W, setW] = useState(800)
+
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width
+      if (w && w > 0) setW(Math.floor(w))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   if (buckets.length === 0) {
     return <div className="chart-empty">No event data for this range</div>
   }
 
-  const W = 800
   const H = 180
   const padL = 38
   const padR = 16
@@ -138,9 +151,10 @@ function EventsLineChart({
 
   return (
     <svg
-      viewBox={`0 0 ${W} ${H}`}
+      ref={svgRef}
+      width="100%"
+      height={H}
       className="events-chart-svg"
-      preserveAspectRatio="xMidYMid meet"
     >
       {/* horizontal grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(t => (
@@ -205,12 +219,18 @@ export function Events() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { tick } = useAutoRefresh()
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week')
+  const [chartRange, setChartRange] = useState<ChartRange>('week')
   const initialLevel = searchParams.get('level') as Severity | null
   const [severity, setSeverity] = useState<Severity | ''>(
     SEVERITIES.includes(initialLevel as Severity) ? (initialLevel as Severity) : ''
   )
-  const [sourceType, setSourceType] = useState<SourceType>('')
+  const initialSourceType = searchParams.get('source_type') as SourceType | null
+  const initialSourceId = searchParams.get('source_id') ?? ''
+  const [sourceType, setSourceType] = useState<SourceType>(
+    initialSourceType && ['app', 'infra', 'check'].includes(initialSourceType) ? initialSourceType : ''
+  )
+  const [sourceId, setSourceId] = useState(initialSourceId)
+  const [sourceOptions, setSourceOptions] = useState<{ id: string; name: string }[]>([])
   const [search, setSearch] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
   const [searchTrigger, setSearchTrigger] = useState(0)
@@ -219,7 +239,6 @@ export function Events() {
   const [sort, setSort] = useState<EventSort>('newest')
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(0)
-  const [chartRange, setChartRange] = useState<ChartRange>('week')
 
   const [eventList, setEventList] = useState<Event[]>([])
   const [total, setTotal] = useState(0)
@@ -242,17 +261,18 @@ export function Events() {
         limit: pageSize,
         offset: page * pageSize,
       }
-      // Date range: custom dates take priority over timeFilter tabs
+      // Date range: custom dates take priority over chart range
       if (fromDate) {
         filter.from = new Date(fromDate).toISOString()
       } else {
-        filter.from = sinceFromTimeFilter(timeFilter)
+        filter.from = sinceFromChartRange(chartRange)
       }
       if (toDate) {
         filter.to = new Date(toDate + 'T23:59:59').toISOString()
       }
       if (severity) filter.level = severity
       if (sourceType) filter.source_type = sourceType as 'app' | 'infra' | 'check'
+      if (sourceId) filter.source_id = sourceId
       if (search) filter.search = search
       try {
         const res = await eventsApi.list(filter)
@@ -264,9 +284,9 @@ export function Events() {
         setLoading(false)
       }
     })()
-  }, [timeFilter, severity, sourceType, search, searchTrigger, fromDate, toDate, sort, pageSize, page, tick])
+  }, [chartRange, severity, sourceType, sourceId, search, searchTrigger, fromDate, toDate, sort, pageSize, page, tick])
 
-  // Fetch chart data
+  // Fetch chart data — follows the chart range selector
   useEffect(() => {
     setChartLoading(true)
     const { since, until, granularity } = chartRangeParams(chartRange)
@@ -282,6 +302,29 @@ export function Events() {
       .finally(() => setChartLoading(false))
   }, [chartRange, severity])
 
+  // Fetch source options when source type changes
+  useEffect(() => {
+    setSourceOptions([])
+    if (!sourceType) return
+    const fetch = async () => {
+      try {
+        if (sourceType === 'app') {
+          const res = await appsApi.list()
+          setSourceOptions((res.data as App[]).map(a => ({ id: a.id, name: a.name })))
+        } else if (sourceType === 'infra') {
+          const res = await infraApi.list()
+          setSourceOptions((res.data as InfrastructureComponent[]).map(c => ({ id: c.id, name: c.name })))
+        } else if (sourceType === 'check') {
+          const res = await checksApi.list()
+          setSourceOptions((res.data as MonitorCheck[]).map(c => ({ id: c.id, name: c.name })))
+        }
+      } catch {
+        setSourceOptions([])
+      }
+    }
+    void fetch()
+  }, [sourceType])
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   function changePage(next: number) {
@@ -291,28 +334,26 @@ export function Events() {
 
   return (
     <>
-      <Topbar
-        title="Events"
-        timeFilter={timeFilter}
-        onTimeFilter={t => { setTimeFilter(t as TimeFilter); setPage(0) }}
-      />
+      <Topbar title="Events" />
       <div className="content">
+
+        {/* ── Time range selector ── */}
+        <div className="events-range-row">
+          {(['day', 'week', 'month', '3m'] as ChartRange[]).map(r => (
+            <button
+              key={r}
+              className={`chart-range-tab${chartRange === r ? ' active' : ''}`}
+              onClick={() => { setChartRange(r); setPage(0) }}
+            >
+              {r === 'day' ? 'Day' : r === 'week' ? 'Week' : r === 'month' ? 'Month' : '3 Months'}
+            </button>
+          ))}
+        </div>
 
         {/* ── Chart ── */}
         <div className="events-chart-container">
           <div className="events-chart-header">
             <span className="section-title">Event Volume</span>
-            <div className="chart-range-tabs">
-              {(['day', 'week', 'month', '3m'] as ChartRange[]).map(r => (
-                <button
-                  key={r}
-                  className={`chart-range-tab${chartRange === r ? ' active' : ''}`}
-                  onClick={() => setChartRange(r)}
-                >
-                  {r === 'day' ? '24h' : r === 'week' ? '7d' : r === 'month' ? '30d' : '3M'}
-                </button>
-              ))}
-            </div>
           </div>
           <div className="events-chart-body">
             {chartLoading ? (
@@ -364,12 +405,23 @@ export function Events() {
           <select
             className="events-select"
             value={sourceType}
-            onChange={e => { setSourceType(e.target.value as SourceType); setPage(0) }}
+            onChange={e => { setSourceType(e.target.value as SourceType); setSourceId(''); setPage(0) }}
           >
-            <option value="">All sources</option>
+            <option value="">All types</option>
             <option value="app">Apps</option>
             <option value="infra">Infrastructure</option>
             <option value="check">Checks</option>
+          </select>
+          <select
+            className="events-select"
+            value={sourceId}
+            onChange={e => { setSourceId(e.target.value); setPage(0) }}
+            disabled={!sourceType || sourceOptions.length === 0}
+          >
+            <option value="">{sourceType ? 'All names' : 'Select type first'}</option>
+            {sourceOptions.map(o => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
           </select>
           <div className="events-date-range">
             <input

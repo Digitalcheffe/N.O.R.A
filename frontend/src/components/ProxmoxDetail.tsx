@@ -10,6 +10,8 @@ import type {
   ProxmoxGuestInfo,
   ProxmoxNodeStatusDetail,
   ProxmoxTaskFailure,
+  ProxmoxBackupJob,
+  ProxmoxBackupFile,
 } from '../api/types'
 import './ProxmoxDetail.css'
 
@@ -256,11 +258,15 @@ function GuestsSection({
   loading,
   error,
   onRetry,
+  backupJobs,
+  backupFiles,
 }: {
   guests: ProxmoxGuestInfo[]
   loading: boolean
   error: string | null
   onRetry: () => void
+  backupJobs: ProxmoxBackupJob[]
+  backupFiles: ProxmoxBackupFile[]
 }) {
   const [typeFilter,   setTypeFilter]   = useState<GuestTypeFilter>('all')
   const [statusFilter, setStatusFilter] = useState<GuestStatusFilter>('all')
@@ -277,6 +283,23 @@ function GuestsSection({
   const headerCount = statusFilter !== 'all'
     ? `${filtered.length} of ${guests.length} guests`
     : `${guests.length} guest${guests.length !== 1 ? 's' : ''}`
+
+  // Build per-VMID latest backup ctime from storage files (most reliable)
+  const latestBackupByVMID = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const f of backupFiles) {
+      const existing = map.get(f.vmid)
+      if (!existing || f.ctime > existing) {
+        map.set(f.vmid, f.ctime)
+      }
+    }
+    return map
+  }, [backupFiles])
+
+  const lastBackup = backupJobs.length > 0
+    ? [...backupJobs].sort((a, b) => b.start_time - a.start_time)[0]
+    : null
+  const lastBackupOk = lastBackup?.exit_status === 'OK'
 
   return (
     <div className="px-section">
@@ -304,6 +327,15 @@ function GuestsSection({
             <option value="stopped">Stopped</option>
           </select>
           <span className="px-guest-count">{headerCount}</span>
+          {lastBackup && (
+            <span
+              className="px-backup-inline-badge"
+              style={{ color: lastBackupOk ? 'var(--green)' : 'var(--red)' }}
+              title={`Last backup: ${new Date(lastBackup.start_time * 1000).toLocaleString()}`}
+            >
+              {lastBackupOk ? '✓' : '✕'} backup {formatTimestamp(lastBackup.start_time)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -323,6 +355,7 @@ function GuestsSection({
               <th>Disk</th>
               <th>Bridge</th>
               <th>OS / Tags</th>
+              {latestBackupByVMID.size > 0 && <th>Last Backup</th>}
             </tr>
           </thead>
           <tbody>
@@ -381,6 +414,20 @@ function GuestsSection({
                         )}
                       </div>
                     </td>
+                    {latestBackupByVMID.size > 0 && (() => {
+                      const ctime = latestBackupByVMID.get(g.vmid)
+                      return (
+                        <td>
+                          {ctime ? (
+                            <span className="px-backup-vm-date" style={{ color: 'var(--green)' }}>
+                              ✓ {formatTimestamp(ctime)}
+                            </span>
+                          ) : (
+                            <span className="px-muted">—</span>
+                          )}
+                        </td>
+                      )
+                    })()}
                   </tr>
                 )
               })
@@ -466,6 +513,55 @@ function TaskFailuresSection({
   )
 }
 
+// ── Backup Jobs ───────────────────────────────────────────────────────────────
+
+function BackupSummarySection({
+  jobs,
+  loading,
+  error,
+  onRetry,
+}: {
+  jobs: ProxmoxBackupJob[]
+  loading: boolean
+  error: string | null
+  onRetry: () => void
+}) {
+  const sorted   = [...jobs].sort((a, b) => b.start_time - a.start_time).slice(0, 50)
+  const ok       = sorted.filter(j => j.exit_status === 'OK').length
+  const failed   = sorted.length - ok
+  const lastRun  = sorted[0]
+
+  return (
+    <div className="px-section">
+      <div className="px-section-title">Backup Jobs</div>
+      {error ? (
+        <SectionError msg={error} onRetry={onRetry} />
+      ) : loading ? (
+        <div className="px-backup-summary-card px-skeleton-inline" />
+      ) : sorted.length === 0 ? (
+        <div className="px-task-clean">No completed backup jobs found.</div>
+      ) : (
+        <div className="px-overview-meta">
+          <span className="px-meta-chip" style={{ color: 'var(--green)' }}>
+            {ok} successful
+          </span>
+          {failed > 0 && (
+            <span className="px-meta-chip" style={{ color: 'var(--red)' }}>
+              {failed} failed
+            </span>
+          )}
+          <span className="px-meta-chip">{sorted.length} total runs</span>
+          {lastRun && (
+            <span className="px-meta-chip">
+              Last run {formatTimestamp(lastRun.start_time)}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Updates Banner ────────────────────────────────────────────────────────────
 
 function UpdatesBanner({
@@ -528,6 +624,13 @@ export function ProxmoxContent({ component }: ProxmoxContentProps) {
   const [failuresLoading, setFailuresLoading] = useState(true)
   const [failuresError,   setFailuresError]   = useState<string | null>(null)
 
+  const [backupJobs,        setBackupJobs]        = useState<ProxmoxBackupJob[]>([])
+  const [backupJobsLoading, setBackupJobsLoading] = useState(true)
+  const [backupJobsError,   setBackupJobsError]   = useState<string | null>(null)
+
+  const [backupFiles,        setBackupFiles]        = useState<ProxmoxBackupFile[]>([])
+  const [backupFilesLoading, setBackupFilesLoading] = useState(true)
+
   const loadResources = useCallback(() => {
     infraApi.resources(componentId, 'hour')
       .then(r => setResources(r))
@@ -566,13 +669,31 @@ export function ProxmoxContent({ component }: ProxmoxContentProps) {
       .finally(() => setFailuresLoading(false))
   }, [componentId])
 
+  const loadBackupJobs = useCallback(() => {
+    setBackupJobsLoading(true)
+    proxmoxApi.backupJobs(componentId)
+      .then(r => { setBackupJobs(r.data); setBackupJobsError(null) })
+      .catch(err => setBackupJobsError(err instanceof Error ? err.message : 'Failed to load backup jobs'))
+      .finally(() => setBackupJobsLoading(false))
+  }, [componentId])
+
+  const loadBackupFiles = useCallback(() => {
+    setBackupFilesLoading(true)
+    proxmoxApi.backupFiles(componentId)
+      .then(r => { setBackupFiles(r.data) })
+      .catch(() => { /* best-effort — missing permission is expected */ })
+      .finally(() => setBackupFilesLoading(false))
+  }, [componentId])
+
   useEffect(() => {
     loadResources()
     loadPools()
     loadGuests()
     loadStatus()
     loadFailures()
-  }, [loadResources, loadPools, loadGuests, loadStatus, loadFailures, tick])
+    loadBackupJobs()
+    loadBackupFiles()
+  }, [loadResources, loadPools, loadGuests, loadStatus, loadFailures, loadBackupJobs, loadBackupFiles, tick])
 
   const updatesAvailable = nodeStatuses.reduce((sum, ns) => sum + ns.updates_available, 0)
 
@@ -603,6 +724,8 @@ export function ProxmoxContent({ component }: ProxmoxContentProps) {
         loading={guestsLoading}
         error={guestsError ? `Failed to load guests. ${guestsError}` : null}
         onRetry={loadGuests}
+        backupJobs={backupJobs}
+        backupFiles={backupFilesLoading ? [] : backupFiles}
       />
 
       <TaskFailuresSection
@@ -610,6 +733,13 @@ export function ProxmoxContent({ component }: ProxmoxContentProps) {
         loading={failuresLoading}
         error={failuresError ? `Failed to load task failures. ${failuresError}` : null}
         onRetry={loadFailures}
+      />
+
+      <BackupSummarySection
+        jobs={backupJobs}
+        loading={backupJobsLoading}
+        error={backupJobsError ? `Failed to load backup jobs. ${backupJobsError}` : null}
+        onRetry={loadBackupJobs}
       />
     </>
   )

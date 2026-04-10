@@ -294,6 +294,7 @@ function TraefikShell({ component, ep }: { component: InfrastructureComponent; e
         </>
       }
       sourceId={component.id}
+      sourceType="infra"
     >
       <InfraEditModal
         open={ep.editOpen}
@@ -356,6 +357,7 @@ function SynologyShell({ component, ep }: { component: InfrastructureComponent; 
         </>
       }
       sourceId={component.id}
+      sourceType="infra"
     >
       <InfraEditModal
         open={ep.editOpen}
@@ -517,6 +519,7 @@ export function InfraComponentDetail() {
           </>
         }
         sourceId={component.id}
+      sourceType="infra"
       >
         <InfraEditModal
           open={editOpen}
@@ -558,6 +561,7 @@ export function InfraComponentDetail() {
           </>
         }
         sourceId={component.id}
+      sourceType="infra"
       >
         <InfraEditModal
           open={editOpen}
@@ -635,6 +639,7 @@ export function InfraComponentDetail() {
         </>
       }
       sourceId={component.id}
+      sourceType="infra"
     >
       <InfraEditModal
         open={editOpen}

@@ -207,8 +207,9 @@
 /* ── Action cell / gear button ───────────────────────────────────────────────── */
 
 .rel-action-cell {
-  width: 48px;
+  width: 72px;
   text-align: right;
+  white-space: nowrap;
 }
 
 .rel-gear-btn {
@@ -228,6 +229,28 @@
   color: var(--text);
   border-color: var(--border2);
   background: var(--bg3);
+}
+
+.rel-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2px 9px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
+.rel-nav-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.08);
 }
 
 /* ── Status dot ──────────────────────────────────────────────────────────────── */

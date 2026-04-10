@@ -115,6 +115,8 @@ type PortainerContainerInspect struct {
 	Config struct {
 		// Image is the image name:tag used to create the container.
 		Image string `json:"Image"`
+		// Env is the list of environment variables as "KEY=VALUE" strings.
+		Env []string `json:"Env"`
 	} `json:"Config"`
 }
 

@@ -227,6 +227,93 @@
   user-select: none;
 }
 
+/* ── Vertical layout ─────────────────────────────────────────────────────────── */
+
+.app-chain-row--vertical {
+  flex-direction: column;
+  overflow-x: visible;
+  align-items: stretch;
+}
+
+.app-chain-row--vertical .app-chain-step {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.app-chain-row--vertical .app-chain-node {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+}
+
+.chain-connector--vertical {
+  flex-direction: column;
+  align-items: center;
+  width: auto;
+  height: 24px;
+  padding: 0;
+}
+
+.chain-connector--vertical .chain-connector-line {
+  border-top: none;
+  border-left: 2px dashed var(--border2);
+  flex: 1;
+  margin-right: 0;
+  width: 0;
+}
+
+.chain-connector--vertical .chain-connector-arrow {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* ── Traefik route sub-lines ─────────────────────────────────────────────────── */
+
+.chain-traefik-rule-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.chain-traefik-svc-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.chain-traefik-arrow {
+  font-size: 14px;
+  color: var(--text3);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* ── Traefik in vertical (narrow) mode ───────────────────────────────────────── */
+
+.app-chain-wrap--vertical .app-chain-traefik {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-chain-wrap--vertical .chain-traefik-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.app-chain-wrap--vertical .chain-traefik-rule {
+  max-width: 200px;
+}
+
+.app-chain-wrap--vertical .chain-traefik-backend {
+  margin-left: 0;
+  font-size: 10px;
+}
+
 /* ── Traefik section ─────────────────────────────────────────────────────────── */
 
 .app-chain-traefik {

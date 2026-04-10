@@ -60,41 +60,89 @@ func (s *DockerDiscoveryScanner) Discover(ctx context.Context, entityID string, 
 		knownByID[dc.ContainerID] = dc
 	}
 
+	encJSON := func(v any) *string {
+		b, err := json.Marshal(v)
+		if err != nil || string(b) == "null" {
+			return nil
+		}
+		s := string(b)
+		return &s
+	}
+
 	now := time.Now().UTC()
 	found := 0
 	runningIDs := make([]string, 0, len(containers))
 
 	for _, ct := range containers {
 		name := containerName(ct.Names)
+		if name == "" {
+			continue
+		}
 		status := "stopped"
 		if ct.State == "running" {
 			status = "running"
 			runningIDs = append(runningIDs, ct.ID)
 		}
 
+		// Build network list matching the shared JSON schema.
+		type netEntry struct {
+			Name string `json:"name"`
+			IP   string `json:"ip,omitempty"`
+		}
+		var nets []netEntry
+		if ct.NetworkSettings != nil {
+			for netName, ep := range ct.NetworkSettings.Networks {
+				entry := netEntry{Name: netName}
+				if ep != nil && ep.IPAddress != "" {
+					entry.IP = ep.IPAddress
+				}
+				nets = append(nets, entry)
+			}
+		}
+
 		dc := &models.DiscoveredContainer{
 			InfraComponentID: entityID,
+			SourceType:       "docker_engine",
 			ContainerID:      ct.ID,
 			ContainerName:    name,
 			Image:            ct.Image,
 			Status:           status,
 			LastSeenAt:       now,
 			CreatedAt:        now,
+			Labels:           encJSON(ct.Labels),
+			Ports:            encJSON(ct.Ports),
+			Networks:         encJSON(nets),
+			Volumes:          encJSON(ct.Mounts),
 		}
 
+		isNew := false
 		if _, alreadyKnown := knownByID[ct.ID]; !alreadyKnown {
-			if upsertErr := s.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, dc); upsertErr != nil {
-				log.Printf("docker discovery: upsert %s: %v", name, upsertErr)
-				continue
-			}
+			isNew = true
+		}
+
+		if upsertErr := s.store.DiscoveredContainers.UpsertDiscoveredContainer(ctx, dc); upsertErr != nil {
+			log.Printf("docker discovery: upsert %s: %v", name, upsertErr)
+			continue
+		}
+
+		if isNew {
 			writeDiscoveryEvent(ctx, s.store, entityID, c.Name, "docker_engine", "info",
 				fmt.Sprintf("[discovery] New container discovered: %s", name))
 			found++
-		} else {
-			// Known — update last_seen_at and status.
-			if updateErr := s.store.DiscoveredContainers.UpdateDiscoveredContainerStatus(ctx, knownByID[ct.ID].ID, status, now); updateErr != nil {
-				log.Printf("docker discovery: update status %s: %v", name, updateErr)
+		}
+
+		// Capture env vars via inspect (one extra call per container, non-fatal).
+		if inspect, inspErr := cli.ContainerInspect(ctx, ct.ID); inspErr == nil {
+			if len(inspect.Config.Env) > 0 {
+				if b, jsonErr := json.Marshal(inspect.Config.Env); jsonErr == nil {
+					ev := string(b)
+					if updErr := s.store.DiscoveredContainers.UpdateContainerEnvVars(ctx, dc.ID, ev); updErr != nil {
+						log.Printf("docker discovery: update env vars %s: %v", name, updErr)
+					}
+				}
 			}
+		} else {
+			log.Printf("docker discovery: inspect %s: %v (non-fatal)", name, inspErr)
 		}
 	}
 

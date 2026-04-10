@@ -14,12 +14,14 @@ import { Apps } from './pages/Apps'
 import { AppDetail } from './pages/AppDetail'
 import { Infrastructure } from './pages/Infrastructure'
 import { InfraComponentDetail } from './pages/InfraComponentDetail'
+import { ContainerDetail } from './pages/ContainerDetail'
 import { TopologyPage } from './pages/Topology'
 import { Relationships } from './pages/Relationships'
 import { Settings } from './pages/Settings'
 import { AppTemplateEditor } from './pages/AppTemplateEditor'
 import { Profile } from './pages/Profile'
 import { SlidePanelDevPage } from './pages/SlidePanelDevPage'
+import { NotFound } from './pages/NotFound'
 
 export default function App() {
   return (
@@ -47,6 +49,7 @@ export default function App() {
               <Route path="apps/:id" element={<AppDetail />} />
               <Route path="infrastructure" element={<Infrastructure />} />
               <Route path="infrastructure/:id" element={<InfraComponentDetail />} />
+              <Route path="containers/:id" element={<ContainerDetail />} />
               <Route path="topology" element={<TopologyPage />} />
               <Route path="network-map" element={<Navigate to="/topology" replace />} />
               <Route path="relationships" element={<Relationships />} />
@@ -54,7 +57,7 @@ export default function App() {
               <Route path="profile" element={<Profile />} />
               <Route path="app-templates/new" element={<AppTemplateEditor />} />
               <Route path="app-templates/:id/edit" element={<AppTemplateEditor />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
         </AutoRefreshProvider>

@@ -51,6 +51,20 @@ type GlobalMetricsJob interface {
 	Run(ctx context.Context)
 }
 
+// GlobalDailyJob is a job that runs once per day — on startup and then every
+// 24 hours. Use for expensive external calls with rate limits (e.g. container
+// registry digest lookups).
+type GlobalDailyJob interface {
+	Run(ctx context.Context)
+}
+
+// GlobalDailyFunc is an adapter so a plain func(context.Context) satisfies
+// GlobalDailyJob without defining a named type.
+type GlobalDailyFunc func(ctx context.Context)
+
+// Run implements GlobalDailyJob.
+func (f GlobalDailyFunc) Run(ctx context.Context) { f(ctx) }
+
 // ScanScheduler runs the three scan buckets — Discovery, Metrics, and
 // Snapshots — on their canonical intervals. Each tick fans out to all enabled
 // infrastructure components concurrently with a per-entity timeout.
@@ -73,10 +87,11 @@ type ScanScheduler struct {
 	metricsByMethod          map[string]MetricsScanner   // keyed by collection_method
 	snapshots         map[string]SnapshotScanner // keyed by entity type
 	snapshotsByMethod map[string]SnapshotScanner // keyed by collection_method
-	globalDiscovery   []GlobalDiscoveryJob
-	globalSnapshots   []GlobalSnapshotJob
-	globalMetrics     []GlobalMetricsJob
-	mu                sync.RWMutex
+	globalDiscovery []GlobalDiscoveryJob
+	globalSnapshots []GlobalSnapshotJob
+	globalMetrics   []GlobalMetricsJob
+	globalDaily     []GlobalDailyJob
+	mu              sync.RWMutex
 }
 
 // NewScanScheduler returns a ScanScheduler wired to store with empty scanner
@@ -170,19 +185,41 @@ func (s *ScanScheduler) RegisterGlobalMetrics(job GlobalMetricsJob) {
 	s.globalMetrics = append(s.globalMetrics, job)
 }
 
-// Start launches the three ticker loops and blocks until ctx is cancelled.
+// RegisterGlobalDaily registers a GlobalDailyJob that runs once on startup
+// and then every 24 hours. Use for rate-limited external calls such as
+// container registry digest lookups.
+func (s *ScanScheduler) RegisterGlobalDaily(job GlobalDailyJob) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.globalDaily = append(s.globalDaily, job)
+}
+
+// Start launches the four ticker loops and blocks until ctx is cancelled.
 // Each ticker fires independently; slow discovery scans will not delay metrics
-// collection.
+// collection. Daily jobs run once immediately on start, then every 24 hours.
 func (s *ScanScheduler) Start(ctx context.Context) {
-	log.Printf("scan scheduler: starting (discovery=%s, metrics=%s, snapshots=%s)",
-		DiscoveryInterval, MetricsInterval, SnapshotInterval)
+	log.Printf("scan scheduler: starting (discovery=%s, metrics=%s, snapshots=%s, daily=%s)",
+		DiscoveryInterval, MetricsInterval, SnapshotInterval, DailyInterval)
 
 	discoveryTicker := time.NewTicker(DiscoveryInterval)
 	metricsTicker := time.NewTicker(MetricsInterval)
 	snapshotTicker := time.NewTicker(SnapshotInterval)
+	dailyTicker := time.NewTicker(DailyInterval)
 	defer discoveryTicker.Stop()
 	defer metricsTicker.Stop()
 	defer snapshotTicker.Stop()
+	defer dailyTicker.Stop()
+
+	// Delay the first daily pass so enrichment workers (Portainer, Docker Engine)
+	// have time to complete their initial cycle and populate image_digest before
+	// the registry poller reads it.
+	go func() {
+		select {
+		case <-time.After(3 * time.Minute):
+			s.runDailyPass(ctx)
+		case <-ctx.Done():
+		}
+	}()
 
 	for {
 		select {
@@ -195,6 +232,8 @@ func (s *ScanScheduler) Start(ctx context.Context) {
 			go s.runMetricsPass(ctx)
 		case <-snapshotTicker.C:
 			go s.runSnapshotPass(ctx)
+		case <-dailyTicker.C:
+			go s.runDailyPass(ctx)
 		}
 	}
 }
@@ -366,6 +405,17 @@ func (s *ScanScheduler) runSnapshotPass(ctx context.Context) {
 	s.mu.RLock()
 	globals := make([]GlobalSnapshotJob, len(s.globalSnapshots))
 	copy(globals, s.globalSnapshots)
+	s.mu.RUnlock()
+	for _, job := range globals {
+		job.Run(ctx)
+	}
+}
+
+// runDailyPass runs all registered GlobalDailyJobs sequentially.
+func (s *ScanScheduler) runDailyPass(ctx context.Context) {
+	s.mu.RLock()
+	globals := make([]GlobalDailyJob, len(s.globalDaily))
+	copy(globals, s.globalDaily)
 	s.mu.RUnlock()
 	for _, job := range globals {
 		job.Run(ctx)

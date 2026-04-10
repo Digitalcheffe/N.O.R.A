@@ -1,4 +1,4 @@
-package snapshot
+package daily
 
 import (
 	"context"
@@ -62,34 +62,6 @@ func (m *mockLatestDigester) GetLatestDigest(_ context.Context, image string) (s
 
 // ── mock repos ─────────────────────────────────────────────────────────────────
 
-type mockImageInfraComponentRepo struct {
-	components []models.InfrastructureComponent
-}
-
-func (r *mockImageInfraComponentRepo) List(_ context.Context) ([]models.InfrastructureComponent, error) {
-	return r.components, nil
-}
-func (r *mockImageInfraComponentRepo) ListByParent(_ context.Context, _ string) ([]models.InfrastructureComponent, error) {
-	return nil, nil
-}
-func (r *mockImageInfraComponentRepo) Get(_ context.Context, _ string) (*models.InfrastructureComponent, error) {
-	return nil, repo.ErrNotFound
-}
-func (r *mockImageInfraComponentRepo) Create(_ context.Context, _ *models.InfrastructureComponent) error {
-	return nil
-}
-func (r *mockImageInfraComponentRepo) Update(_ context.Context, _ *models.InfrastructureComponent) error {
-	return nil
-}
-func (r *mockImageInfraComponentRepo) Delete(_ context.Context, _ string) error { return nil }
-func (r *mockImageInfraComponentRepo) UpdateStatus(_ context.Context, _, _, _ string) error {
-	return nil
-}
-func (r *mockImageInfraComponentRepo) UpdateMeta(_ context.Context, _, _ string) error {
-	return nil
-}
-func (r *mockImageInfraComponentRepo) UpdateIP(_ context.Context, _, _ string) error { return nil }
-
 type imageCheckCall struct {
 	id              string
 	imageDigest     string
@@ -132,6 +104,9 @@ func (r *mockDiscoveredContainerRepo) MarkStoppedIfNotRunning(_ context.Context,
 func (r *mockDiscoveredContainerRepo) DeleteDiscoveredContainer(_ context.Context, _ string) error {
 	return nil
 }
+func (r *mockDiscoveredContainerRepo) UpdateContainerLocalDigest(_ context.Context, _ string, _ string) error {
+	return nil
+}
 func (r *mockDiscoveredContainerRepo) UpdateContainerImageCheck(_ context.Context, id, imageDigest, registryDigest string, updateAvailable bool) error {
 	r.imageChecks = append(r.imageChecks, imageCheckCall{
 		id:              id,
@@ -147,19 +122,15 @@ func (r *mockDiscoveredContainerRepo) UpdateContainerRestartPolicy(_ context.Con
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-func makePollerStore(infraComponents []models.InfrastructureComponent, containers []*models.DiscoveredContainer) (*repo.Store, *mockDiscoveredContainerRepo) {
+func makePollerStore(containers []*models.DiscoveredContainer) (*repo.Store, *mockDiscoveredContainerRepo) {
 	dc := &mockDiscoveredContainerRepo{containers: containers}
 	store := repo.NewStore(
 		nil, nil, nil, nil, nil, nil,
-		&mockImageInfraComponentRepo{components: infraComponents},
+		nil,
 		nil, nil, nil,
 		dc, nil, nil, nil, nil, nil, nil, nil,
 	)
 	return store, dc
-}
-
-func dockerEngineComponent() models.InfrastructureComponent {
-	return models.InfrastructureComponent{ID: "engine-1", Type: "docker_engine"}
 }
 
 func makeInspect(containerID, imageID, imageName string, repoDigests []string) (map[string]container.InspectResponse, map[string]dockerimage.InspectResponse) {
@@ -175,23 +146,7 @@ func makeInspect(containerID, imageID, imageName string, repoDigests []string) (
 	return inspects, imgInspects
 }
 
-// ── gate check: no Docker Engine components ────────────────────────────────────
-
-func TestImageUpdatePoller_GateCheck_NoEngines(t *testing.T) {
-	store, dc := makePollerStore(nil, []*models.DiscoveredContainer{
-		{ID: "c1", ContainerID: "abc", ContainerName: "sonarr", Image: "linuxserver/sonarr:latest", Status: "running"},
-	})
-
-	reg := &mockLatestDigester{digests: map[string]string{"linuxserver/sonarr:latest": "sha256:new"}}
-	p := newImageUpdatePollerWithClient(store, &mockImageUpdateClient{}, reg)
-
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(dc.imageChecks) != 0 {
-		t.Errorf("expected 0 image checks when no Docker Engine configured, got %d", len(dc.imageChecks))
-	}
-}
+func strPtr(s string) *string { return &s }
 
 // ── digest mismatch → update_available=true ────────────────────────────────────
 
@@ -203,12 +158,9 @@ func TestImageUpdatePoller_DigestMismatch(t *testing.T) {
 		imageName        = "linuxserver/sonarr:latest"
 	)
 
-	store, dc := makePollerStore(
-		[]models.InfrastructureComponent{dockerEngineComponent()},
-		[]*models.DiscoveredContainer{
-			{ID: "c1", ContainerID: containerID, ContainerName: "sonarr", Image: imageName, Status: "running"},
-		},
-	)
+	store, dc := makePollerStore([]*models.DiscoveredContainer{
+		{ID: "c1", ContainerID: containerID, ContainerName: "sonarr", Image: imageName, Status: "running"},
+	})
 
 	inspects, imgInspects := makeInspect(containerID, "sha256:cfg1", imageName,
 		[]string{"linuxserver/sonarr@" + localManifest})
@@ -241,12 +193,9 @@ func TestImageUpdatePoller_DigestMatch(t *testing.T) {
 		imageName   = "ghcr.io/meeb/tubesync:latest"
 	)
 
-	store, dc := makePollerStore(
-		[]models.InfrastructureComponent{dockerEngineComponent()},
-		[]*models.DiscoveredContainer{
-			{ID: "c2", ContainerID: containerID, ContainerName: "tubesync", Image: imageName, Status: "running"},
-		},
-	)
+	store, dc := makePollerStore([]*models.DiscoveredContainer{
+		{ID: "c2", ContainerID: containerID, ContainerName: "tubesync", Image: imageName, Status: "running"},
+	})
 
 	inspects, imgInspects := makeInspect(containerID, "sha256:cfg2", imageName,
 		[]string{"ghcr.io/meeb/tubesync@" + sameDigest})
@@ -266,17 +215,51 @@ func TestImageUpdatePoller_DigestMatch(t *testing.T) {
 	}
 }
 
+// ── Portainer container uses stored digest ─────────────────────────────────────
+
+func TestImageUpdatePoller_PortainerStoredDigest(t *testing.T) {
+	const (
+		storedManifest   = "sha256:portainerlocal"
+		registryManifest = "sha256:registrynewer"
+		imageName        = "linuxserver/plex:latest"
+	)
+
+	store, dc := makePollerStore([]*models.DiscoveredContainer{
+		{
+			ID: "c-portainer", ContainerID: "ptctr1", ContainerName: "plex",
+			Image: imageName, Status: "running",
+			ImageDigest: strPtr(storedManifest), // populated by Portainer enrichment
+		},
+	})
+
+	// Socket client returns error for all containers (simulates non-local containers).
+	client := &mockImageUpdateClient{inspectErr: errors.New("no such container")}
+	reg := &mockLatestDigester{digests: map[string]string{imageName: registryManifest}}
+	p := newImageUpdatePollerWithClient(store, client, reg)
+
+	if err := p.Run(context.Background()); err != nil {
+		t.Fatalf("Run error: %v", err)
+	}
+	if len(dc.imageChecks) != 1 {
+		t.Fatalf("expected 1 image check via stored digest, got %d", len(dc.imageChecks))
+	}
+	check := dc.imageChecks[0]
+	if !check.updateAvailable {
+		t.Error("expected update_available=true when stored digest differs from registry")
+	}
+	if check.imageDigest != storedManifest {
+		t.Errorf("image_digest: got %q, want %q", check.imageDigest, storedManifest)
+	}
+}
+
 // ── registry error → UpdateContainerImageCheck not called ─────────────────────
 
 func TestImageUpdatePoller_RegistryError_NoUpdateSet(t *testing.T) {
 	const containerID = "ctr-err"
 
-	store, dc := makePollerStore(
-		[]models.InfrastructureComponent{dockerEngineComponent()},
-		[]*models.DiscoveredContainer{
-			{ID: "c3", ContainerID: containerID, ContainerName: "myapp", Image: "myapp:latest", Status: "running"},
-		},
-	)
+	store, dc := makePollerStore([]*models.DiscoveredContainer{
+		{ID: "c3", ContainerID: containerID, ContainerName: "myapp", Image: "myapp:latest", Status: "running"},
+	})
 
 	inspects, imgInspects := makeInspect(containerID, "sha256:cfg3", "myapp:latest",
 		[]string{"myapp@sha256:local"})
@@ -296,13 +279,10 @@ func TestImageUpdatePoller_RegistryError_NoUpdateSet(t *testing.T) {
 // ── stopped/exited containers skipped ────────────────────────────────────────
 
 func TestImageUpdatePoller_NonRunningContainersSkipped(t *testing.T) {
-	store, dc := makePollerStore(
-		[]models.InfrastructureComponent{dockerEngineComponent()},
-		[]*models.DiscoveredContainer{
-			{ID: "c4", ContainerID: "s1", ContainerName: "stopped-app", Image: "myapp:latest", Status: "stopped"},
-			{ID: "c5", ContainerID: "s2", ContainerName: "exited-app", Image: "myapp:latest", Status: "exited"},
-		},
-	)
+	store, dc := makePollerStore([]*models.DiscoveredContainer{
+		{ID: "c4", ContainerID: "s1", ContainerName: "stopped-app", Image: "myapp:latest", Status: "stopped"},
+		{ID: "c5", ContainerID: "s2", ContainerName: "exited-app", Image: "myapp:latest", Status: "exited"},
+	})
 
 	reg := &mockLatestDigester{digests: map[string]string{"myapp:latest": "sha256:digest"}}
 	p := newImageUpdatePollerWithClient(store, &mockImageUpdateClient{}, reg)
