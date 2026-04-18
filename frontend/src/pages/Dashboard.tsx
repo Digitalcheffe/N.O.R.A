@@ -5,7 +5,7 @@ import { Topbar } from '../components/Topbar'
 import { SummaryCard } from '../components/SummaryCard'
 import { AppWidget } from '../components/AppWidget'
 import { dashboard as dashboardApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
-import type { DashboardSummaryResponse, InfrastructureComponent, ResourceSummary } from '../api/types'
+import type { DashboardSummaryResponse, InfrastructureComponent } from '../api/types'
 import { InfraTypeIcon, CheckTypeIcon } from '../components/CheckTypeIcon'
 import './Dashboard.css'
 import './Infrastructure.css'
@@ -28,8 +28,6 @@ const TYPE_LABEL: Record<string, string> = {
   portainer:     'Portainer',
 }
 
-const NO_RESOURCE_BARS = new Set(['traefik', 'portainer', 'docker_engine'])
-
 function statusClass(s: string): string {
   if (s === 'online')   return 'online'
   if (s === 'degraded') return 'degraded'
@@ -42,33 +40,6 @@ function statusLabel(s: string): string {
   if (s === 'degraded') return 'Degraded'
   if (s === 'offline')  return 'Offline'
   return 'Unknown'
-}
-
-function barClass(value: number, isDisk: boolean): string {
-  if (!isDisk) return ''
-  if (value > 95) return ' crit'
-  if (value > 85) return ' warn'
-  return ''
-}
-
-function ResBar({
-  label, value, isDisk, noData,
-}: { label: string; value: number; isDisk?: boolean; noData?: boolean }) {
-  const cls = noData ? '' : barClass(value, !!isDisk)
-  return (
-    <div className="infra-res-row">
-      <span className="infra-res-label">{label}</span>
-      <div className="infra-res-track">
-        <div
-          className={`infra-res-fill${cls}${noData ? ' no-data' : ''}`}
-          style={{ width: noData ? '0%' : `${Math.min(value, 100)}%` }}
-        />
-      </div>
-      <span className={`infra-res-pct${noData ? ' no-data' : ''}`}>
-        {noData ? 'Collecting…' : `${Math.round(value)}%`}
-      </span>
-    </div>
-  )
 }
 
 // ── Event severity counts type ────────────────────────────────────────────────
@@ -89,7 +60,6 @@ export function Dashboard() {
   const [data, setData] = useState<DashboardSummaryResponse | null>(null)
   const [eventCounts, setEventCounts] = useState<EventCounts | null>(null)
   const [infraComponents, setInfraComponents] = useState<InfrastructureComponent[]>([])
-  const [resourcesMap, setResourcesMap] = useState<Record<string, ResourceSummary>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -116,19 +86,6 @@ export function Dashboard() {
           error:    errorRes.total,
           critical: critRes.total,
         })
-
-        // Poll resource summaries for components that expose them
-        const pollable = hosts.data.filter(c => !NO_RESOURCE_BARS.has(c.type))
-        if (pollable.length > 0) {
-          const results = await Promise.allSettled(
-            pollable.map(c => infraApi.resources(c.id, 'hour').then(r => ({ id: c.id, data: r })))
-          )
-          const resMap: Record<string, ResourceSummary> = {}
-          for (const r of results) {
-            if (r.status === 'fulfilled') resMap[r.value.id] = r.value.data
-          }
-          setResourcesMap(resMap)
-        }
       } catch (e) {
         console.error(e)
       } finally {
@@ -238,11 +195,10 @@ export function Dashboard() {
   })
 
   // ── Infra card renderer (read-only, links to detail) ─────────────────────
+  // Matches the Infrastructure list page — name + type + status, no resource
+  // bars. Fresh CPU/MEM/DSK lives on the component detail page where users
+  // navigate by clicking.
   function renderInfraCard(host: InfrastructureComponent) {
-    const res = resourcesMap[host.id]
-    const noData = !res || res.no_data
-    const needsResBar = !NO_RESOURCE_BARS.has(host.type)
-
     return (
       <div
         key={host.id}
@@ -266,14 +222,6 @@ export function Dashboard() {
             <span className="infra-status-label">{statusLabel(host.last_status)}</span>
           </div>
         </div>
-
-        {needsResBar && (
-          <div className="infra-res-bars">
-            <ResBar label="CPU" value={noData ? 0 : res!.cpu_percent} noData={noData} />
-            <ResBar label="MEM" value={noData ? 0 : res!.mem_percent} noData={noData} />
-            <ResBar label="DSK" value={noData ? 0 : res!.disk_percent} isDisk noData={noData} />
-          </div>
-        )}
       </div>
     )
   }
