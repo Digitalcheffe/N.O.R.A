@@ -37,6 +37,12 @@ func (s *stubRepo) ListByProfile(_ context.Context, _ string) ([]models.DigestRe
 
 func (s *stubRepo) Delete(_ context.Context, _ string) error { return nil }
 
+func (s *stubRepo) ListInactive(_ context.Context) ([]models.DigestRegistryEntry, error) {
+	return nil, nil
+}
+
+func (s *stubRepo) DeleteAllInactive(_ context.Context) (int64, error) { return 0, nil }
+
 func (s *stubRepo) SetActiveByID(_ context.Context, _ string, _ bool) error { return nil }
 
 var _ repo.DigestRegistryRepo = (*stubRepo)(nil)

@@ -102,6 +102,12 @@ func (m *enrichMockContainerRepo) FindByName(_ context.Context, _ string, _ stri
 func (m *enrichMockContainerRepo) DeleteDiscoveredContainer(_ context.Context, _ string) error {
 	return nil
 }
+func (m *enrichMockContainerRepo) ListStoppedContainers(_ context.Context) ([]*models.DiscoveredContainer, error) {
+	return nil, nil
+}
+func (m *enrichMockContainerRepo) DeleteAllStoppedContainers(_ context.Context) (int64, error) {
+	return 0, nil
+}
 func (m *enrichMockContainerRepo) UpdateContainerLocalDigest(_ context.Context, _ string, _ string) error {
 	return nil
 }

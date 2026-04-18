@@ -31,6 +31,13 @@ type DiscoveredContainerRepo interface {
 	MarkStoppedIfNotRunning(ctx context.Context, infraComponentID string, runningIDs []string) error
 	// DeleteDiscoveredContainer hard-deletes a discovered container record by UUID.
 	DeleteDiscoveredContainer(ctx context.Context, id string) error
+	// ListStoppedContainers returns every row whose status is not "running".
+	// Used by the cleanup-jobs preview so the UI can show which ghosts will
+	// be pruned before the job fires.
+	ListStoppedContainers(ctx context.Context) ([]*models.DiscoveredContainer, error)
+	// DeleteAllStoppedContainers hard-deletes every row whose status is not
+	// "running". Returns the number of rows removed.
+	DeleteAllStoppedContainers(ctx context.Context) (int64, error)
 	// UpdateContainerLocalDigest stores the locally running image manifest digest.
 	// Called by Portainer/Docker Engine enrichment after inspecting the container.
 	// Does not touch registry_digest or image_update_available.
@@ -346,6 +353,33 @@ func (r *sqliteDiscoveredContainerRepo) DeleteDiscoveredContainer(ctx context.Co
 		return fmt.Errorf("discovered container %s: %w", id, ErrNotFound)
 	}
 	return nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) ListStoppedContainers(ctx context.Context) ([]*models.DiscoveredContainer, error) {
+	var rows []*models.DiscoveredContainer
+	err := r.db.SelectContext(ctx, &rows, `
+		SELECT id, infra_component_id, source_type, container_id, container_name,
+		       image, status, app_id, profile_suggestion, suggestion_confidence,
+		       last_seen_at, created_at, labels, ports, networks, volumes,
+		       env_vars, image_digest, registry_digest, image_last_checked_at,
+		       image_update_available, restart_policy
+		FROM discovered_containers
+		WHERE status != 'running'
+		ORDER BY last_seen_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list stopped discovered containers: %w", err)
+	}
+	return rows, nil
+}
+
+func (r *sqliteDiscoveredContainerRepo) DeleteAllStoppedContainers(ctx context.Context) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM discovered_containers WHERE status != 'running'`)
+	if err != nil {
+		return 0, fmt.Errorf("delete all stopped discovered containers: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // ── DiscoveredRouteRepo implementation ───────────────────────────────────────

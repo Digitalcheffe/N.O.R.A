@@ -104,6 +104,12 @@ func (r *mockDiscoveredContainerRepo) MarkStoppedIfNotRunning(_ context.Context,
 func (r *mockDiscoveredContainerRepo) DeleteDiscoveredContainer(_ context.Context, _ string) error {
 	return nil
 }
+func (r *mockDiscoveredContainerRepo) ListStoppedContainers(_ context.Context) ([]*models.DiscoveredContainer, error) {
+	return nil, nil
+}
+func (r *mockDiscoveredContainerRepo) DeleteAllStoppedContainers(_ context.Context) (int64, error) {
+	return 0, nil
+}
 func (r *mockDiscoveredContainerRepo) UpdateContainerLocalDigest(_ context.Context, _ string, _ string) error {
 	return nil
 }

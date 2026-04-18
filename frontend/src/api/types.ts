@@ -791,6 +791,7 @@ export interface Job {
   name: string
   description: string
   category: string
+  destructive?: boolean
   last_run_at: string | null
   last_run_status: string | null
 }
@@ -799,6 +800,17 @@ export interface JobRunResult {
   status: 'ok' | 'error'
   error?: string
   duration_ms: number
+}
+
+export interface CleanupPreviewItem {
+  id: string
+  label: string
+  sub: string
+}
+
+export interface CleanupPreview {
+  count: number
+  items: CleanupPreviewItem[]
 }
 
 // ── Portainer (DD-8) ─────────────────────────────────────────────────────────
