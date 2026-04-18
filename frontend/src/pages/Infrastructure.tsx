@@ -1,13 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { Topbar } from '../components/Topbar'
 import { infrastructure as infraApi, discovery, apps as appsApi } from '../api/client'
 import type {
   InfrastructureComponent,
-  ResourceSummary,
-  DiscoverResult,
-  VolumeResource,
   DiscoveredContainer,
   App,
 } from '../api/types'
@@ -35,42 +32,6 @@ function statusLabel(s: string): string {
   return 'Unknown'
 }
 
-function timeAgo(date: Date | null): string {
-  if (!date) return '—'
-  const diff = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (diff < 60) return `${diff}s ago`
-  return `${Math.floor(diff / 60)}m ago`
-}
-
-function barClass(value: number, isDisk: boolean): string {
-  if (!isDisk) return ''
-  if (value > 95) return ' crit'
-  if (value > 85) return ' warn'
-  return ''
-}
-
-// ── Resource bar sub-component ────────────────────────────────────────────────
-
-function ResBar({
-  label, value, isDisk, noData,
-}: { label: string; value: number; isDisk?: boolean; noData?: boolean }) {
-  const cls = noData ? '' : barClass(value, !!isDisk)
-  return (
-    <div className="infra-res-row">
-      <span className="infra-res-label">{label}</span>
-      <div className="infra-res-track">
-        <div
-          className={`infra-res-fill${cls}${noData ? ' no-data' : ''}`}
-          style={{ width: noData ? '0%' : `${Math.min(value, 100)}%` }}
-        />
-      </div>
-      <span className={`infra-res-pct${noData ? ' no-data' : ''}`}>
-        {noData ? 'Collecting…' : `${Math.round(value)}%`}
-      </span>
-    </div>
-  )
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type InfraView = 'components' | 'containers'
@@ -88,10 +49,7 @@ export function Infrastructure() {
     setSearchParams(v === 'containers' ? { view: 'containers' } : {}, { replace: true })
   }
   const [components,      setComponents]      = useState<InfrastructureComponent[]>([])
-  const [resourcesMap,    setResourcesMap]    = useState<Record<string, ResourceSummary>>({})
-  const [lastPolledAt,    setLastPolledAt]    = useState<Date | null>(null)
   const [loading,         setLoading]         = useState(true)
-  const [tick,            setTick]            = useState(0)
   const [containers,      setContainers]      = useState<DiscoveredContainer[]>([])
   const [containersLoading, setContainersLoading] = useState(false)
   const [allApps,         setAllApps]         = useState<App[]>([])
@@ -102,52 +60,18 @@ export function Infrastructure() {
   const [editingHasCreds,       setEditingHasCreds]       = useState(false)
   const [initialParentId,       setInitialParentId]       = useState<string | undefined>(undefined)
   const [deletingId]                                       = useState<string | null>(null)
-  const [scanningId,            setScanningId]            = useState<string | null>(null)
-  const [scanResults,           setScanResults]           = useState<Record<string, DiscoverResult>>({})
 
-  // ── Polling ─────────────────────────────────────────────────────────────────
-
-  const pollAll = useCallback(async (compList: InfrastructureComponent[]) => {
-    if (compList.length === 0) return
-
-    const results = await Promise.allSettled(
-      compList
-        .filter(c => c.type !== 'traefik')
-        .map(c => infraApi.resources(c.id, 'hour').then(r => ({ id: c.id, data: r })))
-    )
-
-    const resMap: Record<string, ResourceSummary> = {}
-    for (const r of results) {
-      if (r.status === 'fulfilled') resMap[r.value.id] = r.value.data
-    }
-
-    setResourcesMap(prev => ({ ...prev, ...resMap }))
-    setLastPolledAt(new Date())
-  }, [])
-
-  // Initial load + auto-refresh
+  // ── Initial load + auto-refresh ─────────────────────────────────────────────
+  // The list view no longer shows CPU/MEM/DSK bars per component, so we don't
+  // fan out N /resources calls here. Fresh resource numbers are fetched only
+  // on the component detail page. Drastically cheaper page load on instances
+  // with many components.
   useEffect(() => {
     infraApi.list()
-      .then(res => {
-        setComponents(res.data)
-        return pollAll(res.data)
-      })
+      .then(res => setComponents(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [pollAll, refreshTick])
-
-  // 30-second polling interval
-  useEffect(() => {
-    if (components.length === 0) return
-    const id = setInterval(() => { void pollAll(components) }, 30_000)
-    return () => clearInterval(id)
-  }, [components, pollAll])
-
-  // Tick for time-ago label re-render (every 10s)
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 10_000)
-    return () => clearInterval(id)
-  }, [])
+  }, [refreshTick])
 
   // Load containers + apps (always, so container count is available on components tab too)
   useEffect(() => {
@@ -162,9 +86,6 @@ export function Infrastructure() {
       .finally(() => setContainersLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, refreshTick])
-
-  // Suppress unused variable warning for tick
-  void tick
 
   // ── Modal helpers ────────────────────────────────────────────────────────────
 
@@ -191,62 +112,10 @@ export function Infrastructure() {
     setInitialParentId(undefined)
   }
 
-  async function handleScan(id: string) {
-    setScanningId(id)
-    setScanResults(prev => { const n = { ...prev }; delete n[id]; return n })
-    try {
-      const result = await infraApi.discover(id)
-      setScanResults(prev => ({ ...prev, [id]: result }))
-      // Refresh the component list and containers so everything reflects the new state.
-      const [res, cRes, aRes] = await Promise.all([
-        infraApi.list(),
-        discovery.allContainers(),
-        appsApi.list(),
-      ])
-      setComponents(res.data)
-      setContainers(cRes.data)
-      setAllApps(aRes.data)
-      void pollAll(res.data)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Discover failed'
-      setScanResults(prev => ({ ...prev, [id]: { status: 'error', discovered: 0, updated: 0, missing: 0, error: msg } }))
-    } finally {
-      setScanningId(null)
-    }
-  }
-
   // ── Render helpers ──────────────────────────────────────────────────────────
-
-  function renderResourceBars(c: InfrastructureComponent) {
-    const res = resourcesMap[c.id]
-    const noData = !res || res.no_data
-
-    if (c.type === 'synology' && res && !res.no_data && res.volumes && res.volumes.length > 0) {
-      return (
-        <div className="infra-res-bars">
-          <ResBar label="CPU" value={res.cpu_percent} noData={noData} />
-          <ResBar label="MEM" value={res.mem_percent} noData={noData} />
-          {res.volumes.map((v: VolumeResource) => (
-            <ResBar key={v.name} label={v.name.toUpperCase()} value={v.percent} isDisk noData={false} />
-          ))}
-        </div>
-      )
-    }
-
-    return (
-      <div className="infra-res-bars">
-        <ResBar label="CPU" value={noData ? 0 : res!.cpu_percent} noData={noData} />
-        <ResBar label="MEM" value={noData ? 0 : res!.mem_percent} noData={noData} />
-        {c.type !== 'docker_engine' && (
-          <ResBar label="DSK" value={noData ? 0 : res!.disk_percent} isDisk noData={noData} />
-        )}
-      </div>
-    )
-  }
 
   function renderTraefikCard(c: InfrastructureComponent) {
     const isDeleting = deletingId === c.id
-    const isScanning = scanningId === c.id
 
     return (
       <div key={c.id} className="infra-card">
@@ -265,28 +134,11 @@ export function Infrastructure() {
           </div>
         </div>
 
-        <div className="infra-card-footer">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            {lastPolledAt && (
-              <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
-            )}
-            {renderScanFeedback(c.id)}
-          </div>
-          <div className="infra-card-actions">
-            <button
-              className="infra-card-btn accent"
-              onClick={() => void handleScan(c.id)}
-              disabled={isDeleting || isScanning || scanningId !== null}
-            >
-              {isScanning ? 'Discovering…' : 'Discover Now'}
-            </button>
-          </div>
-        </div>
         <button
           className="infra-card-gear-btn"
           title="Settings"
           onClick={e => { e.stopPropagation(); openEdit(c) }}
-          disabled={isDeleting || isScanning}
+          disabled={isDeleting}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
             <circle cx="12" cy="12" r="3" />
@@ -299,7 +151,6 @@ export function Infrastructure() {
 
   function renderDockerCard(c: InfrastructureComponent) {
     const isDeleting = deletingId === c.id
-    const isScanning = scanningId === c.id
 
     return (
       <div key={c.id} className="infra-card">
@@ -319,28 +170,11 @@ export function Infrastructure() {
           </div>
         </div>
 
-        <div className="infra-card-footer">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            {lastPolledAt && (
-              <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
-            )}
-            {renderScanFeedback(c.id)}
-          </div>
-          <div className="infra-card-actions">
-            <button
-              className="infra-card-btn accent"
-              onClick={() => void handleScan(c.id)}
-              disabled={isDeleting || isScanning || scanningId !== null}
-            >
-              {isScanning ? 'Discovering…' : 'Discover Now'}
-            </button>
-          </div>
-        </div>
         <button
           className="infra-card-gear-btn"
           title="Settings"
           onClick={e => { e.stopPropagation(); openEdit(c) }}
-          disabled={isDeleting || isScanning}
+          disabled={isDeleting}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
             <circle cx="12" cy="12" r="3" />
@@ -351,16 +185,8 @@ export function Infrastructure() {
     )
   }
 
-  function renderScanFeedback(id: string) {
-    const r = scanResults[id]
-    if (!r) return null
-    if (r.error) return <span className="infra-scan-feedback error">{r.error}</span>
-    return <span className="infra-scan-feedback ok">Status: {r.status}</span>
-  }
-
   function renderPortainerCard(c: InfrastructureComponent) {
     const isDeleting = deletingId === c.id
-    const isScanning = scanningId === c.id
 
     return (
       <div key={c.id} className="infra-card">
@@ -379,28 +205,11 @@ export function Infrastructure() {
           </div>
         </div>
 
-        <div className="infra-card-footer">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            {lastPolledAt && (
-              <span className="infra-last-updated">Last updated: {timeAgo(lastPolledAt)}</span>
-            )}
-            {renderScanFeedback(c.id)}
-          </div>
-          <div className="infra-card-actions">
-            <button
-              className="infra-card-btn accent"
-              onClick={() => void handleScan(c.id)}
-              disabled={isDeleting || isScanning || scanningId !== null}
-            >
-              {isScanning ? 'Discovering…' : 'Discover Now'}
-            </button>
-          </div>
-        </div>
         <button
           className="infra-card-gear-btn"
           title="Settings"
           onClick={e => { e.stopPropagation(); openEdit(c) }}
-          disabled={isDeleting || isScanning}
+          disabled={isDeleting}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
             <circle cx="12" cy="12" r="3" />
@@ -416,10 +225,7 @@ export function Infrastructure() {
     if (c.type === 'docker_engine') return renderDockerCard(c)
     if (c.type === 'portainer')     return renderPortainerCard(c)
 
-    const res = resourcesMap[c.id]
     const isDeleting = deletingId === c.id
-    const isScanning = scanningId === c.id
-    const canScan = c.collection_method !== 'none'
 
     const detailPath = `/infrastructure/${c.id}`
 
@@ -444,35 +250,11 @@ export function Infrastructure() {
           </div>
         </div>
 
-        {renderResourceBars(c)}
-
-        <div className="infra-card-footer">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            {lastPolledAt && (
-              <span className="infra-last-updated">
-                Last updated: {timeAgo(lastPolledAt)}
-                {res?.recorded_at ? ` · data from ${new Date(res.recorded_at).toLocaleTimeString()}` : ''}
-              </span>
-            )}
-            {renderScanFeedback(c.id)}
-          </div>
-          {canScan && (
-            <div className="infra-card-actions">
-              <button
-                className="infra-card-btn accent"
-                onClick={() => void handleScan(c.id)}
-                disabled={isDeleting || isScanning || scanningId !== null}
-              >
-                {isScanning ? 'Discovering…' : 'Discover Now'}
-              </button>
-            </div>
-          )}
-        </div>
         <button
           className="infra-card-gear-btn"
           title="Settings"
           onClick={e => { e.stopPropagation(); openEdit(c) }}
-          disabled={isDeleting || isScanning}
+          disabled={isDeleting}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
             <circle cx="12" cy="12" r="3" />
@@ -689,14 +471,12 @@ export function Infrastructure() {
           } else {
             const created = await infraApi.create(payload)
             setComponents(prev => [...prev, created])
-            void pollAll([created])
           }
         }}
         onClose={closeModal}
         onDelete={editingComponent ? async () => {
           await infraApi.delete(editingComponent.id)
           setComponents(prev => prev.filter(c => c.id !== editingComponent.id))
-          setResourcesMap(prev => { const n = { ...prev }; delete n[editingComponent.id]; return n })
         } : undefined}
       />
     </>
