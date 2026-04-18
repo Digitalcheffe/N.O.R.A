@@ -89,9 +89,6 @@ type EventRepo interface {
 	Timeseries(ctx context.Context, since, until time.Time, granularity, sourceID, level string) ([]TimeseriesBucket, error)
 	// CountForCategory returns the number of events matching f.
 	CountForCategory(ctx context.Context, f CategoryFilter) (int, error)
-	// SparklineBuckets returns exactly 7 event counts, one per time bucket.
-	// The window starts at startTime and each bucket covers bucketDur.
-	SparklineBuckets(ctx context.Context, f CategoryFilter, startTime time.Time, bucketDur time.Duration) ([7]int, error)
 	// LatestPerApp returns the most recent event per app source, keyed by source_id.
 	LatestPerApp(ctx context.Context, appIDs []string) (map[string]*models.Event, error)
 	// DeleteByLevelBefore deletes events with the given level older than before
@@ -307,23 +304,6 @@ func (r *sqliteEventRepo) CountForCategory(ctx context.Context, f CategoryFilter
 		return 0, fmt.Errorf("count for category: %w", err)
 	}
 	return count, nil
-}
-
-func (r *sqliteEventRepo) SparklineBuckets(ctx context.Context, f CategoryFilter, startTime time.Time, bucketDur time.Duration) ([7]int, error) {
-	var counts [7]int
-	for i := 0; i < 7; i++ {
-		bucketStart := startTime.Add(time.Duration(i) * bucketDur)
-		bucketEnd := bucketStart.Add(bucketDur)
-		bf := f
-		bf.Since = bucketStart
-		bf.Until = bucketEnd
-		n, err := r.CountForCategory(ctx, bf)
-		if err != nil {
-			return counts, err
-		}
-		counts[i] = n
-	}
-	return counts, nil
 }
 
 func (r *sqliteEventRepo) DeleteByLevelBefore(ctx context.Context, level string, before time.Time) (int64, error) {

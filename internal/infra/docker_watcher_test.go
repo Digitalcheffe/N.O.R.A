@@ -70,9 +70,6 @@ func (r *mockEventRepo) Get(_ context.Context, _ string) (*models.Event, error) 
 func (r *mockEventRepo) CountForCategory(_ context.Context, _ repo.CategoryFilter) (int, error) {
 	return 0, nil
 }
-func (r *mockEventRepo) SparklineBuckets(_ context.Context, _ repo.CategoryFilter, _ time.Time, _ time.Duration) ([7]int, error) {
-	return [7]int{}, nil
-}
 func (r *mockEventRepo) LatestPerApp(_ context.Context, _ []string) (map[string]*models.Event, error) {
 	return nil, nil
 }

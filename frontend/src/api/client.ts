@@ -49,7 +49,6 @@ import type {
   ProxmoxTaskFailure,
   ProxmoxBackupJob,
   ProxmoxBackupFile,
-  ResourceHistory,
   ResourceSummary,
   Rule,
   RuleSourcesResponse,
@@ -404,9 +403,6 @@ export const infrastructure = {
 
   dockerSummary: (id: string) =>
     request<DockerEngineSummary>('GET', `/infrastructure/${id}/docker-summary`),
-
-  resourceHistory: (id: string, period: 'hour' | 'day' = 'hour', limit = 24) =>
-    request<ResourceHistory>('GET', `/infrastructure/${id}/resources/history?period=${period}&limit=${limit}`),
 
   scan: (id: string) =>
     request<ScanResult>('POST', `/infrastructure/${id}/scan`),

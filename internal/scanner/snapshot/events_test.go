@@ -90,9 +90,6 @@ func (r *memEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, _, _ str
 func (r *memEventRepo) CountForCategory(_ context.Context, _ repo.CategoryFilter) (int, error) {
 	return 0, nil
 }
-func (r *memEventRepo) SparklineBuckets(_ context.Context, _ repo.CategoryFilter, _ time.Time, _ time.Duration) ([7]int, error) {
-	return [7]int{}, nil
-}
 func (r *memEventRepo) LatestPerApp(_ context.Context, _ []string) (map[string]*models.Event, error) {
 	return nil, nil
 }

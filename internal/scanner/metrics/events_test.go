@@ -88,9 +88,6 @@ func (r *stubEventRepo) Timeseries(_ context.Context, _, _ time.Time, _, _, _ st
 func (r *stubEventRepo) CountForCategory(_ context.Context, _ repo.CategoryFilter) (int, error) {
 	return 0, nil
 }
-func (r *stubEventRepo) SparklineBuckets(_ context.Context, _ repo.CategoryFilter, _ time.Time, _ time.Duration) ([7]int, error) {
-	return [7]int{}, nil
-}
 func (r *stubEventRepo) LatestPerApp(_ context.Context, _ []string) (map[string]*models.Event, error) {
 	return nil, nil
 }
