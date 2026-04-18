@@ -5,8 +5,92 @@ meta:
   description: Network-wide ad and tracker blocking DNS server
   homepage: https://adguard.com/adguard-home
 
-webhook:
-  setup_instructions: |
-    No webhook support. NORA monitors the status API endpoint.
-    A shorter check interval is used because DNS availability is critical infrastructure.
+# AdGuard Home has no webhooks — everything comes from the REST API using
+# Basic auth. In app settings the user sets Auth Type = Basic and puts
+# "username:password" in the API Key field.
 
+api_polling:
+  auth_type: basic
+  endpoints:
+    # /control/stats — traffic counters
+    - name: dns_queries
+      label: DNS Queries
+      path: /control/stats
+      target: $.num_dns_queries
+      value_type: count
+    - name: blocked_filtering
+      label: Blocked
+      path: /control/stats
+      target: $.num_blocked_filtering
+      value_type: count
+    - name: blocked_safebrowsing
+      label: Safebrowsing Blocked
+      path: /control/stats
+      target: $.num_replaced_safebrowsing
+      value_type: count
+    - name: blocked_parental
+      label: Parental Blocked
+      path: /control/stats
+      target: $.num_replaced_parental
+      value_type: count
+    - name: avg_response_time
+      label: Avg Response Time
+      path: /control/stats
+      target: $.avg_processing_time
+      value_type: string
+
+    # /control/status — daemon health
+    - name: protection_enabled
+      label: Protection Status
+      path: /control/status
+      target: $.protection_enabled
+      value_type: boolean
+    - name: server_running
+      label: Server Running
+      path: /control/status
+      target: $.running
+      value_type: boolean
+
+    # /control/filtering/status — filter engine
+    - name: filtering_enabled
+      label: Filtering Status
+      path: /control/filtering/status
+      target: $.enabled
+      value_type: boolean
+
+    # /control/safebrowsing/status — safebrowsing engine
+    - name: safebrowsing_enabled
+      label: Safebrowsing Status
+      path: /control/safebrowsing/status
+      target: $.enabled
+      value_type: boolean
+
+digest:
+  widgets:
+    - source: api
+      metric: dns_queries
+      label: DNS Queries
+    - source: api
+      metric: blocked_filtering
+      label: Blocked
+    - source: api
+      metric: blocked_safebrowsing
+      label: Safebrowsing Blocked
+    - source: api
+      metric: blocked_parental
+      label: Parental Blocked
+    - source: api
+      metric: avg_response_time
+      label: Avg Response Time
+    - source: api
+      metric: protection_enabled
+      label: Protection Status
+    - source: api
+      metric: server_running
+      label: Server Running
+    - source: api
+      metric: filtering_enabled
+      label: Filtering Status
+    - source: api
+      metric: safebrowsing_enabled
+      label: Safebrowsing Status

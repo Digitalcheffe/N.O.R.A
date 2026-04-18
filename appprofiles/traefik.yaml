@@ -5,3 +5,8 @@ meta:
   description: Cloud-native reverse proxy and load balancer
   homepage: https://traefik.io
 
+# Meta-only profile. Traefik is a first-class infrastructure integration in
+# NORA — routers, services, and health are pulled straight from the Traefik
+# API by the infra scanner, so adding webhook or api_polling here would just
+# duplicate that data. Access logs from syslog-ng are too noisy to land in
+# the event feed as-is. Keep this profile for the name, icon, and category.

@@ -3,9 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAutoRefresh } from '../context/AutoRefreshContext'
 import { DetailPageLayout } from '../components/DetailPageLayout'
 import { apps as appsApi, dashboard as dashboardApi, appTemplates as templatesApi, checks as checksApi, events as eventsApi, infrastructure as infraApi } from '../api/client'
-import type { App, AppChainResponse, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck } from '../api/types'
+import type { App, AppAuthType, AppChainResponse, AppMetricSnapshot, AppSummary, AppTemplate, MonitorCheck } from '../api/types'
 import { AppChain } from '../components/AppChain'
-import { AppMetricCard, AppMetricCardSkeleton } from '../components/AppMetricCard'
+import { AppMetricCardSkeleton } from '../components/AppMetricCard'
 import { CheckTypeIcon } from '../components/CheckTypeIcon'
 import { CheckForm } from '../components/CheckForm'
 import { SlidePanel } from '../components/SlidePanel'
@@ -44,6 +44,16 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
   const [baseUrl, setBaseUrl] = useState((app.config?.base_url as string) ?? '')
   const [apiUrl, setApiUrl] = useState((app.config?.api_url as string) ?? '')
   const [apiKey, setApiKey] = useState((app.config?.api_key as string) ?? '')
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [authType, setAuthType] = useState<AppAuthType>(
+    (app.config?.auth_type as AppAuthType) || 'none'
+  )
+  const [authHeader, setAuthHeader] = useState(
+    (app.config?.auth_header as string) ?? ''
+  )
+  const [authEverSetByUser, setAuthEverSetByUser] = useState(
+    Boolean(app.config?.auth_type) || Boolean(app.config?.auth_header)
+  )
   const [rateLimit, setRateLimit] = useState(String(app.rate_limit ?? 0))
 
   const [templates, setTemplates] = useState<AppTemplate[]>([])
@@ -68,6 +78,19 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
       .catch(() => {})
   }, [])
 
+  // Pull auth defaults from the selected profile so built-in apps arrive with
+  // auth_type/auth_header pre-populated. User-set values always win.
+  useEffect(() => {
+    if (!profileId) return
+    templatesApi.get(profileId)
+      .then(t => {
+        if (authEverSetByUser) return
+        if (t.auth_type) setAuthType(t.auth_type)
+        if (t.auth_header) setAuthHeader(t.auth_header)
+      })
+      .catch(() => {})
+  }, [profileId, authEverSetByUser])
+
   const grouped = templates.reduce<Record<string, AppTemplate[]>>((acc, t) => {
     if (!acc[t.category]) acc[t.category] = []
     acc[t.category].push(t)
@@ -89,6 +112,13 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
       else delete config.api_url
       if (apiKey.trim()) config.api_key = apiKey.trim()
       else delete config.api_key
+      if (authType && authType !== 'none') config.auth_type = authType
+      else delete config.auth_type
+      if ((authType === 'apikey_header' || authType === 'apikey_query') && authHeader.trim()) {
+        config.auth_header = authHeader.trim()
+      } else {
+        delete config.auth_header
+      }
 
       const updated = await appsApi.update(app.id, {
         name: name.trim(),
@@ -197,12 +227,73 @@ export function AppSettingsModal({ open, app, onClose, onUpdated, onDeleted }: A
       <input className="modal-input" placeholder="http://app:8989"
         value={apiUrl} onChange={e => setApiUrl(e.target.value)} />
 
-      <label className="modal-label" style={{ marginTop: 16 }}>
-        API Key <span className="modal-hint">(optional — used for API polling widgets)</span>
-      </label>
-      <input className="modal-input modal-input-mono" placeholder="your-api-key"
-        type="password" autoComplete="new-password"
-        value={apiKey} onChange={e => setApiKey(e.target.value)} />
+      {/* ── API Polling Auth ── */}
+      <div className="app-auth-block">
+        <div className="app-auth-title">API Polling Auth</div>
+
+        <label className="modal-label">
+          Auth Type <span className="modal-hint">(how to send credentials)</span>
+        </label>
+        <select
+          className="modal-input"
+          value={authType}
+          onChange={e => {
+            setAuthType(e.target.value as AppAuthType)
+            setAuthEverSetByUser(true)
+          }}
+        >
+          <option value="none">None</option>
+          <option value="apikey_header">API Key — Header</option>
+          <option value="apikey_query">API Key — Query param</option>
+          <option value="bearer">Bearer Token</option>
+          <option value="basic">Basic (user:pass)</option>
+        </select>
+
+        {(authType === 'apikey_header' || authType === 'apikey_query') && (
+          <>
+            <label className="modal-label" style={{ marginTop: 12 }}>
+              {authType === 'apikey_header' ? 'Header Name' : 'Query Parameter'}
+            </label>
+            <input
+              className="modal-input modal-input-mono"
+              placeholder={authType === 'apikey_header' ? 'X-Api-Key' : 'apikey'}
+              value={authHeader}
+              onChange={e => {
+                setAuthHeader(e.target.value)
+                setAuthEverSetByUser(true)
+              }}
+            />
+          </>
+        )}
+
+        {authType !== 'none' && (
+          <>
+            <label className="modal-label" style={{ marginTop: 12 }}>
+              {authType === 'basic' ? 'Credentials' : 'API Key'}
+              <span className="modal-hint">
+                {authType === 'basic' ? '(format: user:pass)' : '(stored encrypted at rest)'}
+              </span>
+            </label>
+            <div className="app-auth-key-row">
+              <input
+                className="modal-input modal-input-mono"
+                placeholder={authType === 'basic' ? 'user:pass' : 'your-api-key'}
+                type={showApiKey ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+              />
+              <button
+                type="button"
+                className="app-auth-show-btn"
+                onClick={() => setShowApiKey(s => !s)}
+              >
+                {showApiKey ? 'hide' : 'show'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       <label className="modal-label" style={{ marginTop: 16 }}>
         Rate limit <span className="modal-hint">(events / minute, 0 = unlimited)</span>
@@ -575,26 +666,28 @@ export function AppDetail() {
 
           <div className="appdetail-col-left">
 
-            {/* Live metrics */}
-            {(metricsLoading || appMetrics.length > 0 || (appSummary?.stats ?? []).length > 0) && (
+            {/* Live metrics — driven entirely by dashboard/summary stats, which
+                are gated by the digest_registry. Categories render as counts,
+                api-source widgets render the latest snapshot value, webhook
+                widgets render event counts. Legacy api_polling snapshots are
+                no longer rendered independently — if a metric isn't in the
+                registry it doesn't appear here. */}
+            {(metricsLoading || (appSummary?.stats ?? []).length > 0) && (
               <div className="amg-section">
                 {!metricsLoading && <div className="amg-label">Live Metrics</div>}
                 <div className="amg-grid">
                   {metricsLoading ? (
                     [0, 1, 2].map(i => <AppMetricCardSkeleton key={i} />)
                   ) : (
-                    <>
-                      {appMetrics.map(m => <AppMetricCard key={m.id} metric={m} />)}
-                      {(appSummary?.stats ?? []).map(stat => (
-                        <div key={`stat-${stat.label}`} className="amc-card">
-                          <div className={`amc-value${stat.color ? ` color-${stat.color}` : ''}`}>{stat.value}</div>
-                          <div className="amc-label">{stat.label}</div>
-                          {appSummary?.last_event_at && (
-                            <div className="amc-timestamp">{formatIngestTime(appSummary.last_event_at)}</div>
-                          )}
-                        </div>
-                      ))}
-                    </>
+                    (appSummary?.stats ?? []).map(stat => (
+                      <div key={`stat-${stat.label}`} className="amc-card">
+                        <div className={`amc-value${stat.color ? ` color-${stat.color}` : ''}`}>{stat.value}</div>
+                        <div className="amc-label">{stat.label}</div>
+                        {appSummary?.last_event_at && (
+                          <div className="amc-timestamp">{formatIngestTime(appSummary.last_event_at)}</div>
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>

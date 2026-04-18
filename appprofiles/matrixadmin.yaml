@@ -3,9 +3,9 @@ meta:
   category: Infrastructure
   icon: matrix
   description: Synapse Admin UI for Matrix homeserver administration
+  homepage: https://github.com/etkecc/synapse-admin
 
-webhook:
-  setup_instructions: |
-    No webhook or API. NORA monitors the admin UI base URL only.
-    This profile monitors the Synapse Admin web interface, not the Matrix homeserver itself.
-
+# Meta-only profile. Synapse Admin is a browser-only frontend with no API
+# of its own — it just proxies calls to the Synapse homeserver. For actual
+# metrics, attach the Matrix (Synapse) profile to the homeserver app.
+# Use a URL monitor check here if you want an up/down signal on the UI.

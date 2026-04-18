@@ -3,4 +3,31 @@ meta:
   category: Communication
   icon: matrix
   description: Synapse Matrix homeserver
+  homepage: https://matrix.org
 
+# Synapse has no outbound webhooks. We read the admin API with an admin
+# user's Matrix access token (bearer). Generate the token by signing in as
+# the admin account; it doesn't expire unless revoked.
+
+api_polling:
+  auth_type: bearer
+  endpoints:
+    - name: registered_users
+      label: Registered Users
+      path: /_synapse/admin/v2/users?limit=1
+      target: $.total
+      value_type: count
+    - name: active_rooms
+      label: Active Rooms
+      path: /_synapse/admin/v1/rooms?limit=1
+      target: $.total_rooms
+      value_type: count
+
+digest:
+  widgets:
+    - source: api
+      metric: registered_users
+      label: Registered Users
+    - source: api
+      metric: active_rooms
+      label: Active Rooms

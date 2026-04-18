@@ -765,3 +765,40 @@
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ── API Polling Auth block in App Settings modal ── */
+.app-auth-block {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg1);
+}
+.app-auth-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+.app-auth-key-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.app-auth-key-row .modal-input {
+  flex: 1;
+}
+.app-auth-show-btn {
+  padding: 0 12px;
+  background: var(--bg3);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.app-auth-show-btn:hover {
+  background: var(--bg4);
+}

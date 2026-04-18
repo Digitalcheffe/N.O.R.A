@@ -42,6 +42,8 @@ type CategoryFilter struct {
 	SourceIDs  []string  // empty = all sources
 	MatchField string    // json_extract(payload, '$.{MatchField}') = MatchValue
 	MatchValue string
+	AndField   string // optional secondary field — ANDed with MatchField when both set
+	AndValue   string
 	MatchLevel string    // level = MatchLevel
 	Since      time.Time // inclusive lower bound
 	Until      time.Time // inclusive upper bound
@@ -269,6 +271,11 @@ func buildCategoryWhere(f CategoryFilter) (string, []interface{}) {
 	if f.MatchField != "" && f.MatchValue != "" {
 		parts = append(parts, "json_extract(payload, '$."+f.MatchField+"') = ?")
 		args = append(args, f.MatchValue)
+	}
+
+	if f.AndField != "" && f.AndValue != "" {
+		parts = append(parts, "json_extract(payload, '$."+f.AndField+"') = ?")
+		args = append(args, f.AndValue)
 	}
 
 	if f.MatchLevel != "" {

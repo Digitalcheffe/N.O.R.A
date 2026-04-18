@@ -7,37 +7,35 @@ meta:
 
 webhook:
   setup_instructions: |
-    Create an automation in Home Assistant that uses a REST command or notify.rest
-    action to POST to {base_url}/ingest/{token} on state changes or events.
-    A long-lived access token is required for the monitor health check.
-    Example REST command configuration:
-      rest_command:
-        nora_event:
-          url: "{base_url}/ingest/{token}"
-          method: POST
-          content_type: application/json
-          payload: '{"event_type":"{{trigger.platform}}","entity_id":"{{trigger.entity_id}}","new_state":{"state":"{{trigger.to_state.state}}","attributes":{"friendly_name":"{{trigger.to_state.attributes.friendly_name}}"}}}'
+    Send events from any Home Assistant automation using rest_command or
+    notify.rest. Point the POST at {base_url}/ingest/{token} with a fixed
+    JSON shape — action, subject, message, severity, extra — so NORA can
+    route, title, and level every event the same way regardless of which
+    automation fired it.
+    See docs/home-assistant-webhook-config.md for a full example.
   recommended_events:
-    - state_changed
-    - automation_triggered
-    - script_started
+    - ha.event
   not_recommended: []
   field_mappings:
-    event_type: "$.event_type"
-    entity_id: "$.entity_id"
-    new_state_state: "$.new_state.state"
-    friendly_name: "$.new_state.attributes.friendly_name"
-  severity_field: event_type
-  display_template: "{event_type} — {friendly_name}: {new_state_state}"
+    action:   "$.action"
+    subject:  "$.subject"
+    message:  "$.message"
+    severity: "$.severity"
+  severity_field: severity
+  # The user controls severity per-automation in the payload. An identity
+  # mapping keeps the engine honest — without it the severity engine falls
+  # back to "info" because an empty severity_mapping disables mapping.
   severity_mapping:
-    state_changed: info
-    automation_triggered: info
-    script_started: info
+    info:     info
+    warn:     warn
+    error:    error
+    critical: critical
+  display_template: "{subject} — {message}"
 
 
 digest:
-  categories:
-    - label: Events
-      match_field: ""
-      match_value: ""
-      match_severity: ""
+  widgets:
+    - source: webhook
+      label: HA Events
+      match_field: action
+      match_value: ha.event

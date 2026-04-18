@@ -26,7 +26,7 @@ func newDashboardTestSetup(t *testing.T, profiler apptemplate.Loader) (http.Hand
 	checkRepo := repo.NewCheckRepo(db)
 	rollupRepo := repo.NewRollupRepo(db)
 	r := chi.NewRouter()
-	api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, profiler).Routes(r)
+	api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, profiler, nil, nil).Routes(r)
 	return r, db
 }
 

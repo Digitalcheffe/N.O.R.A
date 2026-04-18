@@ -7,35 +7,49 @@ meta:
 
 webhook:
   setup_instructions: |
-    In Duplicati go to Settings → Default options → Send HTTP message.
-    Set the URL to {base_url}/ingest/{token}.
+    Configure Duplicati to send an HTTP JSON webhook to {base_url}/ingest/{token}.
+    Duplicati sends a fixed payload built from its template variables.
+    See docs/duplicati-webhook-config.md for the exact payload template and the
+    required --send-http-level=Success,Warning,Error,Fatal flag.
   recommended_events:
-    - Backup completed
-    - Backup failed
-    - Restore completed
+    - Success
+    - Warning
+    - Error
+    - Fatal
   not_recommended: []
   field_mappings:
-    event_type: "$.Data.ParsedResult"
-    backup_name: "$.Data.OperationName"
-    duration: "$.Data.Duration"
-    files_added: "$.Data.AddedFiles"
-    bytes_uploaded: "$.Data.SizeOfAddedFiles"
-    error_message: "$.Data.Message"
-  severity_field: event_type
-  display_template: "Backup {event_type} — {backup_name}"
+    action:      "$.action"
+    event_type:  "$.action"
+    backup_name: "$.backup_name"
+    result:      "$.result"
+    operation:   "$.operation"
+    source_path: "$.source_path"
+  severity_field: action
+  display_template: "{action} — {backup_name}"
+  display_templates:
+    "backup.Success": "Backup succeeded — {backup_name}"
+    "backup.Warning": "Backup warning — {backup_name}"
+    "backup.Error":   "Backup failed — {backup_name}"
+    "backup.Fatal":   "Backup fatal — {backup_name}"
   severity_mapping:
-    Success: info
-    Warning: warn
-    Error: error
-    Fatal: critical
+    "backup.Success": info
+    "backup.Warning": warn
+    "backup.Error":   error
+    "backup.Fatal":   error
 
 digest:
   categories:
-    - label: Backups
-      match_field: event_type
-      match_value: Success
-      match_severity: ""
-    - label: Backup Errors
-      match_field: ""
-      match_value: ""
+    - source: webhook
+      label: Successful Backups
+      match_field: action
+      match_value: "backup.Success"
+    # Match on severity so both backup.Error and backup.Fatal roll up to the
+    # same card without needing an OR clause the schema doesn't support.
+    - source: webhook
+      label: Backup Failures
       match_severity: error
+  widgets:
+    - source: webhook
+      label: Backup Warnings
+      match_field: action
+      match_value: "backup.Warning"

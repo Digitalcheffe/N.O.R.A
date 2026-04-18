@@ -167,9 +167,11 @@ func TestRunAPIPolling_SnapshotWrittenAndEventFired(t *testing.T) {
 	loader := &stubLoader{
 		profileID: "testprofile",
 		tmpl: &apptemplate.AppTemplate{
-			APIPolling: []apptemplate.APIPollingEntry{
-				{Path: "/api/items", Name: "item_count", Label: "Items",
-					Target: "length", ValueType: "count", EventMessage: "Items: {value}"},
+			APIPolling: apptemplate.APIPollingBlock{
+				Endpoints: []apptemplate.APIPollingEntry{
+					{Path: "/api/items", Name: "item_count", Label: "Items",
+						Target: "length", ValueType: "count", EventMessage: "Items: {value}"},
+				},
 			},
 		},
 	}
@@ -197,7 +199,7 @@ func TestRunAPIPolling_NoAPIPollingBlock(t *testing.T) {
 
 	loader := &stubLoader{
 		profileID: "noprofile",
-		tmpl:      &apptemplate.AppTemplate{APIPolling: nil},
+		tmpl:      &apptemplate.AppTemplate{},
 	}
 
 	if err := discovery.RunAPIPolling(context.Background(), store, loader); err != nil {
@@ -219,8 +221,10 @@ func TestRunAPIPolling_HTTPError(t *testing.T) {
 	loader := &stubLoader{
 		profileID: "errprofile",
 		tmpl: &apptemplate.AppTemplate{
-			APIPolling: []apptemplate.APIPollingEntry{
-				{Path: "/fail", Name: "fails", Label: "Fails", Target: "length", ValueType: "count"},
+			APIPolling: apptemplate.APIPollingBlock{
+				Endpoints: []apptemplate.APIPollingEntry{
+					{Path: "/fail", Name: "fails", Label: "Fails", Target: "length", ValueType: "count"},
+				},
 			},
 		},
 	}
@@ -254,8 +258,10 @@ func TestRunAPIPolling_JSONPathExtraction(t *testing.T) {
 	loader := &stubLoader{
 		profileID: "pathprofile",
 		tmpl: &apptemplate.AppTemplate{
-			APIPolling: []apptemplate.APIPollingEntry{
-				{Path: "/stats", Name: "total", Label: "Total", Target: "$.stats.total", ValueType: "count"},
+			APIPolling: apptemplate.APIPollingBlock{
+				Endpoints: []apptemplate.APIPollingEntry{
+					{Path: "/stats", Name: "total", Label: "Total", Target: "$.stats.total", ValueType: "count"},
+				},
 			},
 		},
 	}
@@ -294,8 +300,10 @@ func TestRunAPIPolling_UpsertReplacesExistingValue(t *testing.T) {
 	loader := &stubLoader{
 		profileID: "upsertprofile",
 		tmpl: &apptemplate.AppTemplate{
-			APIPolling: []apptemplate.APIPollingEntry{
-				{Path: "/items", Name: "count", Label: "Count", Target: "length", ValueType: "count"},
+			APIPolling: apptemplate.APIPollingBlock{
+				Endpoints: []apptemplate.APIPollingEntry{
+					{Path: "/items", Name: "count", Label: "Count", Target: "length", ValueType: "count"},
+				},
 			},
 		},
 	}
@@ -324,8 +332,10 @@ func TestRunAPIPolling_UpsertReplacesExistingValue(t *testing.T) {
 	}
 }
 
-// TestRunAPIPolling_APIKeyHeaderAuth verifies apikey_header sets the correct header.
-func TestRunAPIPolling_APIKeyHeaderAuth(t *testing.T) {
+// TestRunAPIPolling_APIKeyHeaderAuth_FromProfileDefault verifies that the
+// profile's api_polling auth_type/auth_header defaults attach the api_key on
+// outgoing requests when the app doesn't override them.
+func TestRunAPIPolling_APIKeyHeaderAuth_FromProfileDefault(t *testing.T) {
 	var receivedHeader string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedHeader = r.Header.Get("X-Api-Key")
@@ -335,16 +345,19 @@ func TestRunAPIPolling_APIKeyHeaderAuth(t *testing.T) {
 	defer srv.Close()
 
 	store, _ := newAPITestStore(t)
-	// Use "sonarr" as the profile ID — apipoller has sonarr.yaml with apikey_header / X-Api-Key.
 	seedPollApp(t, store, "AuthApp", "sonarr",
 		`{"base_url":"`+srv.URL+`","api_key":"secret-key"}`)
 
 	loader := &stubLoader{
 		profileID: "sonarr",
 		tmpl: &apptemplate.AppTemplate{
-			APIPolling: []apptemplate.APIPollingEntry{
-				{Path: "/items", Name: "count", Label: "Count",
-					Target: "length", ValueType: "count"},
+			APIPolling: apptemplate.APIPollingBlock{
+				AuthType:   "apikey_header",
+				AuthHeader: "X-Api-Key",
+				Endpoints: []apptemplate.APIPollingEntry{
+					{Path: "/items", Name: "count", Label: "Count",
+						Target: "length", ValueType: "count"},
+				},
 			},
 		},
 	}
@@ -354,5 +367,42 @@ func TestRunAPIPolling_APIKeyHeaderAuth(t *testing.T) {
 	}
 	if receivedHeader != "secret-key" {
 		t.Errorf("auth header: got %q, want %q", receivedHeader, "secret-key")
+	}
+}
+
+// TestRunAPIPolling_AppAuthOverridesProfile verifies that auth_type and
+// auth_header set on the app's config take precedence over the profile default.
+func TestRunAPIPolling_AppAuthOverridesProfile(t *testing.T) {
+	var receivedAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]int{1})
+	}))
+	defer srv.Close()
+
+	store, _ := newAPITestStore(t)
+	seedPollApp(t, store, "CustomAuthApp", "customprofile",
+		`{"base_url":"`+srv.URL+`","api_key":"token-123","auth_type":"bearer"}`)
+
+	loader := &stubLoader{
+		profileID: "customprofile",
+		tmpl: &apptemplate.AppTemplate{
+			APIPolling: apptemplate.APIPollingBlock{
+				AuthType:   "apikey_header",
+				AuthHeader: "X-Api-Key",
+				Endpoints: []apptemplate.APIPollingEntry{
+					{Path: "/items", Name: "count", Label: "Count",
+						Target: "length", ValueType: "count"},
+				},
+			},
+		},
+	}
+
+	if err := discovery.RunAPIPolling(context.Background(), store, loader); err != nil {
+		t.Fatalf("RunAPIPolling: %v", err)
+	}
+	if receivedAuth != "Bearer token-123" {
+		t.Errorf("Authorization header: got %q, want %q", receivedAuth, "Bearer token-123")
 	}
 }

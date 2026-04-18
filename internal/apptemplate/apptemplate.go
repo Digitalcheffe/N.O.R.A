@@ -39,7 +39,7 @@ type AppTemplateMeta struct {
 //   - neither               → "monitor_only"
 func InferCapability(t *AppTemplate) string {
 	hasWebhook := len(t.Webhook.FieldMappings) > 0 || len(t.Webhook.RecommendedEvents) > 0
-	hasAPI := len(t.APIPolling) > 0
+	hasAPI := len(t.APIPolling.Endpoints) > 0
 	switch {
 	case hasWebhook && hasAPI:
 		return "full"
@@ -93,22 +93,32 @@ type Webhook struct {
 // A category matches events where the given field equals the given value,
 // and/or where severity equals MatchSeverity. Empty strings are ignored.
 // Source is optional for backward compatibility; defaults to "webhook" in the reconciler.
+//
+// AndField / AndValue are optional secondary match criteria — when both are
+// set the event must ALSO satisfy json_extract(payload, '$.{AndField}') =
+// AndValue. Values are stringified (bool → "true"/"false").
 type DigestCategory struct {
 	Source        string `yaml:"source"`
 	Label         string `yaml:"label"`
 	MatchField    string `yaml:"match_field"`
 	MatchValue    string `yaml:"match_value"`
 	MatchSeverity string `yaml:"match_severity"`
+	AndField      string `yaml:"and_field"`
+	AndValue      string `yaml:"and_value"`
 }
 
 // DigestWidget defines a widget in the digest dashboard, backed by either an
 // API polling metric (source=api) or a webhook event count (source=webhook).
+//
+// AndField / AndValue work like on DigestCategory — see that doc comment.
 type DigestWidget struct {
 	Source     string `yaml:"source"`
 	Label      string `yaml:"label"`
 	Metric     string `yaml:"metric"`
 	MatchField string `yaml:"match_field"`
 	MatchValue string `yaml:"match_value"`
+	AndField   string `yaml:"and_field"`
+	AndValue   string `yaml:"and_value"`
 }
 
 // Digest holds digest category and widget definitions for the dashboard.
@@ -118,7 +128,6 @@ type Digest struct {
 }
 
 // APIPollingEntry declares a single API endpoint to poll for a named metric.
-// Authentication is defined per app type in internal/apipoller/ — not here.
 type APIPollingEntry struct {
 	Path         string `yaml:"path"`
 	Name         string `yaml:"name"`
@@ -128,12 +137,49 @@ type APIPollingEntry struct {
 	EventMessage string `yaml:"event_message"`
 }
 
+// APIPollingBlock groups auth defaults and endpoint declarations under one
+// api_polling section. Auth fields are defaults only — users can override
+// them per-app in app settings.
+//
+// Supported auth types:
+//   - apikey_header — send API key in a named header (AuthHeader, e.g. X-Api-Key)
+//   - apikey_query  — send API key as a named query param (AuthHeader)
+//   - bearer        — send "Authorization: Bearer {key}"
+//   - basic         — send "Authorization: Basic {base64(api_key)}" (api_key is "user:pass")
+//   - none          — no auth
+type APIPollingBlock struct {
+	AuthType   string            `yaml:"auth_type"`
+	AuthHeader string            `yaml:"auth_header"`
+	Endpoints  []APIPollingEntry `yaml:"endpoints"`
+}
+
+// UnmarshalYAML accepts either the new nested form ({auth_type, endpoints})
+// or a legacy bare list of endpoints so older custom profiles keep loading.
+func (b *APIPollingBlock) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.SequenceNode:
+		return value.Decode(&b.Endpoints)
+	case yaml.MappingNode:
+		type alias APIPollingBlock
+		var a alias
+		if err := value.Decode(&a); err != nil {
+			return err
+		}
+		*b = APIPollingBlock(a)
+		return nil
+	case 0:
+		return nil
+	default:
+		return fmt.Errorf("api_polling: unsupported YAML node kind %d", value.Kind)
+	}
+}
+
 // AppTemplate describes how to process webhooks and render dashboard data for a specific app.
 type AppTemplate struct {
-	Meta       AppTemplateMeta   `yaml:"meta"`
-	Webhook    Webhook           `yaml:"webhook"`
-	Digest     Digest            `yaml:"digest"`
-	APIPolling []APIPollingEntry `yaml:"api_polling"`
+	Meta       AppTemplateMeta `yaml:"meta"`
+	Webhook    Webhook         `yaml:"webhook"`
+	Digest     Digest          `yaml:"digest"`
+	APIPolling APIPollingBlock `yaml:"api_polling"`
 
 	// SourcePath is the absolute path to the YAML file this template was loaded from.
 	// Set at load time; not serialized to YAML.

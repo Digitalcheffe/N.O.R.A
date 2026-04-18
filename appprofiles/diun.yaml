@@ -7,25 +7,35 @@ meta:
 
 webhook:
   setup_instructions: |
-    In Diun configure a webhook notifier pointing to {base_url}/ingest/{token}.
-    Diun sends a POST on new or updated images.
+    Configure Diun to send webhooks to {base_url}/ingest/{token}.
+    Diun's payload is fixed — configure via environment variables in
+    docker-compose. See docs/diun-webhook-config.md for an example.
   recommended_events:
     - new
     - update
   not_recommended: []
   field_mappings:
-    entry_image: "$.entry.image"
-    entry_status: "$.entry.status"
-    hostname: "$.hostname"
-  severity_field: entry_status
-  display_template: "Image {entry_status} — {entry_image}"
+    status:         "$.status"
+    image:          "$.image"
+    hostname:       "$.hostname"
+    platform:       "$.platform"
+    hub_link:       "$.hub_link"
+    created:        "$.created"
+    container_name: "$.metadata.ctn_names"
+  severity_field: status
+  display_template: "Image {status} — {image}"
+  display_templates:
+    new:    "New image — {image} on {hostname}"
+    update: "Update available — {image} on {hostname}"
   severity_mapping:
     new: info
     update: info
 
 digest:
   categories:
-    - label: Updates
-      match_field: ""
-      match_value: ""
+    # DIUN sends "new" and "update" events — both at info severity, both
+    # meaningful to the user. Match on severity so the card covers every
+    # image event without needing an OR clause the schema doesn't support.
+    - source: webhook
+      label: Image Updates
       match_severity: info

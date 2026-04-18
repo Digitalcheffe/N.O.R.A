@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,21 +17,35 @@ import (
 
 // DashboardHandler holds dependencies for the dashboard endpoints.
 type DashboardHandler struct {
-	apps     repo.AppRepo
-	events   repo.EventRepo
-	checks   repo.CheckRepo
-	rollups  repo.RollupRepo
-	profiler apptemplate.Loader
+	apps        repo.AppRepo
+	events      repo.EventRepo
+	checks      repo.CheckRepo
+	rollups     repo.RollupRepo
+	profiler    apptemplate.Loader
+	registry    repo.DigestRegistryRepo
+	appMetrics  repo.AppMetricSnapshotRepo
 }
 
 // NewDashboardHandler creates a DashboardHandler with the given dependencies.
-func NewDashboardHandler(apps repo.AppRepo, events repo.EventRepo, checks repo.CheckRepo, rollups repo.RollupRepo, profiler apptemplate.Loader) *DashboardHandler {
+// registry and appMetrics may be nil — when nil, widget rendering falls back to
+// empty (categories continue to work off the profile loader for legacy tests).
+func NewDashboardHandler(
+	apps repo.AppRepo,
+	events repo.EventRepo,
+	checks repo.CheckRepo,
+	rollups repo.RollupRepo,
+	profiler apptemplate.Loader,
+	registry repo.DigestRegistryRepo,
+	appMetrics repo.AppMetricSnapshotRepo,
+) *DashboardHandler {
 	return &DashboardHandler{
-		apps:     apps,
-		events:   events,
-		checks:   checks,
-		rollups:  rollups,
-		profiler: profiler,
+		apps:       apps,
+		events:     events,
+		checks:     checks,
+		rollups:    rollups,
+		profiler:   profiler,
+		registry:   registry,
+		appMetrics: appMetrics,
 	}
 }
 
@@ -38,6 +53,89 @@ func NewDashboardHandler(apps repo.AppRepo, events repo.EventRepo, checks repo.C
 func (h *DashboardHandler) Routes(r chi.Router) {
 	r.Get("/dashboard/summary", h.Summary)
 	r.Get("/dashboard/digest/{period}", h.Digest)
+}
+
+// registryKey identifies a digest_registry row for the active-gate lookup.
+type registryKey struct {
+	profileID string
+	entryType string // "category" or "widget"
+	label     string
+}
+
+// loadActiveRegistry returns the set of active (profile, entryType, label)
+// tuples from digest_registry. Returns nil when the registry dependency is
+// not wired — callers treat nil as "gate disabled, show everything".
+func (h *DashboardHandler) loadActiveRegistry(ctx context.Context) (map[registryKey]bool, error) {
+	if h.registry == nil {
+		return nil, nil
+	}
+	entries, err := h.registry.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[registryKey]bool, len(entries))
+	for _, e := range entries {
+		if !e.Active {
+			continue
+		}
+		out[registryKey{profileID: e.ProfileID, entryType: e.EntryType, label: e.Label}] = true
+	}
+	return out, nil
+}
+
+// registryAllows reports whether (profileID, entryType, label) is active.
+// Nil map = gate disabled, so everything passes.
+func registryAllows(m map[registryKey]bool, profileID, entryType, label string) bool {
+	if m == nil {
+		return true
+	}
+	return m[registryKey{profileID: profileID, entryType: entryType, label: label}]
+}
+
+// widgetValue computes the rendered value string for a DigestWidget:
+//
+//   - source=webhook → count of events in [since, until] matching the widget's
+//     field predicate (with optional and_field/and_value compound clause).
+//     Returns "0" when nothing matches — callers render that as a zero card.
+//   - source=api     → latest app_metric_snapshot.value for the referenced
+//     metric name. Returns "—" when no snapshot exists yet (e.g. the profile
+//     declares an API widget but api_polling hasn't populated it).
+func (h *DashboardHandler) widgetValue(
+	ctx context.Context,
+	appID string,
+	wg apptemplate.DigestWidget,
+	since, until time.Time,
+) (string, error) {
+	switch wg.Source {
+	case "webhook":
+		f := repo.CategoryFilter{
+			SourceIDs:  []string{appID},
+			MatchField: wg.MatchField,
+			MatchValue: wg.MatchValue,
+			AndField:   wg.AndField,
+			AndValue:   wg.AndValue,
+			Since:      since,
+			Until:      until,
+		}
+		n, err := h.events.CountForCategory(ctx, f)
+		if err != nil {
+			return "", err
+		}
+		return strconv.Itoa(n), nil
+	case "api":
+		if h.appMetrics == nil || wg.Metric == "" {
+			return "—", nil
+		}
+		snap, err := h.appMetrics.GetByAppAndMetric(ctx, appID, wg.Metric)
+		if err != nil || snap == nil {
+			// A missing snapshot is not a handler-level failure — it just
+			// means the API poller hasn't populated this metric yet.
+			return "—", nil
+		}
+		return snap.Value, nil
+	default:
+		return "—", nil
+	}
 }
 
 // --- period helpers ---
@@ -158,6 +256,16 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Load the digest registry once — rendering is gated on active entries so
+	// deleting or deactivating a row drops the card from the UI. When the
+	// handler is wired without a registry (older tests), everything is treated
+	// as active to preserve behavior.
+	registryActive, err := h.loadActiveRegistry(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load digest registry")
+		return
+	}
+
 	// --- 2. Load all checks ---
 	checks, err := h.checks.List(ctx)
 	if err != nil {
@@ -202,6 +310,9 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, cat := range p.Digest.Categories {
+			if !registryAllows(registryActive, a.ProfileID, "category", cat.Label) {
+				continue
+			}
 			if _, exists := catMap[cat.Label]; !exists {
 				catMap[cat.Label] = &categoryEntry{
 					perApp: make(map[string]int),
@@ -214,11 +325,13 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			// Count events for this app+category in the period
 			f := repo.CategoryFilter{
 				SourceIDs:  []string{a.ID},
-				MatchField:    cat.MatchField,
-				MatchValue:    cat.MatchValue,
+				MatchField: cat.MatchField,
+				MatchValue: cat.MatchValue,
+				AndField:   cat.AndField,
+				AndValue:   cat.AndValue,
 				MatchLevel: cat.MatchSeverity,
-				Since:         pc.since,
-				Until:         pc.until,
+				Since:      pc.since,
+				Until:      pc.until,
 			}
 			n, err := h.events.CountForCategory(ctx, f)
 			if err != nil {
@@ -247,8 +360,10 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		// Use the first category definition's match criteria for sparkline (they share a label)
 		cat := entry.cats[0]
 		sf := repo.CategoryFilter{
-			MatchField:    cat.MatchField,
-			MatchValue:    cat.MatchValue,
+			MatchField: cat.MatchField,
+			MatchValue: cat.MatchValue,
+			AndField:   cat.AndField,
+			AndValue:   cat.AndValue,
 			MatchLevel: cat.MatchSeverity,
 		}
 		// Collect all app IDs that contribute to this label
@@ -337,19 +452,27 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Per-app stats from profile digest categories
+		// Per-app stats from profile digest entries, gated by digest_registry.
+		// Both categories and widgets render here (widgets stay off the main
+		// summary bar). Zero counts still produce a card so the dashboard
+		// layout doesn't jump when counts hit zero for a period.
 		var stats []appStat
 		if a.ProfileID != "" {
 			p, err := h.profiler.Get(a.ProfileID)
 			if err == nil && p != nil {
 				for _, cat := range p.Digest.Categories {
+					if !registryAllows(registryActive, a.ProfileID, "category", cat.Label) {
+						continue
+					}
 					f := repo.CategoryFilter{
 						SourceIDs:  []string{a.ID},
-						MatchField:    cat.MatchField,
-						MatchValue:    cat.MatchValue,
+						MatchField: cat.MatchField,
+						MatchValue: cat.MatchValue,
+						AndField:   cat.AndField,
+						AndValue:   cat.AndValue,
 						MatchLevel: cat.MatchSeverity,
-						Since:         pc.since,
-						Until:         pc.until,
+						Since:      pc.since,
+						Until:      pc.until,
 					}
 					n, err := h.events.CountForCategory(ctx, f)
 					if err != nil {
@@ -359,6 +482,21 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 					stats = append(stats, appStat{
 						Label: cat.Label,
 						Value: strconv.Itoa(n),
+					})
+				}
+
+				for _, wg := range p.Digest.Widgets {
+					if !registryAllows(registryActive, a.ProfileID, "widget", wg.Label) {
+						continue
+					}
+					value, err := h.widgetValue(ctx, a.ID, wg, pc.since, pc.until)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "failed to build app widget value")
+						return
+					}
+					stats = append(stats, appStat{
+						Label: wg.Label,
+						Value: value,
 					})
 				}
 			}

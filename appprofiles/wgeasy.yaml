@@ -5,7 +5,9 @@ meta:
   description: Easy WireGuard VPN server with web UI
   homepage: https://github.com/wg-easy/wg-easy
 
-webhook:
-  setup_instructions: |
-    No webhook support. NORA monitors the WireGuard client API endpoint for availability.
-
+# Meta-only for now. WG Easy's API (GET /api/wireguard/client) works with
+# Basic auth and returns a peer list including latestHandshakeAt, but the
+# metric worth showing — "connected peers" — requires filtering the array
+# by recent handshake timestamp, and the current api_polling engine only
+# supports full array length or single-value JSONPath. Total peers alone
+# isn't useful, so park this until conditional array filtering lands.

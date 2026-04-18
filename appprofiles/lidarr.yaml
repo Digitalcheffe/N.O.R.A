@@ -9,41 +9,98 @@ webhook:
   setup_instructions: |
     In Lidarr go to Settings → Connect → Add → Webhook.
     Set the URL to {base_url}/ingest/{token} and select the event types below.
+    Enable "Include Health Warnings" under On Health Issue so warn-level health events fire.
   recommended_events:
+    - On Grab
     - On Release Import
     - On Upgrade
+    - On Download Failure
+    - On Import Failure
+    - On Artist Add
     - On Health Issue
+    - On Health Restored
     - On Application Update
   not_recommended:
-    - On Grab
+    - On Rename
+    - On Track Retag
+    - On Artist Delete
+    - On Album Delete
   field_mappings:
-    event_type: "$.eventType"
-    artist_name: "$.artist.name"
-    album_title: "$.albums[0].title"
-    quality: "$.trackFiles[0].quality.quality.name"
-    health_type: "$.healthCheck.type"
-    health_message: "$.healthCheck.message"
+    event_type:       "$.eventType"
+    artist_name:      "$.artist.name"
+    artist_mbid:      "$.artist.mbId"
+    album_title:      "$.albums[0].title"
+    quality:          "$.trackFiles[0].quality.quality.name"
+    release_quality:  "$.release.quality"
+    is_upgrade:       "$.isUpgrade"
+    download_client:  "$.downloadClient"
+    previous_version: "$.previousVersion"
+    new_version:      "$.newVersion"
+    level:            "$.level"
+    message:          "$.message"
+    wiki_url:         "$.wikiUrl"
   severity_field: event_type
+  severity_compound_field: level
   display_template: "{event_type} — {artist_name} — {album_title}"
+  display_templates:
+    Grab:              "Grabbed — {artist_name} — {album_title} ({release_quality})"
+    AlbumDownload:     "Imported — {artist_name} — {album_title} ({quality})"
+    DownloadFailure:   "Download failed — {artist_name} — {album_title} ({message})"
+    ImportFailure:     "Import failed — {artist_name} — {album_title} ({message})"
+    ArtistAdd:         "Artist added — {artist_name}"
+    ArtistDelete:      "Artist removed — {artist_name}"
+    AlbumDelete:       "Album removed — {artist_name} — {album_title}"
+    HealthIssue:       "Health Issue — {message}"
+    HealthRestored:    "Health Restored — {message}"
+    ApplicationUpdate: "Lidarr updated {previous_version} → {new_version}"
   severity_mapping:
+    Grab: info
     AlbumDownload: info
-    Upgrade: info
+    DownloadFailure: error
+    ImportFailure: error
+    ArtistAdd: info
+    ArtistDelete: info
+    AlbumDelete: info
     HealthIssue: warn
+    HealthIssue:error: error
+    HealthIssue:warning: warn
     HealthRestored: info
     ApplicationUpdate: info
+    Test: info
 
 
 digest:
   categories:
-    - label: Downloads
+    - source: webhook
+      label: Downloads
       match_field: event_type
       match_value: AlbumDownload
-      match_severity: ""
-    - label: Upgrades
-      match_field: event_type
-      match_value: Upgrade
-      match_severity: ""
-    - label: Health Issues
+      and_field: is_upgrade
+      and_value: "false"
+    - source: webhook
+      label: Health Issues
       match_field: event_type
       match_value: HealthIssue
-      match_severity: ""
+  widgets:
+    - source: webhook
+      label: Grabs
+      match_field: event_type
+      match_value: Grab
+    - source: webhook
+      label: New Artists
+      match_field: event_type
+      match_value: ArtistAdd
+    - source: webhook
+      label: Upgrades
+      match_field: event_type
+      match_value: AlbumDownload
+      and_field: is_upgrade
+      and_value: "true"
+    - source: webhook
+      label: Download Failures
+      match_field: event_type
+      match_value: DownloadFailure
+    - source: webhook
+      label: Import Failures
+      match_field: event_type
+      match_value: ImportFailure

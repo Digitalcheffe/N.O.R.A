@@ -7,35 +7,41 @@ meta:
 
 webhook:
   setup_instructions: |
-    In n8n go to Settings → Log streaming or use the n8n webhook node to POST to
-    {base_url}/ingest/{token} on workflow completion and error events.
+    n8n's built-in execution notifications require an enterprise license.
+    Instead, add an HTTP Request node at the end of each workflow that POSTs
+    a fixed JSON payload to {base_url}/ingest/{token}. Use one node on the
+    success path with action=workflow.success, and one on the error path
+    with action=workflow.error. See docs/n8n-webhook-config.md for the
+    suggested node configuration.
   recommended_events:
-    - Workflow finished
-    - Workflow error
-    - Node error
+    - workflow.success
+    - workflow.error
   not_recommended: []
   field_mappings:
-    event_type: "$.eventName"
-    workflow_name: "$.workflowData.name"
-    workflow_id: "$.workflowData.id"
-    execution_id: "$.executionId"
-    error_message: "$.error.message"
-    error_node: "$.nodeName"
-  severity_field: event_type
-  display_template: "{event_type} — {workflow_name}"
+    action:        "$.action"
+    event_type:    "$.action"
+    workflow_name: "$.workflow_name"
+    workflow_id:   "$.workflow_id"
+    execution_id: "$.execution_id"
+    error_message: "$.error_message"
+    error_node:    "$.error_node"
+  severity_field: action
+  display_template: "{action} — {workflow_name}"
+  display_templates:
+    "workflow.success": "Workflow succeeded — {workflow_name}"
+    "workflow.error":   "Workflow failed — {workflow_name} ({error_node}: {error_message})"
   severity_mapping:
-    "workflow.finished": info
-    "workflow.error": error
-    "node.error": warn
+    "workflow.success": info
+    "workflow.error":   error
 
 
 digest:
-  categories:
-    - label: Workflows
-      match_field: event_type
-      match_value: "workflow.finished"
-      match_severity: ""
-    - label: Errors
-      match_field: ""
-      match_value: ""
-      match_severity: error
+  widgets:
+    - source: webhook
+      label: Successful Runs
+      match_field: action
+      match_value: "workflow.success"
+    - source: webhook
+      label: Failures
+      match_field: action
+      match_value: "workflow.error"

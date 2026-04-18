@@ -9,13 +9,33 @@ var validValueTypes = map[string]bool{
 	"list":    true,
 }
 
+// validAuthTypes lists the auth schemes the API poller understands. Profiles
+// and apps may omit auth_type entirely; only reject explicit bad values.
+var validAuthTypes = map[string]bool{
+	"":              true,
+	"none":          true,
+	"apikey_header": true,
+	"apikey_query":  true,
+	"bearer":        true,
+	"basic":         true,
+}
+
 // validate checks the structural integrity of a loaded AppTemplate.
 // Returns a descriptive error if any constraint is violated.
 // Called at load time; callers should log the error and skip the profile rather than crashing.
 func validate(id string, t *AppTemplate) error {
+	if !validAuthTypes[t.APIPolling.AuthType] {
+		return fmt.Errorf("%s: api_polling.auth_type %q must be one of apikey_header, apikey_query, bearer, basic, none", id, t.APIPolling.AuthType)
+	}
+	if t.APIPolling.AuthType == "apikey_header" || t.APIPolling.AuthType == "apikey_query" {
+		if t.APIPolling.AuthHeader == "" {
+			return fmt.Errorf("%s: api_polling.auth_header is required when auth_type=%s", id, t.APIPolling.AuthType)
+		}
+	}
+
 	// Build api_polling name index and validate each entry.
-	pollingNames := make(map[string]struct{}, len(t.APIPolling))
-	for i, p := range t.APIPolling {
+	pollingNames := make(map[string]struct{}, len(t.APIPolling.Endpoints))
+	for i, p := range t.APIPolling.Endpoints {
 		if p.Path == "" {
 			return fmt.Errorf("%s: api_polling[%d]: path is required", id, i)
 		}

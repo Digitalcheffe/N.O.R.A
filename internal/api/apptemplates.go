@@ -52,8 +52,12 @@ type appTemplateMeta struct {
 }
 
 // appTemplateDetail extends appTemplateMeta for the Get endpoint.
+// Includes api_polling auth defaults so the app settings UI can
+// pre-populate auth_type/auth_header for built-in profiles.
 type appTemplateDetail struct {
 	appTemplateMeta
+	AuthType   string `json:"auth_type,omitempty"`
+	AuthHeader string `json:"auth_header,omitempty"`
 }
 
 // List handles GET /app-templates — returns meta for all registered app templates.
@@ -99,6 +103,8 @@ func (h *AppTemplatesHandler) Get(w http.ResponseWriter, r *http.Request) {
 			Capability:  apptemplate.InferCapability(t),
 			Homepage:    t.Meta.Homepage,
 		},
+		AuthType:   t.APIPolling.AuthType,
+		AuthHeader: t.APIPolling.AuthHeader,
 	}
 	writeJSON(w, http.StatusOK, detail)
 }
