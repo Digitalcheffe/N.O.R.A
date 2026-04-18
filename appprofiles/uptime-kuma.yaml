@@ -8,25 +8,39 @@ meta:
 webhook:
   setup_instructions: |
     In Uptime Kuma go to Settings → Notifications → Add → Webhook.
-    Set the URL to {base_url}/ingest/{token}.
+    Set the URL to {base_url}/ingest/{token}. The payload shape is fixed —
+    heartbeat.status is 1 for up and 0 for down, which NORA maps to info
+    and error severity respectively.
   recommended_events:
     - Monitor down
     - Monitor up
   not_recommended: []
   field_mappings:
+    status:       "$.heartbeat.status"
+    msg:          "$.heartbeat.msg"
+    duration:     "$.heartbeat.duration"
+    time:         "$.heartbeat.time"
+    monitor_id:   "$.monitor.id"
     monitor_name: "$.monitor.name"
-    monitor_url: "$.monitor.url"
-    status: "$.heartbeat.status"
-    msg: "$.heartbeat.msg"
+    monitor_url:  "$.monitor.url"
+    monitor_type: "$.monitor.type"
   severity_field: status
   display_template: "{monitor_name} — {msg}"
+  display_templates:
+    "0": "DOWN — {monitor_name} ({msg})"
+    "1": "UP — {monitor_name} recovered after {duration}s"
   severity_mapping:
     "0": error
     "1": info
 
+
 digest:
-  categories:
-    - label: Incidents
-      match_field: ""
-      match_value: ""
-      match_severity: error
+  widgets:
+    - source: webhook
+      label: Incidents
+      match_field: status
+      match_value: "0"
+    - source: webhook
+      label: Recoveries
+      match_field: status
+      match_value: "1"

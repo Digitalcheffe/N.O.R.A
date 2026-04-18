@@ -9,40 +9,88 @@ webhook:
   setup_instructions: |
     In Radarr go to Settings → Connect → Add → Webhook.
     Set the URL to {base_url}/ingest/{token} and select the event types below.
+    Enable "Include Health Warnings" under On Health Issue so warn-level health events fire.
   recommended_events:
-    - On Download
-    - On Upgrade
-    - On Health Issue
-    - On Application Update
-  not_recommended:
     - On Grab
+    - On File Import
+    - On File Upgrade
+    - On Movie Added
+    - On Health Issue
+    - On Health Restored
+    - On Application Update
+    - On Manual Interaction Required
+  not_recommended:
+    - On Rename
+    - On Movie Delete
+    - On Movie File Delete
+    - On Movie File Delete For Upgrade
   field_mappings:
-    event_type: "$.eventType"
-    movie_title: "$.movie.title"
-    quality: "$.movieFile.quality.quality.name"
-    health_type: "$.healthCheck.type"
-    health_message: "$.healthCheck.message"
+    event_type:       "$.eventType"
+    movie_title:      "$.movie.title"
+    movie_year:       "$.movie.year"
+    imdb_id:          "$.movie.imdbId"
+    tmdb_id:          "$.movie.tmdbId"
+    quality:          "$.movieFile.quality"
+    release_quality:  "$.release.quality"
+    release_group:    "$.movieFile.releaseGroup"
+    is_upgrade:       "$.isUpgrade"
+    deleted_files:    "$.deletedFiles"
+    download_client:  "$.downloadClient"
+    previous_version: "$.previousVersion"
+    new_version:      "$.newVersion"
+    level:            "$.level"
+    message:          "$.message"
+    wiki_url:         "$.wikiUrl"
   severity_field: event_type
+  severity_compound_field: level
   display_template: "{event_type} — {movie_title}"
+  display_templates:
+    Grab:                      "Grabbed — {movie_title} ({movie_year}) ({release_quality})"
+    Download:                  "Imported — {movie_title} ({movie_year}) ({quality})"
+    MovieAdded:                "Movie added — {movie_title} ({movie_year})"
+    MovieDelete:               "Movie removed — {movie_title} ({movie_year})"
+    HealthIssue:               "Health Issue — {message}"
+    HealthRestored:            "Health Restored — {message}"
+    ApplicationUpdate:         "Radarr updated {previous_version} → {new_version}"
+    ManualInteractionRequired: "Manual action needed — {movie_title}"
   severity_mapping:
+    Grab: info
     Download: info
-    Upgrade: info
+    MovieAdded: info
+    MovieDelete: info
     HealthIssue: warn
+    HealthIssue:error: error
+    HealthIssue:warning: warn
     HealthRestored: info
     ApplicationUpdate: info
+    ManualInteractionRequired: warn
+    Test: info
 
 
 digest:
   categories:
-    - label: Downloads
+    - source: webhook
+      label: Downloads
       match_field: event_type
       match_value: Download
-      match_severity: ""
-    - label: Upgrades
-      match_field: event_type
-      match_value: Upgrade
-      match_severity: ""
-    - label: Health Issues
+      and_field: is_upgrade
+      and_value: "false"
+    - source: webhook
+      label: Health Issues
       match_field: event_type
       match_value: HealthIssue
-      match_severity: ""
+  widgets:
+    - source: webhook
+      label: Grabs
+      match_field: event_type
+      match_value: Grab
+    - source: webhook
+      label: New Movies
+      match_field: event_type
+      match_value: MovieAdded
+    - source: webhook
+      label: Upgrades
+      match_field: event_type
+      match_value: Download
+      and_field: is_upgrade
+      and_value: "true"

@@ -3,47 +3,72 @@ meta:
   category: Media
   icon: seerr
   description: Media request management for Plex, Jellyfin, and Emby
-  homepage: https://overseerr.dev
+  homepage: https://docs.jellyseerr.dev
 
 webhook:
   setup_instructions: |
-    In Seerr go to Settings → Notifications → Webhook.
-    Set the Webhook URL to {base_url}/ingest/{token} and enable the notification types below.
+    In Seerr/Jellyseerr go to Settings → Notifications → Webhook. Set the
+    Webhook URL to {base_url}/ingest/{token} and paste the custom JSON
+    template from docs/seerr-webhook-config.md as the payload body.
+    Enable all ten notification types so every event reaches NORA.
   recommended_events:
-    - Media Requested
-    - Media Approved
-    - Media Available
-    - Media Failed
-    - Issue Reported
+    - MEDIA_PENDING
+    - MEDIA_AUTO_APPROVED
+    - MEDIA_APPROVED
+    - MEDIA_DECLINED
+    - MEDIA_AVAILABLE
+    - MEDIA_FAILED
+    - ISSUE_REPORTED
+    - ISSUE_COMMENT
+    - ISSUE_RESOLVED
+    - ISSUE_REOPENED
   not_recommended: []
   field_mappings:
     notification_type: "$.notification_type"
-    subject: "$.subject"
-    message: "$.message"
-    media_type: "$.media.media_type"
-    requested_by: "$.request.requestedBy.displayName"
+    event_type:        "$.notification_type"
+    subject:           "$.subject"
+    message:           "$.message"
+    media_type:        "$.media_type"
+    media_status:      "$.media_status"
+    requested_by:      "$.requested_by"
+    reported_by:       "$.reported_by"
+    commented_by:      "$.commented_by"
+    comment_message:   "$.comment_message"
+    issue_id:          "$.issue_id"
+    request_id:        "$.request_id"
   severity_field: notification_type
   display_template: "{notification_type} — {subject}"
+  display_templates:
+    MEDIA_PENDING:       "Request pending — {subject} ({requested_by})"
+    MEDIA_AUTO_APPROVED: "Auto-approved — {subject} ({requested_by})"
+    MEDIA_APPROVED:      "Approved — {subject} ({requested_by})"
+    MEDIA_DECLINED:      "Declined — {subject} ({requested_by})"
+    MEDIA_AVAILABLE:     "Available — {subject}"
+    MEDIA_FAILED:        "Processing failed — {subject}"
+    ISSUE_REPORTED:      "Issue reported — {subject} ({reported_by})"
+    ISSUE_COMMENT:       "Comment on {subject} — {commented_by}: {comment_message}"
+    ISSUE_RESOLVED:      "Issue resolved — {subject}"
+    ISSUE_REOPENED:      "Issue reopened — {subject}"
   severity_mapping:
-    MEDIA_REQUESTED: info
-    MEDIA_APPROVED: info
-    MEDIA_AVAILABLE: info
-    MEDIA_FAILED: error
-    ISSUE_REPORTED: warn
-    ISSUE_RESOLVED: info
+    MEDIA_PENDING:       info
+    MEDIA_AUTO_APPROVED: info
+    MEDIA_APPROVED:      info
+    MEDIA_DECLINED:      warn
+    MEDIA_AVAILABLE:     info
+    MEDIA_FAILED:        error
+    ISSUE_REPORTED:      warn
+    ISSUE_COMMENT:       info
+    ISSUE_RESOLVED:      info
+    ISSUE_REOPENED:      warn
 
 
 digest:
-  categories:
-    - label: Requests
+  widgets:
+    - source: webhook
+      label: Auto Approved
       match_field: notification_type
-      match_value: MEDIA_REQUESTED
-      match_severity: ""
-    - label: Available
+      match_value: MEDIA_AUTO_APPROVED
+    - source: webhook
+      label: Processing Failed
       match_field: notification_type
-      match_value: MEDIA_AVAILABLE
-      match_severity: ""
-    - label: Issues
-      match_field: ""
-      match_value: ""
-      match_severity: error
+      match_value: MEDIA_FAILED

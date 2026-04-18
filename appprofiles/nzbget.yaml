@@ -7,6 +7,48 @@ meta:
 
 webhook:
   setup_instructions: |
-    No webhook support. NORA monitors the JSON-RPC endpoint for availability.
-    Configure base_url, username, and password to enable health checks.
+    NZBGet has no built-in webhook system. Install the NORA WebhookNotifier
+    extension (manifest.json + main.py) in your NZBGet ScriptDir, point its
+    WebhookUrl setting at {base_url}/ingest/{token}, and add it to the
+    post-processing extensions list. NZBGet v24+ required. Full install
+    steps live in docs/nzbget-webhook-config.md.
+  recommended_events:
+    - download.success
+    - download.failure
+    - download.warning
+  not_recommended: []
+  field_mappings:
+    action:         "$.action"
+    event_type:     "$.action"
+    download_name:  "$.name"
+    category:       "$.category"
+    status:         "$.status"
+    status_detail:  "$.status_detail"
+    failure_reason: "$.failure_reason"
+  severity_field: action
+  display_template: "{action} — {download_name}"
+  display_templates:
+    "download.success": "Download complete — {download_name}"
+    "download.warning": "Download warning — {download_name} ({failure_reason})"
+    "download.failure": "Download failed — {download_name} ({failure_reason})"
+  severity_mapping:
+    "download.success": info
+    "download.warning": warn
+    "download.failure": error
 
+
+digest:
+  categories:
+    - source: webhook
+      label: NZB Downloads
+      match_field: action
+      match_value: "download.success"
+  widgets:
+    - source: webhook
+      label: Failures
+      match_field: action
+      match_value: "download.failure"
+    - source: webhook
+      label: Warnings
+      match_field: action
+      match_value: "download.warning"

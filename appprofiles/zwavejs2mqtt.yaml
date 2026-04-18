@@ -1,11 +1,11 @@
 meta:
   name: Z-Wave JS to MQTT
   category: Automation
-  icon: zwave-js-to-mqtt
+  icon: z-wave-js-ui
   description: Z-Wave to MQTT gateway with web UI
+  homepage: https://zwave-js.github.io/zwave-js-ui/
 
-webhook:
-  setup_instructions: |
-    No HTTP webhook — Z-Wave JS to MQTT is MQTT-based. NORA monitors the REST health
-    endpoint only. Ensure the web server is enabled in Z-Wave JS to MQTT settings.
-
+# Meta-only profile. Z-Wave JS to MQTT is MQTT-oriented — its HTTP API is
+# geared toward the web UI and isn't shaped for a homelab dashboard. No
+# outbound webhooks either. Attach this profile for the name, icon, and
+# category; use a URL monitor check for up/down signal on the web UI.

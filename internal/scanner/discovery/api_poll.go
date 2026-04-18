@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,7 +34,7 @@ func PollOneApp(ctx context.Context, store *repo.Store, registry apptemplate.Loa
 	if err != nil || tmpl == nil {
 		return fmt.Errorf("template not found for profile %q", app.ProfileID)
 	}
-	if len(tmpl.APIPolling) == 0 {
+	if len(tmpl.APIPolling.Endpoints) == 0 {
 		return fmt.Errorf("profile %q has no api_polling entries", app.ProfileID)
 	}
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -59,7 +60,7 @@ func RunAPIPolling(ctx context.Context, store *repo.Store, registry apptemplate.
 			continue
 		}
 		tmpl, err := registry.Get(app.ProfileID)
-		if err != nil || tmpl == nil || len(tmpl.APIPolling) == 0 {
+		if err != nil || tmpl == nil || len(tmpl.APIPolling.Endpoints) == 0 {
 			continue
 		}
 		if err := pollApp(ctx, store, client, app, tmpl.APIPolling); err != nil {
@@ -75,7 +76,7 @@ func pollApp(
 	store *repo.Store,
 	client *http.Client,
 	app models.App,
-	entries []apptemplate.APIPollingEntry,
+	block apptemplate.APIPollingBlock,
 ) error {
 	var cfg map[string]interface{}
 	if err := json.Unmarshal(app.Config, &cfg); err != nil {
@@ -83,13 +84,34 @@ func pollApp(
 	}
 	baseURL := apipoller.ResolveAPIBaseURL(cfg)
 	apiKey, _ := cfg["api_key"].(string)
+	auth := resolveAuth(cfg, block)
 
-	for _, entry := range entries {
-		if err := pollEntry(ctx, store, client, app, entry, baseURL, apiKey); err != nil {
+	for _, entry := range block.Endpoints {
+		if err := pollEntry(ctx, store, client, app, entry, baseURL, apiKey, auth); err != nil {
 			log.Printf("api polling: app %s (%s): entry %q: %v", app.Name, app.ID, entry.Name, err)
 		}
 	}
 	return nil
+}
+
+// resolveAuth picks the effective auth config for an app: values set on the
+// app record win, with the profile block providing defaults. The result uses
+// AuthType="none" when nothing is configured.
+func resolveAuth(cfg map[string]interface{}, block apptemplate.APIPollingBlock) apptemplate.APIPollingBlock {
+	out := apptemplate.APIPollingBlock{
+		AuthType:   block.AuthType,
+		AuthHeader: block.AuthHeader,
+	}
+	if v, ok := cfg["auth_type"].(string); ok && v != "" {
+		out.AuthType = v
+	}
+	if v, ok := cfg["auth_header"].(string); ok && v != "" {
+		out.AuthHeader = v
+	}
+	if out.AuthType == "" {
+		out.AuthType = "none"
+	}
+	return out
 }
 
 // pollEntry executes a single APIPollingEntry for an app.
@@ -100,6 +122,7 @@ func pollEntry(
 	app models.App,
 	entry apptemplate.APIPollingEntry,
 	baseURL, apiKey string,
+	auth apptemplate.APIPollingBlock,
 ) error {
 	rawURL := strings.TrimRight(baseURL, "/") + entry.Path
 
@@ -109,7 +132,7 @@ func pollEntry(
 	}
 
 	// Attach auth credentials to the request without embedding secrets in any URL string.
-	if auth := apipoller.Get(app.ProfileID); auth != nil && apiKey != "" {
+	if apiKey != "" {
 		switch auth.AuthType {
 		case "apikey_header":
 			if auth.AuthHeader != "" {
@@ -123,6 +146,8 @@ func pollEntry(
 			}
 		case "bearer":
 			req.Header.Set("Authorization", "Bearer "+apiKey)
+		case "basic":
+			req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(apiKey)))
 		}
 	}
 

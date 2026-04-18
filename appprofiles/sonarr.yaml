@@ -9,61 +9,65 @@ webhook:
   setup_instructions: |
     In Sonarr go to Settings → Connect → Add → Webhook.
     Set the URL to {base_url}/ingest/{token} and select the event types below.
+    Enable "Include Health Warnings" under On Health Issue so warn-level health events fire.
   recommended_events:
-    - On Download
-    - On Upgrade
-    - On Health Issue
-    - On Application Update
-  not_recommended:
     - On Grab
+    - On File Import
+    - On File Upgrade
+    - On Series Add
+    - On Health Issue
+    - On Health Restored
+    - On Application Update
+    - On Manual Interaction Required
+  not_recommended:
+    - On Rename
+    - On Series Delete
+    - On Episode File Delete
+    - On Episode File Delete For Upgrade
+    - On Import Complete
   field_mappings:
-    event_type: "$.eventType"
-    series_title: "$.series.title"
-    episode_title: "$.episodes[0].title"
-    season: "$.episodes[0].seasonNumber"
-    episode: "$.episodes[0].episodeNumber"
-    quality: "$.episodes[0].quality.quality.name"
-    level: "$.level"
-    message: "$.message"
+    event_type:       "$.eventType"
+    series_title:     "$.series.title"
+    series_type:      "$.series.type"
+    episode_title:    "$.episodes[0].title"
+    season:           "$.episodes[0].seasonNumber"
+    episode:          "$.episodes[0].episodeNumber"
+    quality:          "$.episodeFile.quality"
+    release_quality:  "$.release.quality"
+    release_group:    "$.episodeFile.releaseGroup"
+    is_upgrade:       "$.isUpgrade"
+    deleted_files:    "$.deletedFiles"
+    download_client:  "$.downloadClient"
+    previous_version: "$.previousVersion"
+    new_version:      "$.newVersion"
+    level:            "$.level"
+    message:          "$.message"
+    wiki_url:         "$.wikiUrl"
   severity_field: event_type
   severity_compound_field: level
   display_template: "{event_type} — {series_title}"
   display_templates:
-    Download: "Download — {series_title} S{season}E{episode}"
-    Grab: "Grabbed — {series_title} S{season}E{episode}"
-    Health: "Health Issue — {message}"
-    HealthRestored: "Health Restored — {message}"
-    ApplicationUpdate: "Sonarr updated to {message}"
+    Grab:                      "Grabbed — {series_title} S{season}E{episode} ({release_quality})"
+    Download:                  "Imported — {series_title} S{season}E{episode} ({quality})"
+    SeriesAdd:                 "Series added — {series_title}"
+    SeriesDelete:              "Series removed — {series_title}"
+    Health:                    "Health Issue — {message}"
+    HealthRestored:            "Health Restored — {message}"
+    ApplicationUpdate:         "Sonarr updated {previous_version} → {new_version}"
+    ManualInteractionRequired: "Manual action needed — {series_title}"
   severity_mapping:
-    Download: info
-    Upgrade: info
     Grab: info
+    Download: info
+    SeriesAdd: info
+    SeriesDelete: info
     Health: warn
     Health:error: error
     Health:warning: warn
     HealthRestored: info
     ApplicationUpdate: info
+    ManualInteractionRequired: warn
     Test: info
 
-
-api_polling:
-  - name: total_series
-    label: Series Tracked
-    path: /api/v3/series
-    target: length
-    value_type: count
-
-  - name: queue_depth
-    label: Queue Depth
-    path: /api/v3/queue
-    target: $.totalRecords
-    value_type: count
-
-  - name: health_issues
-    label: Health Issues
-    path: /api/v3/health
-    target: length
-    value_type: count
 
 digest:
   categories:
@@ -71,22 +75,24 @@ digest:
       label: Downloads
       match_field: event_type
       match_value: Download
-    - source: webhook
-      label: Upgrades
-      match_field: event_type
-      match_value: Upgrade
+      and_field: is_upgrade
+      and_value: "false"
     - source: webhook
       label: Health Issues
       match_field: event_type
       match_value: Health
   widgets:
-    - source: api
-      metric: total_series
-      label: Series Tracked
-    - source: api
-      metric: queue_depth
-      label: In Queue
     - source: webhook
-      label: Downloads Today
+      label: Grabs
+      match_field: event_type
+      match_value: Grab
+    - source: webhook
+      label: New Series
+      match_field: event_type
+      match_value: SeriesAdd
+    - source: webhook
+      label: Upgrades
       match_field: event_type
       match_value: Download
+      and_field: is_upgrade
+      and_value: "true"

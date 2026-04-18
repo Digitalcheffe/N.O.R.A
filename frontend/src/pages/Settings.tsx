@@ -1847,8 +1847,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   monitor: 'Monitor',
   scan: 'Scan Engine',
   data: 'Data',
+  profiles: 'Profiles',
 }
-const CATEGORY_ORDER = ['monitor', 'scan', 'data']
+const CATEGORY_ORDER = ['monitor', 'scan', 'data', 'profiles']
 
 function JobsTab() {
   const [jobList, setJobList] = useState<Job[]>([])

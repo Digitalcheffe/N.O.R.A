@@ -5,37 +5,7 @@ meta:
   description: Indexer manager and proxy for Usenet and torrents
   homepage: https://prowlarr.com
 
-webhook:
-  setup_instructions: |
-    In Prowlarr go to Settings → Connect → Add → Webhook.
-    Set the URL to {base_url}/ingest/{token} and select the event types below.
-  recommended_events:
-    - On Health Issue
-    - On Application Update
-    - On Grab
-  not_recommended: []
-  field_mappings:
-    event_type: "$.eventType"
-    indexer_name: "$.grabInfo.indexerName"
-    release_title: "$.grabInfo.title"
-    health_type: "$.healthCheck.type"
-    health_message: "$.healthCheck.message"
-  severity_field: event_type
-  display_template: "{event_type} — {indexer_name}"
-  severity_mapping:
-    Grab: info
-    HealthIssue: warn
-    HealthRestored: info
-    ApplicationUpdate: info
-
-
-digest:
-  categories:
-    - label: Grabs
-      match_field: event_type
-      match_value: Grab
-      match_severity: ""
-    - label: Health Issues
-      match_field: event_type
-      match_value: HealthIssue
-      match_severity: ""
+# Meta-only profile. Prowlarr isn't in active use here yet, so the webhook
+# payloads haven't been validated end-to-end — shipping a half-baked mapping
+# would mislabel events. When someone puts Prowlarr into production,
+# reintroduce field_mappings / digest entries using real captured payloads.

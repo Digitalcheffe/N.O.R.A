@@ -1,0 +1,44 @@
+meta:
+  name: What's Up Docker
+  category: Infrastructure
+  icon: whats-up-docker
+  description: Monitors Docker containers for available image updates
+  homepage: https://getwud.github.io/wud/
+
+# WUD replaces the abandoned Watchtower project. It fires an HTTP trigger
+# POST for each container update it detects — one event per container per
+# cycle. Configure via environment variables on the wud container; see
+# docs/whatsupdocker-webhook-config.md for the trigger block.
+
+webhook:
+  setup_instructions: |
+    In the wud container environment set:
+      TRIGGER_HTTP_NORA_URL={base_url}/ingest/{token}
+      TRIGGER_HTTP_NORA_METHOD=POST
+    WUD posts a JSON body per detected update (one event per container).
+    See docs/whatsupdocker-webhook-config.md for the full trigger config.
+  recommended_events:
+    - container update available
+  not_recommended: []
+  field_mappings:
+    container_id:   "$.id"
+    container_name: "$.name"
+    watcher_name:   "$.watcher"
+    image_name:     "$.image.name"
+    image_tag:      "$.image.tag.value"
+    update_kind:    "$.updateKind.kind"
+    update_from:    "$.updateKind.localValue"
+    update_to:      "$.updateKind.remoteValue"
+    changelog_url:  "$.result.link"
+  severity_field: update_kind
+  display_template: "Update available — {container_name}: {update_from} → {update_to}"
+  severity_mapping:
+    tag:    info
+    digest: info
+
+
+digest:
+  categories:
+    - source: webhook
+      label: Updates Available
+      match_severity: info

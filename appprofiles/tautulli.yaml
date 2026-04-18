@@ -8,28 +8,91 @@ meta:
 webhook:
   setup_instructions: |
     In Tautulli go to Settings → Notification Agents → Add → Webhook.
-    Set the Webhook URL to {base_url}/ingest/{token} and configure triggers below.
+    Set the Webhook URL to {base_url}/ingest/{token}. Each trigger needs
+    its own JSON body — paste the templates from docs/tautulli-webhook-config.md
+    into the Data section of each matching notification agent.
   recommended_events:
     - Playback Start
+    - Watched
+    - Recently Added
+    - User New Device
+    - Plex Server Down
+    - Plex Server Back Up
+    - Plex Remote Access Down
+    - Plex Remote Access Back Up
+    - Plex Update Available
+    - Tautulli Update Available
+    - Tautulli Database Corruption
+    - Tautulli Plex Token Expired
+  not_recommended:
     - Playback Stop
     - Playback Pause
     - Playback Resume
-  not_recommended: []
+    - Playback Error
+    - Transcode Decision Change
+    - Intro / Commercial / Credits Marker
+    - Buffer Warning
+    - User Concurrent Streams
   field_mappings:
-    action: "$.action"
-    user: "$.user"
-    title: "$.title"
-    media_type: "$.media_type"
-    player: "$.player"
-    quality: "$.quality"
-  severity_field: ""
-  display_template: "{action} — {title} ({user})"
-  severity_mapping: {}
+    action:                  "$.action"
+    event_type:              "$.action"
+    user:                    "$.user"
+    title:                   "$.title"
+    media_type:              "$.media_type"
+    player:                  "$.player"
+    platform:                "$.platform"
+    stream_location:         "$.stream_location"
+    transcode_decision:      "$.transcode_decision"
+    show_name:               "$.show_name"
+    season_num:              "$.season_num"
+    episode_num:             "$.episode_num"
+    year:                    "$.year"
+    library_name:            "$.library_name"
+    server_name:             "$.server_name"
+    update_version:          "$.update_version"
+    tautulli_update_version: "$.tautulli_update_version"
+    remote_access_reason:    "$.remote_access_reason"
+  severity_field: action
+  display_template: "{action} — {title}"
+  display_templates:
+    "playback.start":          "Playback — {user}: {title} ({player})"
+    "watched":                 "Watched — {user}: {title}"
+    "recently_added":          "Added to {library_name} — {title}"
+    "user_new_device":         "New device — {user} on {player} ({platform})"
+    "plex_server_down":        "Plex server down — {server_name}"
+    "plex_server_up":          "Plex server back up — {server_name}"
+    "plex_remote_down":        "Remote access down — {remote_access_reason}"
+    "plex_remote_up":          "Remote access back up — {server_name}"
+    "plex_update":             "Plex update available — {update_version}"
+    "tautulli_update":         "Tautulli update available — {tautulli_update_version}"
+    "tautulli_db_corruption":  "Tautulli database corruption detected"
+    "tautulli_token_expired":  "Tautulli Plex token expired"
+  severity_mapping:
+    "playback.start":         info
+    "watched":                info
+    "recently_added":         info
+    "user_new_device":        info
+    "plex_server_down":       error
+    "plex_server_up":         info
+    "plex_remote_down":       warn
+    "plex_remote_up":         info
+    "plex_update":            info
+    "tautulli_update":        info
+    "tautulli_db_corruption": error
+    "tautulli_token_expired": warn
 
 
 digest:
-  categories:
-    - label: Plays
+  widgets:
+    - source: webhook
+      label: Plays
       match_field: action
-      match_value: play
-      match_severity: ""
+      match_value: "playback.start"
+    - source: webhook
+      label: Watched
+      match_field: action
+      match_value: "watched"
+    - source: webhook
+      label: Recently Added
+      match_field: action
+      match_value: "recently_added"

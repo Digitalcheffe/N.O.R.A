@@ -3,9 +3,21 @@ meta:
   category: Network
   icon: cloudflare
   description: Automatic Cloudflare DNS updater for dynamic IP addresses
+  homepage: https://github.com/timothyjmiller/cloudflare-ddns
+
+# Container image: timothyjmiller/cloudflare-ddns
+#
+# Notifications go through Shoutrrr. The generic HTTP target sends only
+# {"message": "..."} with no event type or ok/fail flag — everything we can
+# see is the plain text message, so this is an ingest-only profile with no
+# field extraction or digest cards.
+#
+# Configure the container's SHOUTRRR env var with:
+#   generic+http://<nora-host>/api/v1/ingest/{token}
 
 webhook:
   setup_instructions: |
-    No HTTP interface. NORA monitors the container via Docker socket.
-    A healthy running container indicates the DDNS updater is active.
-    Docker socket integration must be enabled in NORA settings.
+    Set the SHOUTRRR environment variable on the cloudflare-ddns container to:
+      generic+http://<nora-host>/api/v1/ingest/{token}
+    Events arrive with only a message string and land in the event feed as-is.
+    No digest cards or widgets — text-only ingest.

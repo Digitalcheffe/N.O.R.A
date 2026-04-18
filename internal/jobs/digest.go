@@ -455,6 +455,8 @@ func (d *DigestJob) buildDigestData(ctx context.Context, period string) (*Digest
 					SourceIDs:  []string{app.ID},
 					MatchField: cat.MatchField,
 					MatchValue: cat.MatchValue,
+					AndField:   cat.AndField,
+					AndValue:   cat.AndValue,
 					MatchLevel: cat.MatchSeverity,
 					Since:      since,
 					Until:      until,

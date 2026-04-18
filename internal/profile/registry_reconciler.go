@@ -140,6 +140,26 @@ func (rc *RegistryReconciler) Reconcile(ctx context.Context) error {
 		}
 	}
 
+	// Deactivate rows whose profile was removed entirely. The per-profile
+	// loop above only visits templates that still load, so orphans left by
+	// a deleted profile YAML (e.g. Watchtower) would stay Active forever.
+	all, err := rc.repo.List(ctx)
+	if err != nil {
+		return fmt.Errorf("list digest registry: %w", err)
+	}
+	for _, e := range all {
+		if _, ok := templates[e.ProfileID]; ok {
+			continue
+		}
+		if !e.Active {
+			continue
+		}
+		if err := rc.repo.SetActive(ctx, e.ProfileID, e.Name, false); err != nil {
+			return fmt.Errorf("deactivate orphan %s/%s: %w", e.ProfileID, e.Name, err)
+		}
+		log.Printf("digest registry: deactivated %s/%s (profile no longer loaded)", e.ProfileID, e.Name)
+	}
+
 	return nil
 }
 
@@ -151,6 +171,12 @@ func categoryConfig(cat apptemplate.DigestCategory) (models.JSONText, error) {
 	}
 	if cat.MatchSeverity != "" {
 		m["match_severity"] = cat.MatchSeverity
+	}
+	if cat.AndField != "" {
+		m["and_field"] = cat.AndField
+	}
+	if cat.AndValue != "" {
+		m["and_value"] = cat.AndValue
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -170,6 +196,12 @@ func widgetConfig(w apptemplate.DigestWidget) (models.JSONText, error) {
 	}
 	if w.MatchValue != "" {
 		m["match_value"] = w.MatchValue
+	}
+	if w.AndField != "" {
+		m["and_field"] = w.AndField
+	}
+	if w.AndValue != "" {
+		m["and_value"] = w.AndValue
 	}
 	b, err := json.Marshal(m)
 	if err != nil {

@@ -3,8 +3,8 @@ meta:
   category: Infrastructure
   icon: homepage
   description: Highly customisable application dashboard
+  homepage: https://gethomepage.dev
 
-webhook:
-  setup_instructions: |
-    No webhook or API. NORA monitors the dashboard base URL for availability.
-
+# Meta-only profile. Homepage is a dashboard UI with no outbound webhooks
+# and no API worth polling for NORA. Attach this profile for the name,
+# icon, and category; use a URL monitor check if you want up/down signal.

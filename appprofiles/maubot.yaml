@@ -1,10 +1,29 @@
 meta:
   name: Maubot
   category: Automation
-  icon: maubot
+  icon: matrix
   description: Plugin-based Matrix bot manager
+  homepage: https://docs.mau.fi/maubot
 
-webhook:
-  setup_instructions: |
-    No outbound webhook. NORA monitors the Maubot management API endpoint for availability.
+# Maubot has no outbound webhooks. We read the management API with a
+# bearer token obtained from POST /_matrix/maubot/v1/auth/login.
+#
+# Note: the ideal widget is "count instances where started == true", but
+# the current scanner only supports full-array length or single-value
+# JSONPath — no conditional filtering. We report total instance count as
+# a close-enough signal.
 
+api_polling:
+  auth_type: bearer
+  endpoints:
+    - name: total_instances
+      label: Plugin Instances
+      path: /_matrix/maubot/v1/instances
+      target: length
+      value_type: count
+
+digest:
+  widgets:
+    - source: api
+      metric: total_instances
+      label: Plugin Instances

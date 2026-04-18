@@ -5,8 +5,7 @@ meta:
   description: Self-hosted push notification server
   homepage: https://gotify.net
 
-webhook:
-  setup_instructions: |
-    Gotify is itself a notification server — it does not emit webhooks outbound.
-    NORA monitors the health endpoint to ensure the notification server is reachable.
-
+# Meta-only profile. Gotify is a receiver, not an emitter — it doesn't send
+# webhooks outbound, and there's nothing on its API worth polling for a
+# dashboard. Attach this profile to get the right name, icon, and category;
+# use monitor checks if you want an up/down signal.

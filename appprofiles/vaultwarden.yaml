@@ -5,8 +5,7 @@ meta:
   description: Lightweight self-hosted Bitwarden-compatible password manager
   homepage: https://github.com/dani-garcia/vaultwarden
 
-webhook:
-  setup_instructions: |
-    No webhook support. NORA monitors the health endpoint for availability.
-    SSL certificate monitoring is strongly recommended — this is a password manager.
-
+# Meta-only profile. Vaultwarden has no outbound webhooks and no public
+# events worth ingesting. Attach this profile for the name, icon, and
+# category; add URL + SSL monitor checks — this is a password manager and
+# both availability and cert expiry matter.

@@ -298,7 +298,12 @@ export interface AppTemplate {
     check_type: string
     check_url: string   // raw template, e.g. "{base_url}/ping" — substitute before use
   }
+  // api_polling auth defaults — only present on GET /app-templates/{id}
+  auth_type?: AppAuthType
+  auth_header?: string
 }
+
+export type AppAuthType = 'none' | 'apikey_header' | 'apikey_query' | 'bearer' | 'basic'
 
 // ── Custom App Templates ───────────────────────────────────────────────────────
 

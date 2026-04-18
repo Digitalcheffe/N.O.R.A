@@ -3,9 +3,10 @@ meta:
   category: Network
   icon: unifi
   description: Ubiquiti UniFi network controller
-  homepage: https://ui.com
+  homepage: https://ui.com/download/network-application
 
-webhook:
-  setup_instructions: |
-    No webhook support. NORA monitors the controller base URL for availability.
-
+# Meta-only for now. UniFi Network Application's Alarm Manager can emit
+# webhooks, but the per-trigger payload shapes aren't documented publicly
+# and the controller API uses session auth rather than a static key. Revisit
+# once real payloads are captured from a live controller and we decide
+# whether session-auth polling is worth wiring up.

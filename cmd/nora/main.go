@@ -393,6 +393,19 @@ func main() {
 		},
 	})
 
+	// PROFILES — reload profile YAMLs and reconcile the digest registry
+	// on demand, without a full server restart.
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "reload_templates", Name: "Reload App Templates", Category: "profiles",
+		Description: "Re-reads every profile YAML from disk. Run after editing a builtin or custom profile.",
+		RunFn:       func(ctx context.Context) error { return jobs.RunTemplateReload(ctx, registry) },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "reload_digest_registry", Name: "Reload Digest Registry", Category: "profiles",
+		Description: "Syncs the digest registry with the loaded profiles — upserts new categories/widgets and deactivates removed ones.",
+		RunFn:       func(ctx context.Context) error { return jobs.RunDigestRegistryReconcile(ctx, reconciler) },
+	})
+
 	// Router
 	r := chi.NewRouter()
 	if cfg.IsDebug() {
@@ -425,7 +438,7 @@ func main() {
 		}
 		api.NewEventsHandler(eventRepo).Routes(r)
 		api.NewChecksHandler(checkRepo, eventRepo, monitorScheduler).Routes(r)
-		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry).Routes(r)
+		api.NewDashboardHandler(appRepo, eventRepo, checkRepo, rollupRepo, registry, store.DigestRegistry, appMetricSnapshotRepo).Routes(r)
 		api.NewTopologyHandler(infraComponentRepo, appRepo, componentLinkRepo, store.DiscoveredContainers).Routes(r)
 		api.NewInfraComponentHandler(infraComponentRepo, resourceRollupRepo, checkRepo, eventRepo, store).Routes(r)
 		api.NewProfilesHandler(registry, customDir).Routes(r)
