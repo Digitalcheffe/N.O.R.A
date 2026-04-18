@@ -45,10 +45,6 @@ func (n *notifyingEventRepo) CountForCategory(ctx context.Context, f repo.Catego
 	return n.inner.CountForCategory(ctx, f)
 }
 
-func (n *notifyingEventRepo) SparklineBuckets(ctx context.Context, f repo.CategoryFilter, startTime time.Time, bucketDur time.Duration) ([7]int, error) {
-	return n.inner.SparklineBuckets(ctx, f, startTime, bucketDur)
-}
-
 func (n *notifyingEventRepo) LatestPerApp(ctx context.Context, appIDs []string) (map[string]*models.Event, error) {
 	return n.inner.LatestPerApp(ctx, appIDs)
 }

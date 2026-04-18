@@ -166,10 +166,9 @@ func parsePeriod(param string, now time.Time) periodConfig {
 // --- response types ---
 
 type summaryBarItem struct {
-	Label     string `json:"label"`
-	Count     int    `json:"count"`
-	Sub       string `json:"sub"`
-	Sparkline [7]int `json:"sparkline"`
+	Label string `json:"label"`
+	Count int    `json:"count"`
+	Sub   string `json:"sub"`
 }
 
 type appStat struct {
@@ -188,7 +187,6 @@ type appSummary struct {
 	LastEventAt   *string   `json:"last_event_at"`
 	LastEventText *string   `json:"last_event_text"`
 	Stats         []appStat `json:"stats"`
-	Sparkline     [7]int    `json:"sparkline"`
 	ChecksUp      int       `json:"checks_up"`
 	ChecksTotal   int       `json:"checks_total"`
 }
@@ -277,10 +275,9 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 
 	// categoryEntry accumulates cross-app data for one label.
 	type categoryEntry struct {
-		cats    []apptemplate.DigestCategory // all matching category definitions
-		perApp  map[string]int           // appID → count
-		total   int
-		sparkline [7]int
+		cats   []apptemplate.DigestCategory // all matching category definitions
+		perApp map[string]int               // appID → count
+		total  int
 	}
 
 	// keyed by label
@@ -343,37 +340,17 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build sparklines and sub-strings for all categories, including zero-count ones
+	// Build sub-strings for all categories, including zero-count ones.
 	summaryBar := make([]summaryBarItem, 0, len(catOrder))
 	for _, label := range catOrder {
 		entry := catMap[label]
 		if entry.total == 0 {
 			summaryBar = append(summaryBar, summaryBarItem{
-				Label:     label,
-				Count:     0,
-				Sub:       "",
-				Sparkline: [7]int{},
+				Label: label,
+				Count: 0,
+				Sub:   "",
 			})
 			continue
-		}
-
-		// Use the first category definition's match criteria for sparkline (they share a label)
-		cat := entry.cats[0]
-		sf := repo.CategoryFilter{
-			MatchField: cat.MatchField,
-			MatchValue: cat.MatchValue,
-			AndField:   cat.AndField,
-			AndValue:   cat.AndValue,
-			MatchLevel: cat.MatchSeverity,
-		}
-		// Collect all app IDs that contribute to this label
-		for appID := range entry.perApp {
-			sf.SourceIDs = append(sf.SourceIDs, appID)
-		}
-		sparkline, err := h.events.SparklineBuckets(ctx, sf, pc.since, pc.bucketDur)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to build sparkline")
-			return
 		}
 
 		// Build sub string: "AppName N · AppName N" for apps with count > 0
@@ -394,10 +371,9 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 		}
 
 		summaryBar = append(summaryBar, summaryBarItem{
-			Label:     label,
-			Count:     entry.total,
-			Sub:       strings.Join(subParts, " · "),
-			Sparkline: sparkline,
+			Label: label,
+			Count: entry.total,
+			Sub:   strings.Join(subParts, " · "),
 		})
 	}
 
@@ -439,17 +415,6 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			status = "down"
 		} else if s == "warn" {
 			status = "warn"
-		}
-
-		// Per-app sparkline: all events for this app in the period
-		appSparkline, err := h.events.SparklineBuckets(ctx, repo.CategoryFilter{
-			SourceIDs: []string{a.ID},
-			Since:  pc.since,
-			Until:  pc.until,
-		}, pc.since, pc.bucketDur)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to build app sparkline")
-			return
 		}
 
 		// Per-app stats from profile digest entries, gated by digest_registry.
@@ -519,7 +484,6 @@ func (h *DashboardHandler) Summary(w http.ResponseWriter, r *http.Request) {
 			LastEventAt:   lastEventAt,
 			LastEventText: lastEventText,
 			Stats:         stats,
-			Sparkline:     appSparkline,
 			ChecksUp:      cc.up,
 			ChecksTotal:   cc.total,
 		}

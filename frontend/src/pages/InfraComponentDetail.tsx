@@ -15,8 +15,6 @@ import type {
   InfrastructureComponent,
   InfrastructureComponentInput,
   ResourceSummary,
-  ResourceHistory,
-  ResourceRollupPoint,
   SNMPDetail,
   SNMPDisk,
   SynologyDetail,
@@ -27,26 +25,6 @@ import { InfraTypeIcon } from '../components/CheckTypeIcon'
 import { InfraEditModal, TYPE_LABEL } from './InfraEditModal'
 import './InfraComponentDetail.css'
 
-
-// ── Sparkline ─────────────────────────────────────────────────────────────────
-
-function Sparkline({ points, color = 'var(--accent)' }: { points: ResourceRollupPoint[]; color?: string }) {
-  if (points.length < 2) {
-    return <svg width={120} height={32} style={{ display: 'block' }} />
-  }
-  const w = 120, h = 32
-  const vals = points.map(p => p.avg)
-  const coords = points.map((_, i) => {
-    const x = (i / (points.length - 1)) * w
-    const y = h - (vals[i] / 100) * (h - 4) - 2
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
-  return (
-    <svg width={w} height={h} style={{ display: 'block' }}>
-      <polyline points={coords.join(' ')} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  )
-}
 
 // ── Resource section ──────────────────────────────────────────────────────────
 
@@ -62,15 +40,7 @@ function ResourceBar({ label, value, color }: { label: string; value: number; co
   )
 }
 
-function ResourceSection({ resources, history }: { resources: ResourceSummary | null; history: ResourceHistory | null }) {
-  const byMetric: Record<string, ResourceRollupPoint[]> = {}
-  if (history) {
-    for (const pt of history.data) {
-      if (!byMetric[pt.metric]) byMetric[pt.metric] = []
-      byMetric[pt.metric].push(pt)
-    }
-  }
-
+function ResourceSection({ resources }: { resources: ResourceSummary | null }) {
   const metrics = [
     { key: 'cpu_percent',  label: 'CPU',  value: resources?.cpu_percent  ?? 0, color: 'var(--accent)' },
     { key: 'mem_percent',  label: 'Mem',  value: resources?.mem_percent  ?? 0, color: 'var(--green)' },
@@ -78,9 +48,8 @@ function ResourceSection({ resources, history }: { resources: ResourceSummary | 
   ]
 
   const hasData = resources && !resources.no_data
-  const hasHistory = Object.keys(byMetric).length > 0
 
-  if (!hasData && !hasHistory) {
+  if (!hasData) {
     return (
       <div className="icd-section">
         <div className="icd-section-title">Resources</div>
@@ -97,15 +66,9 @@ function ResourceSection({ resources, history }: { resources: ResourceSummary | 
           <div key={m.key} className="icd-resource-card">
             <div className="icd-resource-card-header">
               <span className="icd-resource-card-label">{m.label}</span>
-              {hasData && <span className="icd-resource-card-value">{m.value.toFixed(1)}%</span>}
+              <span className="icd-resource-card-value">{m.value.toFixed(1)}%</span>
             </div>
-            {hasData && <ResourceBar label="" value={m.value} color={m.color} />}
-            {hasHistory && byMetric[m.key] && byMetric[m.key].length >= 2 && (
-              <div className="icd-resource-spark">
-                <Sparkline points={byMetric[m.key]} color={m.color} />
-                <div className="icd-spark-label">Last {byMetric[m.key].length}h</div>
-              </div>
-            )}
+            <ResourceBar label="" value={m.value} color={m.color} />
           </div>
         ))}
       </div>
@@ -388,7 +351,6 @@ export function InfraComponentDetail() {
 
   const [component,        setComponent]        = useState<InfrastructureComponent | null>(null)
   const [resources,        setResources]        = useState<ResourceSummary | null>(null)
-  const [history,          setHistory]          = useState<ResourceHistory | null>(null)
   const [snmpDetail,       setSnmpDetail]       = useState<SNMPDetail | null>(null)
   const [linkedApps,       setLinkedApps]       = useState<App[]>([])
   const [allApps,          setAllApps]          = useState<App[]>([])
@@ -407,15 +369,13 @@ export function InfraComponentDetail() {
     Promise.all([
       infraApi.get(id),
       infraApi.resources(id, 'hour'),
-      infraApi.resourceHistory(id, 'hour', 24),
       infraApi.linkedApps(id),
       appsApi.list(),
       infraApi.list(),
     ])
-      .then(([comp, res, hist, linked, allA, allComps]) => {
+      .then(([comp, res, linked, allA, allComps]) => {
         setComponent(comp)
         setResources(res)
-        setHistory(hist)
         setLinkedApps(linked.data)
         setAllApps(allA.data)
         setAllComponents(allComps.data)
@@ -657,7 +617,7 @@ export function InfraComponentDetail() {
 
       {/* Non-SNMP resource metrics */}
       {component.type !== 'docker_engine' && component.collection_method !== 'snmp' && (
-        <ResourceSection resources={resources} history={history} />
+        <ResourceSection resources={resources} />
       )}
 
       {/* Type-specific content */}

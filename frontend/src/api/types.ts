@@ -232,7 +232,6 @@ export interface SummaryBarItem {
   label: string
   count: number
   sub: string
-  sparkline: number[]
 }
 
 export interface AppStat {
@@ -251,7 +250,6 @@ export interface AppSummary {
   last_event_at: string | null
   last_event_text: string | null
   stats: AppStat[] | null
-  sparkline: number[]
   checks_up: number
   checks_total: number
 }
@@ -440,20 +438,6 @@ export interface ResourceSummary {
   no_data?: boolean
 }
 
-export interface ResourceRollupPoint {
-  period_start: string
-  metric: string
-  avg: number
-  min: number
-  max: number
-}
-
-export interface ResourceHistory {
-  component_id: string
-  period: string
-  data: ResourceRollupPoint[]
-  total: number
-}
 
 // ── Proxmox Detail ────────────────────────────────────────────────────────────
 
