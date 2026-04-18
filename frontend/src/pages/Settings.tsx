@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePushSubscription } from '../hooks/usePushSubscription'
 import type {
   AppTemplate,
+  CleanupPreview,
   CreateRuleInput,
   CustomProfile,
   DigestFrequency,
@@ -1848,13 +1849,28 @@ const CATEGORY_LABELS: Record<string, string> = {
   scan: 'Scan Engine',
   data: 'Data',
   profiles: 'Profiles',
+  cleanup: 'Cleanup',
 }
-const CATEGORY_ORDER = ['monitor', 'scan', 'data', 'profiles']
+const CATEGORY_ORDER = ['monitor', 'scan', 'data', 'profiles', 'cleanup']
+
+// ConfirmJob is the state carried by the destructive-job preview SlidePanel.
+// When open === true the panel renders the preview returned from
+// jobsApi.preview() and waits for the user to confirm before firing jobsApi.run().
+type ConfirmJob = {
+  open: boolean
+  job: Job | null
+  loading: boolean
+  preview: CleanupPreview | null
+  error: string | null
+}
 
 function JobsTab() {
   const [jobList, setJobList] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [runState, setRunState] = useState<Record<string, RunState>>({})
+  const [confirm, setConfirm] = useState<ConfirmJob>({
+    open: false, job: null, loading: false, preview: null, error: null,
+  })
 
   useEffect(() => {
     jobsApi.list()
@@ -1863,7 +1879,9 @@ function JobsTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleRun = async (id: string) => {
+  // fireRun runs a job and updates the per-job status card. Pulled out of
+  // handleRun so the destructive confirm flow can share it.
+  const fireRun = async (id: string) => {
     setRunState(prev => ({ ...prev, [id]: { status: 'running' } }))
     try {
       const result: JobRunResult = await jobsApi.run(id)
@@ -1877,6 +1895,34 @@ function JobsTab() {
     setTimeout(() => {
       setRunState(prev => ({ ...prev, [id]: { status: 'idle' } }))
     }, 3000)
+  }
+
+  const handleRun = async (job: Job) => {
+    // Destructive jobs require an "Are you sure?" confirmation showing exactly
+    // which rows will disappear. Non-destructive jobs fire immediately.
+    if (!job.destructive) {
+      await fireRun(job.id)
+      return
+    }
+    setConfirm({ open: true, job, loading: true, preview: null, error: null })
+    try {
+      const preview = await jobsApi.preview(job.id)
+      setConfirm(prev => ({ ...prev, loading: false, preview }))
+    } catch (e) {
+      setConfirm(prev => ({ ...prev, loading: false, error: String(e) }))
+    }
+  }
+
+  const closeConfirm = () =>
+    setConfirm({ open: false, job: null, loading: false, preview: null, error: null })
+
+  const confirmAndRun = async () => {
+    const job = confirm.job
+    if (!job) return
+    closeConfirm()
+    await fireRun(job.id)
+    // Refresh job list so last_run_at / last_run_status reflect the cleanup.
+    jobsApi.list().then(r => setJobList(r.data)).catch(() => {})
   }
 
   const grouped = Object.fromEntries(
@@ -1933,8 +1979,8 @@ function JobsTab() {
                       </div>
                       <div className="job-card-action">
                         <button
-                          className="settings-btn secondary"
-                          onClick={() => handleRun(job.id)}
+                          className={`settings-btn ${job.destructive ? 'danger' : 'secondary'}`}
+                          onClick={() => handleRun(job)}
                           disabled={isRunning}
                         >
                           {isRunning ? (
@@ -1952,6 +1998,53 @@ function JobsTab() {
             ))
         )}
       </section>
+
+      <SlidePanel
+        open={confirm.open}
+        onClose={closeConfirm}
+        title="Are you sure?"
+        subtitle={confirm.job?.name}
+        footer={
+          confirm.loading || confirm.error ? null : (
+            <button
+              className="settings-btn danger"
+              onClick={() => void confirmAndRun()}
+              disabled={!confirm.preview || confirm.preview.count === 0}
+            >
+              {confirm.preview && confirm.preview.count > 0
+                ? `Delete ${confirm.preview.count} item${confirm.preview.count === 1 ? '' : 's'}`
+                : 'Nothing to delete'}
+            </button>
+          )
+        }
+      >
+        {confirm.loading && <div className="settings-placeholder">Loading preview…</div>}
+        {confirm.error && <div className="modal-error">{confirm.error}</div>}
+        {confirm.preview && confirm.preview.count === 0 && (
+          <div className="settings-placeholder">No matching rows — nothing to clean up.</div>
+        )}
+        {confirm.preview && confirm.preview.count > 0 && (
+          <>
+            <p className="jobs-description">
+              This will permanently delete {confirm.preview.count} row
+              {confirm.preview.count === 1 ? '' : 's'}. This action cannot be undone.
+            </p>
+            <div className="cleanup-preview-list">
+              {confirm.preview.items.map(item => (
+                <div key={item.id} className="cleanup-preview-row">
+                  <span className="cleanup-preview-label">{item.label}</span>
+                  <span className="cleanup-preview-sub">{item.sub}</span>
+                </div>
+              ))}
+              {confirm.preview.count > confirm.preview.items.length && (
+                <div className="cleanup-preview-row cleanup-preview-more">
+                  …and {confirm.preview.count - confirm.preview.items.length} more
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </SlidePanel>
     </div>
   )
 }

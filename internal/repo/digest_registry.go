@@ -14,7 +14,9 @@ type DigestRegistryRepo interface {
 	SetActive(ctx context.Context, profileID string, name string, active bool) error
 	List(ctx context.Context) ([]models.DigestRegistryEntry, error)
 	ListByProfile(ctx context.Context, profileID string) ([]models.DigestRegistryEntry, error)
+	ListInactive(ctx context.Context) ([]models.DigestRegistryEntry, error)
 	Delete(ctx context.Context, id string) error
+	DeleteAllInactive(ctx context.Context) (int64, error)
 	SetActiveByID(ctx context.Context, id string, active bool) error
 }
 
@@ -90,6 +92,33 @@ func (r *sqliteDigestRegistryRepo) ListByProfile(ctx context.Context, profileID 
 		return nil, fmt.Errorf("list digest registry entries by profile: %w", err)
 	}
 	return entries, nil
+}
+
+// ListInactive returns every entry with active = 0. Used by the cleanup job's
+// preview endpoint so the UI can show the user what will be deleted before
+// the job runs.
+func (r *sqliteDigestRegistryRepo) ListInactive(ctx context.Context) ([]models.DigestRegistryEntry, error) {
+	var entries []models.DigestRegistryEntry
+	err := r.db.SelectContext(ctx, &entries, `
+		SELECT id, profile_id, source, entry_type, name, label, config, profile_source, active, created_at, updated_at
+		FROM digest_registry
+		WHERE active = 0
+		ORDER BY profile_id, entry_type, name`)
+	if err != nil {
+		return nil, fmt.Errorf("list inactive digest registry entries: %w", err)
+	}
+	return entries, nil
+}
+
+// DeleteAllInactive hard-deletes every row where active = 0. Returns the
+// number of rows removed.
+func (r *sqliteDigestRegistryRepo) DeleteAllInactive(ctx context.Context) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM digest_registry WHERE active = 0`)
+	if err != nil {
+		return 0, fmt.Errorf("delete all inactive digest registry entries: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // Delete removes an inactive entry. Returns ErrConflict if the entry is still active.

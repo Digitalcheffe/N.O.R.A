@@ -7,13 +7,37 @@ import (
 	"time"
 )
 
+// CleanupPreviewItem is a single row shown in the confirmation modal for a
+// destructive job. Label is the primary name (e.g. container name or registry
+// label); Sub is a subtitle line with context (e.g. image + last-seen time, or
+// profile_id + entry_type).
+type CleanupPreviewItem struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Sub   string `json:"sub"`
+}
+
+// CleanupPreview is the payload returned by GET /jobs/{id}/preview for
+// destructive jobs. Count is the total number of rows that would be deleted
+// (items may be capped for payload size; count is the true total).
+type CleanupPreview struct {
+	Count int                  `json:"count"`
+	Items []CleanupPreviewItem `json:"items"`
+}
+
 // JobEntry is a single registered background job.
+//
+// Destructive jobs MUST provide a PreviewFn so the UI can show a confirmation
+// modal before triggering the run. The jobs handler refuses to return a
+// preview for a non-destructive job.
 type JobEntry struct {
 	ID          string
 	Name        string
 	Description string
 	Category    string
+	Destructive bool
 	RunFn       func(ctx context.Context) error
+	PreviewFn   func(ctx context.Context) (CleanupPreview, error)
 
 	mu            sync.Mutex
 	lastRunAt     *time.Time

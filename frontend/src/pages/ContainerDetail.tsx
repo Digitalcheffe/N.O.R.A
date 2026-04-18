@@ -75,6 +75,10 @@ export function ContainerDetail() {
   const [linkBusy, setLinkBusy] = useState(false)
   const [linkError, setLinkError] = useState('')
 
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
   useEffect(() => {
     if (!id) return
     discovery.getContainer(id)
@@ -113,6 +117,23 @@ export function ContainerDetail() {
       setLinkError('Failed to unlink app')
     } finally {
       setLinkBusy(false)
+    }
+  }
+
+  // handleDelete hard-removes the discovered_containers row. This doesn't touch
+  // the actual container on the Docker engine — it just forgets about it.
+  // Useful for pruning ghosts left behind after a container was removed from
+  // its source (e.g. docker-compose down leftovers, old image rollovers).
+  async function handleDelete() {
+    if (!id) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await discovery.deleteContainer(id)
+      navigate('/infrastructure?view=containers')
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete container')
+      setDeleteBusy(false)
     }
   }
 
@@ -189,6 +210,39 @@ export function ContainerDetail() {
     </div>
   )
 
+  const deleteAction = (
+    <div className="ctr-det-delete-wrap">
+      {!deleteConfirm ? (
+        <button
+          className="ctr-det-delete-btn"
+          onClick={() => { setDeleteConfirm(true); setDeleteError('') }}
+          title="Remove this container record from NORA"
+        >
+          Delete
+        </button>
+      ) : (
+        <div className="ctr-det-delete-confirm">
+          <span className="ctr-det-delete-warn">Delete this record?</span>
+          <button
+            className="ctr-det-delete-cancel"
+            onClick={() => setDeleteConfirm(false)}
+            disabled={deleteBusy}
+          >
+            Cancel
+          </button>
+          <button
+            className="ctr-det-delete-confirm-btn"
+            onClick={() => void handleDelete()}
+            disabled={deleteBusy}
+          >
+            {deleteBusy ? 'Deleting…' : 'Confirm'}
+          </button>
+        </div>
+      )}
+      {deleteError && <span className="ctr-det-error">{deleteError}</span>}
+    </div>
+  )
+
   return (
     <DetailPageLayout
       breadcrumb="Infrastructure"
@@ -197,6 +251,7 @@ export function ContainerDetail() {
       status={{ status: dplStatus, label: ctr.status }}
       keyDataPoints={keyDataPoints}
       headerExtra={linkedAppExtra}
+      actions={deleteAction}
       sourceId={ctr.id}
     >
       {/* ── Image ── */}

@@ -406,6 +406,24 @@ func main() {
 		RunFn:       func(ctx context.Context) error { return jobs.RunDigestRegistryReconcile(ctx, reconciler) },
 	})
 
+	// CLEANUP — bulk-delete destructive jobs. The Jobs UI intercepts Run clicks
+	// on entries with Destructive=true and shows the preview returned by
+	// PreviewFn before firing RunFn.
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "cleanup_inactive_registry", Name: "Clean Stale Registry Entries", Category: "cleanup",
+		Description: "Hard-deletes every digest_registry row marked inactive. Inactive rows are produced when a profile YAML is edited or removed — they accumulate over time until cleaned up.",
+		Destructive: true,
+		RunFn:       func(ctx context.Context) error { return jobs.RunCleanupInactiveRegistry(ctx, store) },
+		PreviewFn:   func(ctx context.Context) (jobs.CleanupPreview, error) { return jobs.PreviewInactiveRegistry(ctx, store) },
+	})
+	jobRegistry.Register(&jobs.JobEntry{
+		ID: "cleanup_stopped_containers", Name: "Clean Stopped Containers", Category: "cleanup",
+		Description: "Hard-deletes every discovered_containers row whose status is not running. Stopped rows stay in the DB after a container is removed from its engine; this clears the ghosts.",
+		Destructive: true,
+		RunFn:       func(ctx context.Context) error { return jobs.RunCleanupStoppedContainers(ctx, store) },
+		PreviewFn:   func(ctx context.Context) (jobs.CleanupPreview, error) { return jobs.PreviewStoppedContainers(ctx, store) },
+	})
+
 	// Router
 	r := chi.NewRouter()
 	if cfg.IsDebug() {

@@ -21,6 +21,7 @@ func NewJobsHandler(registry *jobs.Registry) *JobsHandler {
 // Routes registers the jobs endpoints on r.
 func (h *JobsHandler) Routes(r chi.Router) {
 	r.Get("/jobs", h.List)
+	r.Get("/jobs/{id}/preview", h.Preview)
 	r.Post("/jobs/{id}/run", h.Run)
 }
 
@@ -29,6 +30,7 @@ type jobResponse struct {
 	Name          string  `json:"name"`
 	Description   string  `json:"description"`
 	Category      string  `json:"category"`
+	Destructive   bool    `json:"destructive,omitempty"`
 	LastRunAt     *string `json:"last_run_at"`
 	LastRunStatus *string `json:"last_run_status"`
 }
@@ -43,6 +45,7 @@ func (h *JobsHandler) List(w http.ResponseWriter, r *http.Request) {
 			Name:          e.Name,
 			Description:   e.Description,
 			Category:      e.Category,
+			Destructive:   e.Destructive,
 			LastRunStatus: e.LastRunStatus(),
 		}
 		if t := e.LastRunAt(); t != nil {
@@ -52,6 +55,27 @@ func (h *JobsHandler) List(w http.ResponseWriter, r *http.Request) {
 		out = append(out, j)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": out})
+}
+
+// Preview returns the list of rows a destructive job would delete.
+// GET /api/v1/jobs/{id}/preview
+func (h *JobsHandler) Preview(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	entry := h.registry.Get(id)
+	if entry == nil {
+		writeError(w, http.StatusNotFound, "job not found: "+id)
+		return
+	}
+	if !entry.Destructive || entry.PreviewFn == nil {
+		writeError(w, http.StatusBadRequest, "job is not a destructive cleanup job")
+		return
+	}
+	preview, err := entry.PreviewFn(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, preview)
 }
 
 // Run triggers a job immediately: POST /api/v1/jobs/{id}/run

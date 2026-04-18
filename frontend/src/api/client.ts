@@ -28,6 +28,7 @@ import type {
   InfrastructureComponent,
   InfrastructureComponentInput,
   InstanceMetrics,
+  CleanupPreview,
   Job,
   JobRunResult,
   PortainerEndpoint,
@@ -602,6 +603,9 @@ export const jobsApi = {
 
   run: (id: string) =>
     request<JobRunResult>('POST', `/jobs/${id}/run`),
+
+  preview: (id: string) =>
+    request<CleanupPreview>('GET', `/jobs/${id}/preview`),
 }
 
 // ── Portainer (DD-8) ──────────────────────────────────────────────────────────
