@@ -575,7 +575,7 @@ func (h *InfraComponentHandler) GetResources(w http.ResponseWriter, r *http.Requ
 		rollups, rollupErr = h.rollups.LatestForSource(r.Context(), id, sourceType, period)
 	}
 	if rollupErr != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, http.StatusInternalServerError, rollupErr.Error())
 		return
 	}
 
