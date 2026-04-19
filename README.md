@@ -144,7 +144,7 @@ NZBGet doesn't send webhooks natively, so NORA ships a tiny NZBGet extension —
 
 3-stage Docker build: frontend → Go binary → `alpine:3.19` final image.
 
-For the repository layout, data flow, database schema, and deployment internals, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For the repository layout, data flow, database schema, and deployment internals, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 

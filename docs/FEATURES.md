@@ -95,4 +95,4 @@ Every background job is also a manual button on **Settings → Jobs**:
 
 ---
 
-See [ARCHITECTURE.md](../ARCHITECTURE.md) for repository layout, data flow, and deployment internals.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for repository layout, data flow, and deployment internals.
