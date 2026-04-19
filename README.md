@@ -3,7 +3,7 @@
 
 > Know what's happening in your homelab without it becoming a project.
 
-NORA is a self-hosted monitoring, event capture, and notification platform built for homelabbers and small self-hosted teams. One Docker image. No pipelines to build. No dashboards to configure. It just works.
+NORA is a self-hosted monitoring, event capture, and notification platform for homelabbers and small self-hosted teams. One Docker image, one data directory, no pipelines to build. It just works.
 
 ---
 
@@ -15,99 +15,37 @@ NORA is built on the shoulders of great open-source work — [see the full list 
 
 ---
 
-## The Problem
+## What it does
 
-Every homelabber knows they *should* have better visibility into their stack. They know they should get notified before things break instead of after. But standing up Grafana + Prometheus + Loki + Alertmanager is a project, not a solution. So it never happens. And they stay blind.
+NORA is three things in one binary:
 
-NORA is what you get when you commit to the thing none of those tools committed to: **visibility without the work.**
+- **A monitor** — ping, URL, SSL, and DNS checks on a schedule, plus direct integration with Docker, Proxmox, Portainer, Traefik, Synology, and SNMP for resource metrics and health.
+- **An event capture service** — a webhook ingest endpoint that normalizes events from the apps you already run (Sonarr, Radarr, n8n, Duplicati, Ghost, and 20+ more) into a single searchable feed.
+- **A notification router** — rule-based alerts over Web Push or email, plus a scheduled digest summary you can hand off to non-technical stakeholders.
+
+Everything ships in one image, writes to one folder (`/data`), and runs on a Raspberry Pi or a full homelab rack equally well.
+
+---
+
+## Screenshot
+
+![NORA Dashboard](docs/screenshots/image1.png)
+
+More views: see [docs/screenshots/](docs/screenshots/).
 
 ---
 
-## What It Does
+## Core features
 
-| | |
-|---|---|
-| **Monitor** | Actively checks hosts, services, SSL certificates, and DNS on a schedule — no agent required |
-| **Capture** | Receives webhook events from apps that support them (Sonarr, n8n, Duplicati, and more) |
-| **Observe** | Connects to Docker, Proxmox, Portainer, Traefik, Synology, and SNMP targets for deep visibility |
-| **Measure** | Collects CPU, memory, and disk from containers, VMs, and hosts automatically |
-| **Store** | Retains events by severity with configurable retention — monthly rollups kept forever |
-| **Alert** | Fires rules-based Web Push notifications to any subscribed browser or mobile device |
-| **Summarize** | Delivers a scheduled digest email of what happened across your stack |
+- **Monitor checks** — ping, URL, SSL, DNS with baseline reset
+- **Webhook ingest** — normalized events from 29 built-in app profiles, plus a custom profile editor
+- **Infrastructure integrations** — Docker, Proxmox, Portainer, Traefik, Synology, SNMP
+- **Web Push + email notifications** — rules engine over any event field
+- **Scheduled digest email** — weekly or monthly summary via SMTP
+- **Two-factor auth** — TOTP with any authenticator app
+- **Single binary, single data directory** — mount `/data`, done
 
----
-## Screenshots
-![NORA Dashboard](.github/screenshots/Screenshot2026040201.png)
-
-More Screen Shots [Screenshots](https://github.com/Digitalcheffe/N.O.R.A/tree/main/.github/screenshots)
----
-## Features
-
-### Monitoring
-- **Ping checks** — ICMP reachability on a schedule
-- **URL checks** — HTTP/HTTPS with status code verification
-- **SSL checks** — certificate expiry detection with configurable warning thresholds
-- **DNS checks** — query validation with record type support
-- Manual run, baseline reset, and per-check event history
-
-### Event Capture
-- Receive webhooks from any app via `POST /api/v1/ingest/{token}`
-- Token-based auth per app — compromise one token, the rest are safe
-- App profiles normalize payloads into NORA's event model automatically
-
-### Infrastructure Integrations
-
-| Integration | What NORA collects |
-|---|---|
-| **Docker** | Container discovery, resource metrics, health state, image update detection |
-| **Proxmox** | Node status, VMs and LXC guests, storage, task failures, uptime |
-| **Portainer** | Endpoints, container inventory, CPU/memory per container, image status |
-| **Traefik** | Routes, services, SSL certificates |
-| **Synology** | System status, storage, uptime |
-| **SNMP** | Generic metrics and health from any SNMP-capable device |
-
-### Notifications
-- **Web Push** — browser-native push to desktop and mobile, no app store required
-- **Alert Rules** — define conditions on any event field, fire notifications when they match
-- **Digest Email** — scheduled summary of what happened across your stack via SMTP
-- VAPID keys auto-generated on first run
-
-### User Management
-- Admin and Member roles
-- Admin-controlled user creation with optional invite email on creation
-- Per-user password management with configurable policy enforcement
-- **Two-Factor Authentication (TOTP)** — time-based codes via any authenticator app (Google Authenticator, Authy, etc.)
-- Global MFA enforcement with grace login and per-user exempt flag
-- Disable TOTP without losing enrollment — re-enable without re-scanning
-
-### Dashboard
-- Summary counts, sparklines, and status rollup across apps, checks, and infrastructure
-- Event timeline, check status, and resource trends in one view
-- Clickable event cards with full payload detail
-
-### Alert Rules
-- Define conditions on any event field (severity, source, app, message, etc.)
-- Combine conditions with AND / OR logic
-- Fire Web Push or email notifications when a rule matches
-- Enable, disable, or delete rules from the Settings → Notify Rules tab
-
-### App Library
-
-NORA ships with 29 pre-built profiles. Pick your app and NORA already knows how to handle its events.
-
-| Category | Apps |
-|---|---|
-| Media | Plex · Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Overseerr · Tubesync · NZBGet |
-| Automation | n8n · Home Assistant · Mealie |
-| Infrastructure | Traefik · Unifi · WG-Easy |
-| Security & DNS | AdGuard Home · Cloudflare DDNS · Vaultwarden |
-| Backup & Updates | Duplicati · Watchtower · DIUN |
-| Notifications & Comms | Gotify · Ghost · Matrix · Maubot |
-| Other | Uptime Kuma · Homepage · Zwavejs2mqtt |
-
-Don't see your app? The custom profile editor lets you map any webhook payload to NORA's event model.
-
-Profile contributions are welcome — drop a YAML file in a GitHub issue or discussion and it will be reviewed for inclusion in the library.
+For the full feature list, see [docs/FEATURES.md](docs/FEATURES.md).
 
 ---
 
@@ -119,37 +57,78 @@ docker run -d \
   -v ./data:/data \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -e NORA_SECRET=your-secret-here \
+  -e NORA_ADMIN_EMAIL=admin@example.com \
+  -e NORA_ADMIN_PASSWORD=change-me \
   ghcr.io/digitalcheffe/nora:latest
 ```
 
-Open `http://localhost:8081` — create your admin account and add your first app.
+Open `http://localhost:8081`, sign in with the bootstrap credentials, then add your first app.
+
+All paths (database, app templates, icons, VAPID keys) live under `/data`. Bind-mount wherever you want that folder to persist.
+
+---
+
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 | Variable | Description | Default | Required |
 |---|---|---|---|
 | `NORA_SECRET` | JWT signing secret | — | **Yes** |
 | `NORA_ADMIN_EMAIL` | Bootstrap admin email — used only when the users table is empty | — | **First run** |
 | `NORA_ADMIN_PASSWORD` | Bootstrap admin password | — | **First run** |
-| `NORA_DB_PATH` | Path to SQLite database file | `/data/nora.db` | No |
-| `NORA_TEMPLATES_PATH` | Path to app template YAML files | `/data/templates` | No |
-| `NORA_ICONS_PATH` | Path to custom app icon overrides | `/data/icons` | No |
 | `NORA_PORT` | HTTP port | `8081` | No |
 | `NORA_LOG_LEVEL` | Set to `debug` for verbose request logging | `info` | No |
-| `NORA_DIGEST_SCHEDULE` | Cron expression for digest email | `0 8 1 * *` | No |
-| `NORA_TIMEZONE` | IANA timezone for digest scheduling (e.g. `America/New_York`) | `UTC` | No |
+| `NORA_TIMEZONE` | IANA timezone for the digest scheduler (e.g. `America/New_York`) | `UTC` | No |
 | `NORA_VAPID_PUBLIC` | VAPID public key — auto-generated on first run if not set | — | No |
 | `NORA_VAPID_PRIVATE` | VAPID private key — auto-generated on first run if not set | — | No |
 | `NORA_VAPID_SUBJECT` | VAPID subject (mailto or URL) | `mailto:admin@localhost` | No |
 
-### In-App Settings
-All email configuration is managed in the app under Settings → Notifications — no env vars needed.
+### In-app settings
 
-- SMTP server, port, credentials, from address, and test email
-- Password policy (minimum length, uppercase, numbers, special characters)
-- Global MFA requirement
-- Digest email schedule
+Runtime configuration lives in **Settings** inside the app — no env vars needed:
+
+- SMTP server, credentials, from address, test email
+- Digest frequency + schedule
+- Password policy and MFA requirement
+- Per-app webhook tokens, API polling auth, and rate limits
+- Alert rules
+
+---
+
+## App library
+
+NORA ships with **29 pre-built profiles**. Pick your app and NORA already knows how to handle its events.
+
+| Category | Apps |
+|---|---|
+| Media | Plex · Sonarr · Radarr · Lidarr · Prowlarr · Tautulli · Seerr · TubeSync · NZBGet |
+| Automation | n8n · Home Assistant · Mealie |
+| Infrastructure | Traefik · UniFi · WG Easy · Homepage |
+| Security & DNS | AdGuard Home · Cloudflare DDNS · Vaultwarden |
+| Backup & Updates | Duplicati · What's Up Docker · DIUN |
+| Notifications & Comms | Gotify · Ghost · Matrix · Matrix Admin · Maubot |
+| Other | Uptime Kuma · Z-Wave JS to MQTT |
+
+Custom profile editor lets you map any webhook payload to NORA's event model.
+
+### Per-app setup guides
+
+Several apps need a bit of extra wiring on their side to send the payload NORA expects. Reference configs live in [docs/examples/](docs/examples/):
+
+| App | Reference |
+|---|---|
+| DIUN | [diun-webhook-config.md](docs/examples/diun-webhook-config.md) |
+| Duplicati | [duplicati-webhook-config.md](docs/examples/duplicati-webhook-config.md) |
+| Home Assistant | [home-assistant-webhook-config.md](docs/examples/home-assistant-webhook-config.md) |
+| n8n | [n8n-webhook-config.md](docs/examples/n8n-webhook-config.md) |
+| Seerr / Jellyseerr | [seerr-webhook-config.md](docs/examples/seerr-webhook-config.md) |
+| Tautulli | [tautulli-webhook-config.md](docs/examples/tautulli-webhook-config.md) |
+| What's Up Docker | [whatsupdocker-webhook-config.md](docs/examples/whatsupdocker-webhook-config.md) |
+
+### NZBGet custom extension
+
+NZBGet doesn't send webhooks natively, so NORA ships a tiny NZBGet extension — two files you drop into NZBGet's `ScriptDir` that fire a clean POST after each download. Grab [manifest.json](docs/examples/nzbget-webhook-manifest.json) and [main.py](docs/examples/nzbget-webhook-main.py) and follow the install notes at the top of `main.py`.
 
 ---
 
@@ -163,9 +142,9 @@ All email configuration is managed in the app under Settings → Notifications �
 | Push | Web Push / VAPID — browser-native, no third party |
 | Deployment | Single Docker image (~50 MB) |
 
-3-stage Docker build: frontend → Go binary → `alpine:3.19` final image. No node_modules, no Go toolchain, no source in the final image.
+3-stage Docker build: frontend → Go binary → `alpine:3.19` final image.
 
-For a detailed breakdown of the repository layout, data flow, database schema, API design, and deployment internals, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For the repository layout, data flow, database schema, and deployment internals, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -191,6 +170,8 @@ NORA would not exist without these open-source projects:
 ## Contributing
 
 Code contributions: open an issue first so we can align on approach before you build.
+
+Profile contributions: drop a YAML file in a GitHub issue or discussion and it will be reviewed for inclusion in the library.
 
 ---
 

@@ -1,7 +1,8 @@
 // nora-cli — administrative command-line tool for NORA.
 //
 // Runs standalone inside the container (no server process required).
-// Connects directly to the SQLite database via NORA_DB_PATH.
+// Connects to /data/nora.db by default; set NORA_DB_PATH to override when
+// running the CLI outside the container against a copy of the database.
 //
 // Usage:
 //
