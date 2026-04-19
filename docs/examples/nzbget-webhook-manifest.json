@@ -1,0 +1,37 @@
+{
+    "main": "main.py",
+    "name": "WebhookNotifier",
+    "homepage": "https://github.com/Digitalcheffe/N.O.R.A",
+    "kind": "POST-PROCESSING",
+    "displayName": "Webhook Notifier",
+    "version": "1.0",
+    "author": "NORA",
+    "license": "MIT",
+    "about": "Sends a JSON POST to a webhook URL when a download completes, fails, or completes with warnings.",
+    "queueEvents": "",
+    "requirements": [
+        "This script requires Python 3.8+ to be installed on your system."
+    ],
+    "description": ["Sends a POST request to a configured webhook URL after each download. A failed webhook never blocks or fails your download."],
+    "options": [
+        {
+            "name": "WebhookUrl",
+            "displayName": "WebhookUrl",
+            "value": "",
+            "description": [
+                "The URL to POST download events to.",
+                "Example: http://your-service/webhook/your-token"
+            ],
+            "select": []
+        }
+    ],
+    "commands": [
+        {
+            "name": "ConnectionTest",
+            "action": "Send Test Notification",
+            "displayName": "ConnectionTest",
+            "description": ["Send a test POST to your webhook URL to verify connectivity."]
+        }
+    ],
+    "taskTime": ""
+}

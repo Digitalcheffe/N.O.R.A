@@ -138,8 +138,8 @@ func main() {
 	store.Events = rules.NewNotifyingEventRepo(store.Events, rulesEngine)
 
 	// App template registry — export embedded templates to disk then load from disk.
-	builtinDir := cfg.TemplatesPath + "/builtin"
-	customDir := cfg.TemplatesPath + "/custom"
+	builtinDir := config.DefaultTemplatesPath + "/builtin"
+	customDir := config.DefaultTemplatesPath + "/custom"
 	if err := os.MkdirAll(customDir, 0755); err != nil {
 		log.Fatalf("create custom templates dir: %v", err)
 	}
@@ -150,7 +150,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("app template registry init failed: %v", err)
 	}
-	log.Printf("  templates: %d loaded from %s", len(registry.List()), cfg.TemplatesPath)
+	log.Printf("  templates: %d loaded from %s", len(registry.List()), config.DefaultTemplatesPath)
 
 	// Digest registry reconciliation — runs synchronously at startup.
 	// Inserts/updates entries for all profile digest categories and deactivates orphans.
@@ -160,7 +160,7 @@ func main() {
 	}
 
 	// Icon fetcher — downloads and caches SVG icons from dashboard-icons CDN.
-	iconFetcher, err := icons.New(cfg.IconsPath)
+	iconFetcher, err := icons.New(config.DefaultIconsPath)
 	if err != nil {
 		log.Printf("icon fetcher init failed: %v — icons disabled", err)
 		iconFetcher = nil

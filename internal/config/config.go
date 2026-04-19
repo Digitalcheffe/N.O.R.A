@@ -5,18 +5,26 @@ import (
 	"os"
 )
 
+// NORA ships with a single persistent data directory — /data. Everything NORA
+// writes (SQLite, app template copies, cached icons, VAPID keys) lives under
+// that root. Operators bind-mount the host path they want; we don't expose
+// the sub-paths as configuration since splitting them has no deploy benefit
+// and adds surface area that can drift out of sync.
+const (
+	DefaultDBPath        = "/data/nora.db"
+	DefaultTemplatesPath = "/data/templates"
+	DefaultIconsPath     = "/data/icons"
+)
+
 type Config struct {
-	Secret         string
-	DBPath         string
-	Port           string
-	LogLevel       string // "debug" enables verbose request logging; default is minimal
-	DigestSchedule string
-	Timezone       string // IANA timezone name used for digest scheduling (e.g. "America/New_York")
-	VAPIDPublic    string
-	VAPIDPrivate   string
-	VAPIDSubject   string
-	TemplatesPath  string
-	IconsPath      string
+	Secret   string
+	DBPath   string // kept as a field for tests that run against :memory: or a temp file
+	Port     string
+	LogLevel string // "debug" enables verbose request logging; default is minimal
+	Timezone string // IANA timezone used by the digest scheduler (e.g. "America/New_York")
+	VAPIDPublic  string
+	VAPIDPrivate string
+	VAPIDSubject string
 	// Bootstrap admin credentials — used only when the users table is empty.
 	AdminEmail    string
 	AdminPassword string
@@ -28,19 +36,16 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		Secret:         os.Getenv("NORA_SECRET"),
-		DBPath:         getEnvStr("NORA_DB_PATH", "/data/nora.db"),
-		TemplatesPath:  getEnvStr("NORA_TEMPLATES_PATH", "/data/templates"),
-		IconsPath:      getEnvStr("NORA_ICONS_PATH", "/data/icons"),
-		Port:           getEnvStr("NORA_PORT", getEnvStr("PORT", "8081")),
-		LogLevel:       getEnvStr("NORA_LOG_LEVEL", "info"),
-		DigestSchedule: getEnvStr("NORA_DIGEST_SCHEDULE", "0 8 1 * *"),
-		Timezone:       getEnvStr("NORA_TIMEZONE", "UTC"),
-		VAPIDPublic:    os.Getenv("NORA_VAPID_PUBLIC"),
-		VAPIDPrivate:   os.Getenv("NORA_VAPID_PRIVATE"),
-		VAPIDSubject:   getEnvStr("NORA_VAPID_SUBJECT", "mailto:admin@localhost"),
-		AdminEmail:     os.Getenv("NORA_ADMIN_EMAIL"),
-		AdminPassword:  os.Getenv("NORA_ADMIN_PASSWORD"),
+		Secret:        os.Getenv("NORA_SECRET"),
+		DBPath:        DefaultDBPath,
+		Port:          getEnvStr("NORA_PORT", getEnvStr("PORT", "8081")),
+		LogLevel:      getEnvStr("NORA_LOG_LEVEL", "info"),
+		Timezone:      getEnvStr("NORA_TIMEZONE", "UTC"),
+		VAPIDPublic:   os.Getenv("NORA_VAPID_PUBLIC"),
+		VAPIDPrivate:  os.Getenv("NORA_VAPID_PRIVATE"),
+		VAPIDSubject:  getEnvStr("NORA_VAPID_SUBJECT", "mailto:admin@localhost"),
+		AdminEmail:    os.Getenv("NORA_ADMIN_EMAIL"),
+		AdminPassword: os.Getenv("NORA_ADMIN_PASSWORD"),
 	}
 
 	if cfg.Secret == "" {

@@ -10,3 +10,12 @@
 *.ttf binary
 *.eot binary
 *.otf binary
+
+# Exclude from `git archive` — what GitHub uses for the source zip/tarball
+# on the Releases page. Build + runtime sources ship; repo-only
+# infrastructure and consumer-facing docs live on the GitHub project
+# page itself instead of inside the release artifact.
+.github/       export-ignore
+.gitignore     export-ignore
+.gitattributes export-ignore
+docs/          export-ignore
