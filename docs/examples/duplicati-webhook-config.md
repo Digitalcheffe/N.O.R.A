@@ -36,32 +36,7 @@ duplicati-cli backup <destination> <source> \
 
 ## Payload shape
 
-Duplicati posts `Content-Type: application/json` with a body like:
-
-```json
-{
-  "Data": {
-    "MainOperation": "Backup",
-    "ParsedResult": "Success",
-    "BeginTime": "2026-04-24T02:00:00Z",
-    "EndTime":   "2026-04-24T02:04:11Z",
-    "Duration":  "00:04:11",
-    "AddedFiles": 12,
-    "ModifiedFiles": 3,
-    "DeletedFiles": 0,
-    "SizeOfAddedFiles": 4823191,
-    "Warnings": [],
-    "Errors": []
-  },
-  "Extra": {
-    "OperationName": "Backup",
-    "backup-name":   "nightly-photos",
-    "machine-name":  "nas01"
-  }
-}
-```
-
-NORA's profile maps these fields:
+Duplicati posts `Content-Type: application/json`. NORA's profile maps these fields:
 
 | Field          | JSONPath                  |
 |----------------|---------------------------|
