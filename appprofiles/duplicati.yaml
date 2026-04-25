@@ -6,16 +6,13 @@ meta:
   homepage: https://duplicati.com
 webhook:
   setup_instructions: |
-    Configure Duplicati to send native JSON webhooks to {base_url}/ingest/{token}.
-    
-    In Duplicati: Settings → Default options → Add advanced option, OR per-job
     Edit → Options → Add advanced option. Set:
       send-http-url                  = {base_url}/ingest/{token}
       send-http-result-output-format = Json
       send-http-level                = All
-    
+
     Duplicati sends its native JSON result object with Content-Type: application/json.
-    See docs/duplicati-webhook-config.md for the full payload schema.
+    See docs/[duplicati-webhook-config.md](http://duplicati-webhook-config.md) for the full payload schema.
   recommended_events:
     - Success
     - Warning
