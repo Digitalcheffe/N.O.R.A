@@ -12,7 +12,7 @@ webhook:
       send-http-level                = All
 
     Duplicati sends its native JSON result object with Content-Type: application/json.
-    See docs/duplicati-webhook-config.md for the full payload schema.
+    See docs/examples/duplicati-webhook-config.md for the full payload schema.
   recommended_events:
     - Success
     - Warning
