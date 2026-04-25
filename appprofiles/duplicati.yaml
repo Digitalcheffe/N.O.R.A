@@ -4,13 +4,18 @@ meta:
   icon: duplicati
   description: Open-source backup software
   homepage: https://duplicati.com
-
 webhook:
   setup_instructions: |
-    Configure Duplicati to send an HTTP JSON webhook to {base_url}/ingest/{token}.
-    Duplicati sends a fixed payload built from its template variables.
-    See docs/duplicati-webhook-config.md for the exact payload template and the
-    required --send-http-level=Success,Warning,Error,Fatal flag.
+    Configure Duplicati to send native JSON webhooks to {base_url}/ingest/{token}.
+    
+    In Duplicati: Settings → Default options → Add advanced option, OR per-job
+    Edit → Options → Add advanced option. Set:
+      send-http-url                  = {base_url}/ingest/{token}
+      send-http-result-output-format = Json
+      send-http-level                = All
+    
+    Duplicati sends its native JSON result object with Content-Type: application/json.
+    See docs/duplicati-webhook-config.md for the full payload schema.
   recommended_events:
     - Success
     - Warning
@@ -18,38 +23,44 @@ webhook:
     - Fatal
   not_recommended: []
   field_mappings:
-    action:      "$.action"
-    event_type:  "$.action"
-    backup_name: "$.backup_name"
-    result:      "$.result"
-    operation:   "$.operation"
-    source_path: "$.source_path"
-  severity_field: action
-  display_template: "{action} — {backup_name}"
+    operation:    "$.Extra.OperationName"
+    backup_name:  "$.Extra.backup-name"
+    result:       "$.Data.ParsedResult"
+    action:       "$.Data.MainOperation"
+    begin_time:   "$.Data.BeginTime"
+    end_time:     "$.Data.EndTime"
+    duration:     "$.Data.Duration"
+    machine_name: "$.Extra.machine-name"
+    warnings:     "$.Data.Warnings"
+    errors:       "$.Data.Errors"
+    files_added:    "$.Data.AddedFiles"
+    files_modified: "$.Data.ModifiedFiles"
+    files_deleted:  "$.Data.DeletedFiles"
+    bytes_added:    "$.Data.SizeOfAddedFiles"
+  event_type: "{action}.{result}"
+  severity_field: result
+  display_template: "{action} {result} — {backup_name}"
   display_templates:
-    "backup.Success": "Backup succeeded — {backup_name}"
-    "backup.Warning": "Backup warning — {backup_name}"
-    "backup.Error":   "Backup failed — {backup_name}"
-    "backup.Fatal":   "Backup fatal — {backup_name}"
+    "Backup.Success": "Backup succeeded — {backup_name}"
+    "Backup.Warning": "Backup warning — {backup_name}"
+    "Backup.Error":   "Backup failed — {backup_name}"
+    "Backup.Fatal":   "Backup fatal — {backup_name}"
   severity_mapping:
-    "backup.Success": info
-    "backup.Warning": warn
-    "backup.Error":   error
-    "backup.Fatal":   error
-
+    "Success": info
+    "Warning": warn
+    "Error":   error
+    "Fatal":   error
 digest:
   categories:
     - source: webhook
       label: Successful Backups
-      match_field: action
-      match_value: "backup.Success"
-    # Match on severity so both backup.Error and backup.Fatal roll up to the
-    # same card without needing an OR clause the schema doesn't support.
+      match_field: result
+      match_value: "Success"
     - source: webhook
       label: Backup Failures
       match_severity: error
   widgets:
     - source: webhook
       label: Backup Warnings
-      match_field: action
-      match_value: "backup.Warning"
+      match_field: result
+      match_value: "Warning"
